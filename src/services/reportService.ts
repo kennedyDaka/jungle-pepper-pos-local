@@ -1,0 +1,231 @@
+import { expenseService } from "@/services/expenseService";
+import { inventoryService } from "@/services/inventoryService";
+import { supabase } from "@/services/repositories/supabaseClient";
+import { raiseIfError } from "@/services/repositories/supabaseErrors";
+import type { Category, MenuItem, Modifier, OrderView, Unit } from "@/types/domain";
+import type { Database } from "@/types/database";
+
+type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
+  payments?: Database["public"]["Tables"]["payments"]["Row"][];
+  order_items?: Array<
+    Database["public"]["Tables"]["order_items"]["Row"] & {
+      menu_items?: Pick<MenuItem, "name"> & {
+        categories?: Pick<Category, "name"> | null;
+      };
+      order_item_modifiers?: Array<
+        Database["public"]["Tables"]["order_item_modifiers"]["Row"] & {
+          modifiers?: Pick<Modifier, "name" | "price_delta"> | null;
+        }
+      >;
+    }
+  >;
+};
+
+type MovementWithRelations = Database["public"]["Tables"]["stock_movements"]["Row"] & {
+  items?: {
+    name: string;
+    stock_type?: string | null;
+    bottle_ml?: number | null;
+    shot_ml?: number | null;
+    units?: Pick<Unit, "code"> | null;
+  } | null;
+};
+
+type ProductionLineWithRelations = Database["public"]["Tables"]["production_inputs"]["Row"] & {
+  items?: {
+    name: string;
+    units?: Pick<Unit, "code"> | null;
+  } | null;
+};
+
+type ProductionWasteWithRelations = Database["public"]["Tables"]["production_wastage"]["Row"] & {
+  items?: {
+    name: string;
+    units?: Pick<Unit, "code"> | null;
+  } | null;
+};
+
+type ProductionBatchWithRelations = Database["public"]["Tables"]["production_batches"]["Row"] & {
+  production_inputs?: ProductionLineWithRelations[];
+  production_outputs?: ProductionLineWithRelations[];
+  production_wastage?: ProductionWasteWithRelations[];
+};
+
+function toOrder(row: OrderWithRelations): OrderView {
+  return {
+    id: row.id,
+    created_at: row.created_at,
+    cashier_id: row.cashier_id,
+    subtotal: Number(row.subtotal),
+    discount: Number(row.discount),
+    total: Number(row.total),
+    status: row.status,
+    note: row.note,
+    payments: (row.payments ?? []).map((payment) => ({
+      id: payment.id,
+      order_id: payment.order_id,
+      method: payment.method,
+      amount: Number(payment.amount),
+    })),
+    order_items: (row.order_items ?? []).map((item) => ({
+      id: item.id,
+      order_id: item.order_id,
+      menu_item_id: item.menu_item_id,
+      qty: Number(item.qty),
+      unit_price: Number(item.unit_price),
+      note: item.note,
+      takeaway: item.takeaway,
+      menu_items: item.menu_items
+        ? {
+            name: item.menu_items.name,
+            categories: item.menu_items.categories
+              ? { name: item.menu_items.categories.name }
+              : undefined,
+          }
+        : undefined,
+      order_item_modifiers: (item.order_item_modifiers ?? []).map((orderModifier) => ({
+        id: orderModifier.id,
+        order_item_id: orderModifier.order_item_id,
+        modifier_id: orderModifier.modifier_id,
+        modifiers: orderModifier.modifiers
+          ? {
+              name: orderModifier.modifiers.name,
+              price_delta: Number(orderModifier.modifiers.price_delta),
+            }
+          : undefined,
+      })),
+    })),
+  };
+}
+
+function toMovement(movement: MovementWithRelations) {
+  return {
+    id: movement.id,
+    item_id: movement.item_id,
+    type: movement.type,
+    qty: Number(movement.qty),
+    unit_cost: Number(movement.unit_cost),
+    qty_before: movement.qty_before === null ? null : Number(movement.qty_before),
+    qty_after: movement.qty_after === null ? null : Number(movement.qty_after),
+    note: movement.note,
+    ref_type: movement.ref_type,
+    ref_id: movement.ref_id,
+    created_at: movement.created_at,
+    items: movement.items
+      ? {
+          name: movement.items.name,
+          stock_type: movement.items.stock_type,
+          bottle_ml: movement.items.bottle_ml === null ? null : Number(movement.items.bottle_ml),
+          shot_ml: movement.items.shot_ml === null ? null : Number(movement.items.shot_ml),
+          units: movement.items.units ? { code: movement.items.units.code } : undefined,
+        }
+      : undefined,
+  };
+}
+
+function toProductionLine(line: ProductionLineWithRelations) {
+  return {
+    id: line.id,
+    batch_id: line.batch_id,
+    item_id: line.item_id,
+    qty: Number(line.qty),
+    qty_count: line.qty_count === null ? null : Number(line.qty_count),
+    weight_kg: line.weight_kg === null ? null : Number(line.weight_kg),
+    unit_cost: line.unit_cost === null ? null : Number(line.unit_cost),
+    created_at: line.created_at,
+    items: line.items
+      ? {
+          name: line.items.name,
+          units: line.items.units ? { code: line.items.units.code } : undefined,
+        }
+      : undefined,
+  };
+}
+
+function toProductionWaste(line: ProductionWasteWithRelations) {
+  return {
+    id: line.id,
+    batch_id: line.batch_id,
+    item_id: line.item_id,
+    qty: Number(line.qty),
+    reason: line.reason,
+    created_at: line.created_at,
+    items: line.items
+      ? {
+          name: line.items.name,
+          units: line.items.units ? { code: line.items.units.code } : undefined,
+        }
+      : undefined,
+  };
+}
+
+export const reportService = {
+  async listSales(fromIso: string, toIso: string) {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        "*, payments(*), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)))",
+      )
+      .eq("status", "paid")
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso)
+      .order("created_at", { ascending: false });
+
+    raiseIfError(error, "Could not load sales report");
+    return ((data ?? []) as OrderWithRelations[]).map(toOrder);
+  },
+
+  async listItems() {
+    return inventoryService.listItems({ activeOnly: true });
+  },
+
+  async listStockMovements(fromIso: string, toIso: string) {
+    const { data, error } = await supabase
+      .from("stock_movements")
+      .select("*, items(name, stock_type, bottle_ml, shot_ml, units(code))")
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso)
+      .order("created_at", { ascending: true });
+
+    raiseIfError(error, "Could not load stock movement report");
+    return ((data ?? []) as MovementWithRelations[]).map(toMovement);
+  },
+
+  async listWastage(fromIso: string, toIso: string) {
+    const { data, error } = await supabase
+      .from("stock_movements")
+      .select("*, items(name, stock_type, bottle_ml, shot_ml, units(code))")
+      .eq("type", "wastage")
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso)
+      .order("created_at", { ascending: false });
+
+    raiseIfError(error, "Could not load wastage report");
+    return ((data ?? []) as MovementWithRelations[]).map(toMovement);
+  },
+
+  async listProduction(fromIso: string, toIso: string) {
+    const { data, error } = await supabase
+      .from("production_batches")
+      .select(
+        "*, production_inputs(*, items(name, units(code))), production_outputs(*, items(name, units(code))), production_wastage(*, items(name, units(code)))",
+      )
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso)
+      .order("created_at", { ascending: false });
+
+    raiseIfError(error, "Could not load production report");
+    return ((data ?? []) as ProductionBatchWithRelations[]).map((batch) => ({
+      id: batch.id,
+      created_at: batch.created_at,
+      note: batch.note,
+      production_inputs: (batch.production_inputs ?? []).map(toProductionLine),
+      production_outputs: (batch.production_outputs ?? []).map(toProductionLine),
+      production_wastage: (batch.production_wastage ?? []).map(toProductionWaste),
+    }));
+  },
+
+  async listExpenses(from: string, to: string) {
+    return expenseService.listExpenses(from, to);
+  },
+};
