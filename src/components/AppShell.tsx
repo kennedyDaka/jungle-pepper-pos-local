@@ -29,7 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <img src={logo} alt="Jungle Pepper" width={36} height={36} className="rounded" />
             <div className="leading-tight">
               <div className="font-bold text-base tracking-tight">Jungle Pepper</div>
-              <div className="text-[10px] text-muted-foreground">Kidney Crescent · Blantyre</div>
+              <div className="text-[10px] text-muted-foreground">Kidney Crescent - Blantyre</div>
             </div>
           </Link>
           <nav className="flex-1 flex flex-wrap items-center gap-1 ml-4">

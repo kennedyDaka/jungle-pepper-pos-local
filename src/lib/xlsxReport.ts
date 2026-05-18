@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 
 export type ReportCell = string | number | boolean | null | undefined;
 export type ReportRow = Record<string, ReportCell>;
+export type ReportMatrix = ReportCell[][];
 
 type AppendReportSheetOptions = {
   title?: string;
@@ -55,6 +56,35 @@ function columnWidths(columns: string[], rows: ReportRow[]) {
   });
 }
 
+function matrixColumnWidths(matrix: ReportMatrix) {
+  const cols = matrix.reduce((max, row) => Math.max(max, row.length), 0);
+  return Array.from({ length: cols }, (_, index) => {
+    const longest = matrix.reduce(
+      (max, row) => Math.max(max, String(valueForSheet(row[index])).length),
+      0,
+    );
+    return { wch: Math.min(Math.max(longest + 2, 10), 36) };
+  });
+}
+
+function applySheetLook(
+  ws: XLSX.WorkSheet,
+  headerRowIndex: number,
+  rowCount: number,
+  colCount: number,
+) {
+  ws["!autofilter"] = {
+    ref: XLSX.utils.encode_range({
+      s: { r: headerRowIndex, c: 0 },
+      e: { r: Math.max(headerRowIndex, rowCount - 1), c: Math.max(0, colCount - 1) },
+    }),
+  };
+  (ws as XLSX.WorkSheet & { "!freeze"?: unknown })["!freeze"] = {
+    xSplit: 0,
+    ySplit: headerRowIndex + 1,
+  };
+}
+
 export function createReportWorkbook(title: string) {
   const wb = XLSX.utils.book_new();
   wb.Props = {
@@ -96,13 +126,45 @@ export function appendReportSheet(
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!cols"] = columnWidths(table.columns, rows.length ? rows : [{ Message: "" }]);
-  ws["!autofilter"] = {
-    ref: XLSX.utils.encode_range({
-      s: { r: headerRowIndex, c: 0 },
-      e: { r: aoa.length - 1, c: table.columns.length - 1 },
-    }),
-  };
+  applySheetLook(ws, headerRowIndex, aoa.length, table.columns.length);
 
+  XLSX.utils.book_append_sheet(wb, ws, cleanSheetName(sheetName));
+}
+
+export function appendMatrixReportSheet(
+  wb: XLSX.WorkBook,
+  sheetName: string,
+  matrix: ReportMatrix,
+  options: AppendReportSheetOptions = {},
+) {
+  const generatedAt = options.generatedAt ?? new Date();
+  const tableRows = matrix.length ? matrix : [["No records for this period"]];
+  const aoa: (string | number | boolean)[][] = [];
+
+  aoa.push([options.title ?? sheetName]);
+  aoa.push(["Generated", generatedAt.toLocaleString()]);
+  if (options.rangeLabel) aoa.push(["Period", options.rangeLabel]);
+  aoa.push([]);
+
+  if (options.summary?.length) {
+    const summary = rowsToTable(options.summary);
+    aoa.push(["Summary"]);
+    aoa.push(summary.columns);
+    aoa.push(...summary.body);
+    aoa.push([]);
+  }
+
+  const headerRowIndex = aoa.length;
+  aoa.push(...tableRows.map((row) => row.map(valueForSheet)));
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = matrixColumnWidths(tableRows);
+  applySheetLook(
+    ws,
+    headerRowIndex,
+    aoa.length,
+    tableRows.reduce((max, row) => Math.max(max, row.length), 0),
+  );
   XLSX.utils.book_append_sheet(wb, ws, cleanSheetName(sheetName));
 }
 

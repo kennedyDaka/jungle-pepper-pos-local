@@ -17,9 +17,11 @@ import {
 import { toast } from "sonner";
 import { MWK, fmtQty } from "@/lib/format";
 import {
+  appendMatrixReportSheet,
   appendReportSheet,
   createReportWorkbook,
   writeReportWorkbook,
+  type ReportMatrix,
   type ReportRow,
 } from "@/lib/xlsxReport";
 import { expenseService } from "@/services/expenseService";
@@ -228,6 +230,41 @@ function ExpensesPage() {
     return rows;
   };
 
+  const expenseRegisterRows = (): ReportMatrix => [
+    [
+      "Ref",
+      "Date",
+      "Category",
+      "Supplier",
+      "Payment",
+      "Expense Detail",
+      "Item Paid For",
+      "Qty",
+      "Unit",
+      "Unit Cost",
+      "Line Total",
+      "Stock Updated",
+      "Before",
+      "After",
+    ],
+    ...expenseLineRows().map((row) => [
+      row.Ref,
+      row.Date,
+      row.Category,
+      row.Supplier,
+      row.Method,
+      row.Description,
+      row.Item || row.Description,
+      row.Qty,
+      row.Unit,
+      row["Unit Cost"],
+      row["Line Total"],
+      row["Affects Stock"],
+      row["Qty Before"],
+      row["Qty After"],
+    ]),
+  ];
+
   const exportXlsx = () => {
     const wb = createReportWorkbook("Jungle Pepper Expense Report");
     const lineRows = expenseLineRows();
@@ -248,6 +285,10 @@ function ExpensesPage() {
     });
     appendReportSheet(wb, "Expense Item Lines", lineRows, {
       title: "Expense Item And Stock Detail",
+      rangeLabel: `${from} to ${to}`,
+    });
+    appendMatrixReportSheet(wb, "Expense Register", expenseRegisterRows(), {
+      title: "Detailed Expense Register",
       rangeLabel: `${from} to ${to}`,
     });
     writeReportWorkbook(wb, `expenses-${from}_to_${to}.xlsx`);
@@ -310,10 +351,10 @@ function ExpensesPage() {
             <Label>Supplier (optional)</Label>
             <Select value={supplierId} onValueChange={setSupplierId}>
               <SelectTrigger>
-                <SelectValue placeholder="—" />
+                <SelectValue placeholder="-" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">—</SelectItem>
+                <SelectItem value="none">-</SelectItem>
                 {suppliers.data?.map((s: any) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}

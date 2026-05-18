@@ -15,15 +15,20 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@jungle.local");
-  const [pw, setPw] = useState("admin1234");
-  const [username, setUsername] = useState("mary");
-  const [pin, setPin] = useState("2468");
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [username, setUsername] = useState("");
+  const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    authService.signOut().catch(() => {});
-  }, []);
+    authService
+      .getSession()
+      .then((session) => {
+        if (session) navigate({ to: "/dashboard" });
+      })
+      .catch(() => {});
+  }, [navigate]);
 
   const signInEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,12 +91,9 @@ function LoginPage() {
               <div>
                 <Label>PIN</Label>
                 <div className="text-center text-3xl tracking-[0.5em] font-mono py-2 my-1 border border-border rounded-md bg-input">
-                  {pin
-                    .padEnd(4, "*")
-                    .split("")
-                    .map((c, i) => (
-                      <span key={i}>{c ? "*" : ""}</span>
-                    ))}
+                  {Array.from({ length: 4 }, (_, i) => (
+                    <span key={i}>{i < pin.length ? "*" : "-"}</span>
+                  ))}
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
@@ -142,6 +144,7 @@ function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
+                  required
                 />
               </div>
               <div>
@@ -152,6 +155,7 @@ function LoginPage() {
                   value={pw}
                   onChange={(e) => setPw(e.target.value)}
                   autoComplete="current-password"
+                  required
                 />
               </div>
               <Button type="submit" className="w-full" disabled={busy}>

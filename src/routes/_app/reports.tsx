@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { MWK, fmtDate, fmtQty } from "@/lib/format";
 import {
+  appendMatrixReportSheet,
   appendReportSheet,
   createReportWorkbook,
   writeReportWorkbook,
+  type ReportMatrix,
   type ReportRow,
 } from "@/lib/xlsxReport";
 import { reportService } from "@/services/reportService";
@@ -26,6 +28,10 @@ function sumBy<T>(rows: T[], pick: (row: T) => number) {
 
 function reportDateRange(from: string, to: string) {
   return `${from}_to_${to}`;
+}
+
+function moneyValue(value: unknown) {
+  return Number(value) || 0;
 }
 
 function ReportsPage() {
@@ -149,6 +155,84 @@ function ReportsPage() {
       Supplier: item.suppliers?.name ?? "",
     }));
 
+  const stockCountMatrixRows = (): ReportMatrix => {
+    const header = [
+      `DATE ${to}`,
+      "OPEN",
+      "IN/PURCHASE",
+      "IN QTY",
+      "OUT QTY",
+      "UNCOOK",
+      "COOK KG",
+      "PRODUCED",
+      "WASTE",
+      "CLOSE",
+      "UNIT",
+    ];
+    const rows: ReportMatrix = [header];
+    const grouped = new Map<string, any[]>();
+
+    (items.data ?? []).forEach((item: any) => {
+      const category = item.categories?.name ?? "UNCATEGORIZED";
+      grouped.set(category, [...(grouped.get(category) ?? []), item]);
+    });
+
+    [...grouped.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([category, group]) => {
+        rows.push([category.toUpperCase()]);
+        group
+          .slice()
+          .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
+          .forEach((item: any) => {
+            const itemMoves = movements.filter((movement) => movement.item_id === item.id);
+            const opening = itemMoves.length
+              ? moneyValue(itemMoves[0].qty_before)
+              : moneyValue(item.qty_on_hand);
+            const closing = itemMoves.length
+              ? moneyValue(itemMoves[itemMoves.length - 1].qty_after)
+              : moneyValue(item.qty_on_hand);
+            const purchases = sumBy(
+              itemMoves.filter((movement) => movement.type === "purchase_in"),
+              (movement) => Math.max(0, moneyValue(movement.qty)),
+            );
+            const outQty = Math.abs(
+              sumBy(
+                itemMoves.filter((movement) =>
+                  ["sale", "issue_out", "complimentary", "breakage"].includes(movement.type),
+                ),
+                (movement) => Math.min(0, moneyValue(movement.qty)),
+              ),
+            );
+            const produced = sumBy(
+              itemMoves.filter((movement) => movement.type === "production_in"),
+              (movement) => Math.max(0, moneyValue(movement.qty)),
+            );
+            const waste = Math.abs(
+              sumBy(
+                itemMoves.filter((movement) => movement.type === "wastage"),
+                (movement) => Math.min(0, moneyValue(movement.qty)),
+              ),
+            );
+            rows.push([
+              item.name,
+              opening,
+              purchases ? purchases * moneyValue(item.avg_cost) : "",
+              purchases,
+              outQty,
+              "",
+              item.units?.code === "kg" ? produced : "",
+              produced,
+              waste,
+              closing,
+              item.units?.code ?? "",
+            ]);
+          });
+      });
+
+    return rows;
+  };
+
   const expenseRecordRows = (): ReportRow[] =>
     (expenses.data ?? []).map((expense: any) => ({
       Ref: expense.ref_no,
@@ -209,6 +293,93 @@ function ReportsPage() {
         });
       });
     });
+    return rows;
+  };
+
+  const expenseRegisterMatrixRows = (): ReportMatrix => [
+    [
+      "Ref",
+      "Date",
+      "Category",
+      "Supplier",
+      "Payment",
+      "Expense Detail",
+      "Item Paid For",
+      "Qty",
+      "Unit",
+      "Unit Cost",
+      "Line Total",
+      "Stock Updated",
+      "Before",
+      "After",
+    ],
+    ...expenseLineRows().map((row) => [
+      row.Ref,
+      row.Date,
+      row.Category,
+      row.Supplier,
+      row.Method,
+      row.Description,
+      row.Item || row.Description,
+      row.Qty,
+      row.Unit,
+      row["Unit Cost"],
+      row["Line Total"],
+      row["Affects Stock"],
+      row["Qty Before"],
+      row["Qty After"],
+    ]),
+  ];
+
+  const salesMatrixRows = (): ReportMatrix => {
+    const itemNames = [...itemAgg.keys()].sort((a, b) => a.localeCompare(b));
+    const header: ReportMatrix[number] = ["Order", "Date", "Thin", "Thick"];
+    itemNames.forEach((name) => header.push(name, "QTY"));
+    header.push("Payments", "Total", "Takeaway Lines", "Note");
+
+    const rows: ReportMatrix = [header];
+    (sales.data ?? [])
+      .slice()
+      .reverse()
+      .forEach((order: any, index: number) => {
+        const lineAgg = new Map<string, { qty: number; total: number }>();
+        let thin = 0;
+        let thick = 0;
+        let takeawayLines = 0;
+
+        order.order_items?.forEach((line: any) => {
+          const itemName = line.menu_items?.name ?? "-";
+          const qty = moneyValue(line.qty);
+          const total = qty * moneyValue(line.unit_price);
+          const current = lineAgg.get(itemName) ?? { qty: 0, total: 0 };
+          lineAgg.set(itemName, { qty: current.qty + qty, total: current.total + total });
+          const options = modifierNames(line);
+          if (options.includes("Thin Crust")) thin += qty;
+          if (options.includes("Thick Crust")) thick += qty;
+          if (line.takeaway) takeawayLines += 1;
+        });
+
+        const row: ReportMatrix[number] = [
+          index + 1,
+          new Date(order.created_at).toLocaleString(),
+          thin,
+          thick,
+        ];
+        itemNames.forEach((name) => {
+          const value = lineAgg.get(name);
+          row.push(value?.total ?? "", value?.qty ?? "");
+        });
+        row.push(
+          (order.payments ?? [])
+            .map((payment: any) => `${payment.method}: ${payment.amount}`)
+            .join(" | "),
+          moneyValue(order.total),
+          takeawayLines,
+          order.note ?? "",
+        );
+        rows.push(row);
+      });
+
     return rows;
   };
 
@@ -324,6 +495,10 @@ function ReportsPage() {
     appendReportSheet(wb, "Orders", orderRows, { title: "Order Detail", rangeLabel });
     appendReportSheet(wb, "Line Items", lineRows, { title: "Line Item Detail", rangeLabel });
     appendReportSheet(wb, "Payments", paymentRows, { title: "Payment Detail", rangeLabel });
+    appendMatrixReportSheet(wb, "Sales Matrix", salesMatrixRows(), {
+      title: "Sales Register",
+      rangeLabel,
+    });
     appendReportSheet(
       wb,
       "Top Items",
@@ -357,6 +532,10 @@ function ReportsPage() {
       { title: "Inventory Summary", rangeLabel },
     );
     appendReportSheet(wb, "All Items", rows, { title: "Inventory Item Detail", rangeLabel });
+    appendMatrixReportSheet(wb, "Stock Count Sheet", stockCountMatrixRows(), {
+      title: "Stock Count Sheet",
+      rangeLabel,
+    });
     appendReportSheet(wb, "Movements", stockMovementRows(), {
       title: "Inventory Movement Detail",
       rangeLabel,
@@ -386,6 +565,10 @@ function ReportsPage() {
     );
     appendReportSheet(wb, "Stock Ledger", ledgerRows, {
       title: "Full Stock Movement Ledger",
+      rangeLabel,
+    });
+    appendMatrixReportSheet(wb, "Stock Count Sheet", stockCountMatrixRows(), {
+      title: "Stock Count Sheet",
       rangeLabel,
     });
     appendReportSheet(
@@ -529,6 +712,10 @@ function ReportsPage() {
     });
     appendReportSheet(wb, "Expense Item Lines", lineRows, {
       title: "Expense Item And Stock Detail",
+      rangeLabel,
+    });
+    appendMatrixReportSheet(wb, "Expense Register", expenseRegisterMatrixRows(), {
+      title: "Detailed Expense Register",
       rangeLabel,
     });
     appendReportSheet(
