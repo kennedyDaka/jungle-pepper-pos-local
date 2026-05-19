@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -22,9 +23,10 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Trash2, Plus, Minus, X, Printer, Download } from "lucide-react";
+import { Plus, Minus, X, Printer, Download, Package } from "lucide-react";
 import { MWK } from "@/lib/format";
 import { menuService } from "@/services/menuService";
+import { packagingService, type PackagingOptionView } from "@/services/packagingService";
 import { posService } from "@/services/posService";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
@@ -43,6 +45,12 @@ type CartLine = {
   takeaway: boolean;
   note?: string;
   modifiers: { id: string; name: string; price_delta: number }[];
+  packaging?: {
+    option_id: string;
+    name: string;
+    item_id: string;
+    unit_price: number;
+  } | null;
 };
 
 function PosPage() {
@@ -54,6 +62,7 @@ function PosPage() {
   const [note, setNote] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [modOpen, setModOpen] = useState<{ menuId: string; lineKey: string } | null>(null);
+  const [packOpen, setPackOpen] = useState<{ lineKey: string } | null>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
 
   const cats = useQuery({
@@ -71,6 +80,11 @@ function PosPage() {
     queryFn: () => menuService.listModifiers(),
   });
 
+  const packaging = useQuery({
+    queryKey: ["pos", "packaging"],
+    queryFn: () => packagingService.listOptions(),
+  });
+
   const filtered = useMemo(() => {
     let list = items.data ?? [];
     if (activeCat) list = list.filter((i: any) => i.category_id === activeCat);
@@ -78,9 +92,28 @@ function PosPage() {
       list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
     return list;
   }, [items.data, activeCat, search]);
-  const dataError = cats.error || items.error || mods.error;
+  const dataError = cats.error || items.error || mods.error || packaging.error;
+  const menuOptionsLoading =
+    cats.isLoading || items.isLoading || mods.isLoading || packaging.isLoading;
+
+  const requiresCrust = (line: CartLine) =>
+    (mods.data ?? []).some(
+      (modifier: any) =>
+        modifier.menu_item_id === line.menu_item_id &&
+        (modifier.name === "Thin Crust" || modifier.name === "Thick Crust"),
+    );
+
+  const hasSelectedCrust = (line: CartLine) =>
+    line.modifiers.some(
+      (modifier) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust",
+    );
 
   const addItem = (mi: any) => {
+    if (menuOptionsLoading) {
+      toast.info("Menu options are still loading. Try again in a moment.");
+      return;
+    }
+
     const itemMods = (mods.data ?? []).filter((m: any) => m.menu_item_id === mi.id);
     const key = crypto.randomUUID();
     setCart((c) => [
@@ -99,9 +132,12 @@ function PosPage() {
   };
 
   const lineTotal = (l: CartLine) =>
-    (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty;
+    (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty +
+    (l.takeaway && l.packaging ? Number(l.packaging.unit_price) * l.qty : 0);
   const subtotal = cart.reduce((s, l) => s + lineTotal(l), 0);
   const total = Math.max(subtotal - discount, 0);
+  const hasMissingPackaging = cart.some((line) => line.takeaway && !line.packaging);
+  const hasMissingCrust = cart.some((line) => requiresCrust(line) && !hasSelectedCrust(line));
 
   const finalize = useMutation({
     mutationFn: async (payments: { method: string; amount: number }[]) => {
@@ -114,6 +150,10 @@ function PosPage() {
           takeaway: l.takeaway,
           note: l.note ?? null,
           modifiers: l.modifiers.map((m) => ({ modifier_id: m.id })),
+          packaging:
+            l.takeaway && l.packaging
+              ? { option_id: l.packaging.option_id, unit_price: Number(l.packaging.unit_price) }
+              : null,
         })),
         payments,
       };
@@ -143,13 +183,13 @@ function PosPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-9rem)]">
       <div className="lg:col-span-2 flex flex-col gap-3 min-h-0">
-        {(cats.isLoading || items.isLoading || mods.isLoading) && (
+        {(cats.isLoading || items.isLoading || mods.isLoading || packaging.isLoading) && (
           <LoadingState label="Loading live menu..." />
         )}
         {dataError && <ErrorState error={dataError} label="Could not load POS data" />}
         <div className="flex gap-2">
           <Input
-            placeholder="Search menu…"
+            placeholder="Search menu..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -172,7 +212,8 @@ function PosPage() {
             <button
               key={mi.id}
               onClick={() => addItem(mi)}
-              className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors"
+              disabled={menuOptionsLoading}
+              className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
             >
               <div className="font-medium text-sm leading-tight">{mi.name}</div>
               <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
@@ -203,6 +244,9 @@ function PosPage() {
                     )
                     .join(", ")}
                 </div>
+              )}
+              {requiresCrust(l) && !hasSelectedCrust(l) && (
+                <p className="text-xs text-destructive mt-1">Choose thin or thick crust.</p>
               )}
               <div className="flex items-center justify-between mt-1">
                 <div className="flex items-center gap-1">
@@ -237,13 +281,60 @@ function PosPage() {
                 <Switch
                   id={`takeaway-${l.key}`}
                   checked={l.takeaway}
-                  onCheckedChange={(checked) =>
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setCart((c) =>
+                        c.map((x) => (x.key === l.key ? { ...x, takeaway: true } : x)),
+                      );
+                      setPackOpen({ lineKey: l.key });
+                      return;
+                    }
                     setCart((c) =>
-                      c.map((x) => (x.key === l.key ? { ...x, takeaway: checked } : x)),
-                    )
-                  }
+                      c.map((x) =>
+                        x.key === l.key ? { ...x, takeaway: false, packaging: null } : x,
+                      ),
+                    );
+                  }}
                 />
               </div>
+              {l.takeaway && (
+                <div className="mt-2 rounded border border-dashed border-border p-2 text-xs">
+                  {l.packaging ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <span>
+                        <Package className="h-3.5 w-3.5 inline mr-1" />
+                        {l.packaging.name} x {l.qty}
+                      </span>
+                      <button
+                        className="font-medium text-primary"
+                        onClick={() => setPackOpen({ lineKey: l.key })}
+                      >
+                        {MWK(l.packaging.unit_price)} each
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-primary font-medium"
+                      onClick={() => setPackOpen({ lineKey: l.key })}
+                    >
+                      Choose takeaway packaging
+                    </button>
+                  )}
+                </div>
+              )}
+              {(mods.data ?? []).some(
+                (modifier: any) => modifier.menu_item_id === l.menu_item_id,
+              ) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2 h-7 w-full text-xs"
+                  onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}
+                >
+                  Edit options / toppings
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -263,7 +354,7 @@ function PosPage() {
             />
           </div>
           <Input
-            placeholder="Order note…"
+            placeholder="Order note..."
             value={note}
             onChange={(e) => setNote(e.target.value)}
             className="h-8"
@@ -272,7 +363,19 @@ function PosPage() {
             <span>Total</span>
             <span className="text-primary">{MWK(total)}</span>
           </div>
-          <Button className="w-full" disabled={cart.length === 0} onClick={() => setPayOpen(true)}>
+          {hasMissingPackaging && (
+            <p className="text-xs text-destructive">
+              Choose packaging for every takeaway line before payment.
+            </p>
+          )}
+          {hasMissingCrust && (
+            <p className="text-xs text-destructive">Choose thin or thick crust for every pizza.</p>
+          )}
+          <Button
+            className="w-full"
+            disabled={cart.length === 0 || hasMissingPackaging || hasMissingCrust}
+            onClick={() => setPayOpen(true)}
+          >
             Pay {MWK(total)}
           </Button>
         </div>
@@ -296,6 +399,44 @@ function PosPage() {
         />
       )}
 
+      {packOpen && (
+        <PackagingDialog
+          options={packaging.data ?? []}
+          current={cart.find((line) => line.key === packOpen.lineKey)?.packaging ?? null}
+          onCancel={() => {
+            setCart((c) =>
+              c.map((x) =>
+                x.key === packOpen.lineKey && !x.packaging ? { ...x, takeaway: false } : x,
+              ),
+            );
+            setPackOpen(null);
+          }}
+          onSave={(selected) => {
+            setCart((c) =>
+              c.map((x) =>
+                x.key === packOpen.lineKey
+                  ? {
+                      ...x,
+                      takeaway: true,
+                      packaging: {
+                        option_id: selected.option.id,
+                        name: selected.option.name,
+                        item_id: selected.option.item_id,
+                        unit_price: selected.unit_price,
+                      },
+                    }
+                  : x,
+              ),
+            );
+            setPackOpen(null);
+            void packagingService
+              .updatePrice(selected.option.id, selected.unit_price)
+              .then(() => qc.invalidateQueries({ queryKey: ["pos", "packaging"] }))
+              .catch((error: any) => toast.error(error.message));
+          }}
+        />
+      )}
+
       {payOpen && (
         <PaymentDialog
           total={total}
@@ -307,6 +448,86 @@ function PosPage() {
 
       {lastReceipt && <ReceiptDialog receipt={lastReceipt} onClose={() => setLastReceipt(null)} />}
     </div>
+  );
+}
+
+function PackagingDialog({
+  options,
+  current,
+  onCancel,
+  onSave,
+}: {
+  options: PackagingOptionView[];
+  current: CartLine["packaging"];
+  onCancel: () => void;
+  onSave: (selection: { option: PackagingOptionView; unit_price: number }) => void;
+}) {
+  const initialOption =
+    options.find((option) => option.id === current?.option_id) ?? options[0] ?? null;
+  const [selectedId, setSelectedId] = useState(initialOption?.id ?? "");
+  const selected = options.find((option) => option.id === selectedId) ?? initialOption;
+  const [unitPrice, setUnitPrice] = useState(
+    current?.unit_price ?? Number(initialOption?.price ?? 0),
+  );
+
+  return (
+    <Dialog open onOpenChange={onCancel}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Takeaway packaging</DialogTitle>
+          <DialogDescription>
+            Select the charged packaging item for this takeaway line.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Packaging</Label>
+            <Select
+              value={selectedId}
+              onValueChange={(value) => {
+                const option = options.find((item) => item.id === value);
+                setSelectedId(value);
+                setUnitPrice(Number(option?.price ?? 0));
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Choose packaging" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.name} {option.items?.units?.code ? `(${option.items.units.code})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Charge per item</Label>
+            <Input
+              type="number"
+              min={0}
+              value={unitPrice}
+              onChange={(event) => setUnitPrice(Math.max(0, Number(event.target.value)))}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The charge is saved as the new default for this packaging option.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!selected}
+            onClick={() => selected && onSave({ option: selected, unit_price: unitPrice })}
+          >
+            Apply
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -339,6 +560,9 @@ function ModifierDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{requiresCrust ? "Choose crust & extras" : "Extras / options"}</DialogTitle>
+          <DialogDescription>
+            Choose required pizza base options and any paid extra toppings.
+          </DialogDescription>
         </DialogHeader>
         {requiresCrust && (
           <div>
@@ -367,7 +591,7 @@ function ModifierDialog({
               >
                 <span>{m.name}</span>
                 <span className="text-muted-foreground">
-                  {Number(m.price_delta) > 0 ? "+" + MWK(m.price_delta) : "—"}
+                  {Number(m.price_delta) > 0 ? "+" + MWK(m.price_delta) : "-"}
                 </span>
               </button>
             ))}
@@ -409,7 +633,8 @@ function PaymentDialog({
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Payment — {MWK(total)}</DialogTitle>
+          <DialogTitle>Payment - {MWK(total)}</DialogTitle>
+          <DialogDescription>Confirm the payment method and amount received.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -482,6 +707,13 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
         doc.text("  " + l.modifiers.map((m: any) => m.name).join(", "), 4, y);
         y += 4;
       }
+      if (l.takeaway && l.packaging) {
+        doc.text(`  Packaging: ${l.packaging.name}`, 4, y);
+        doc.text(`MK${(l.packaging.unit_price * l.qty).toLocaleString()}`, 76, y, {
+          align: "right",
+        });
+        y += 4;
+      }
     });
     doc.line(4, y, 76, y);
     y += 4;
@@ -507,6 +739,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Receipt</DialogTitle>
+          <DialogDescription>Print or download the completed order receipt.</DialogDescription>
         </DialogHeader>
         <div className="receipt-print bg-white text-black p-4 rounded text-xs font-mono">
           <div className="text-center">
@@ -529,6 +762,12 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
               {l.modifiers?.length > 0 && (
                 <div className="pl-2 text-[10px]">
                   {l.modifiers.map((m: any) => m.name).join(", ")}
+                </div>
+              )}
+              {l.takeaway && l.packaging && (
+                <div className="flex justify-between pl-2 text-[10px]">
+                  <span>Packaging: {l.packaging.name}</span>
+                  <span>MK{(l.packaging.unit_price * l.qty).toLocaleString()}</span>
                 </div>
               )}
             </div>

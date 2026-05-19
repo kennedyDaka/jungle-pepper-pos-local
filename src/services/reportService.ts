@@ -5,7 +5,12 @@ import { raiseIfError } from "@/services/repositories/supabaseErrors";
 import type { Category, MenuItem, Modifier, OrderView, Unit } from "@/types/domain";
 import type { Database } from "@/types/database";
 
+type StaffRelation = { username: string; full_name: string } | null;
+type BranchRelation = { name: string } | null;
+
 type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
+  branches?: BranchRelation;
+  cashier?: StaffRelation;
   payments?: Database["public"]["Tables"]["payments"]["Row"][];
   order_items?: Array<
     Database["public"]["Tables"]["order_items"]["Row"] & {
@@ -17,11 +22,19 @@ type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
           modifiers?: Pick<Modifier, "name" | "price_delta"> | null;
         }
       >;
+      order_item_packaging?: Array<
+        Database["public"]["Tables"]["order_item_packaging"]["Row"] & {
+          packaging_options?: { name: string } | null;
+          items?: { name: string; units?: Pick<Unit, "code"> | null } | null;
+        }
+      >;
     }
   >;
 };
 
 type MovementWithRelations = Database["public"]["Tables"]["stock_movements"]["Row"] & {
+  branches?: BranchRelation;
+  creator?: StaffRelation;
   items?: {
     name: string;
     stock_type?: string | null;
@@ -46,14 +59,21 @@ type ProductionWasteWithRelations = Database["public"]["Tables"]["production_was
 };
 
 type ProductionBatchWithRelations = Database["public"]["Tables"]["production_batches"]["Row"] & {
+  branches?: BranchRelation;
+  creator?: StaffRelation;
   production_inputs?: ProductionLineWithRelations[];
   production_outputs?: ProductionLineWithRelations[];
   production_wastage?: ProductionWasteWithRelations[];
 };
 
+function toStaff(row?: StaffRelation) {
+  return row ? { username: row.username, full_name: row.full_name } : null;
+}
+
 function toOrder(row: OrderWithRelations): OrderView {
   return {
     id: row.id,
+    branch_id: row.branch_id,
     created_at: row.created_at,
     cashier_id: row.cashier_id,
     subtotal: Number(row.subtotal),
@@ -61,6 +81,8 @@ function toOrder(row: OrderWithRelations): OrderView {
     total: Number(row.total),
     status: row.status,
     note: row.note,
+    branches: row.branches ? { name: row.branches.name } : null,
+    profiles: toStaff(row.cashier),
     payments: (row.payments ?? []).map((payment) => ({
       id: payment.id,
       order_id: payment.order_id,
@@ -94,6 +116,21 @@ function toOrder(row: OrderWithRelations): OrderView {
             }
           : undefined,
       })),
+      order_item_packaging: (item.order_item_packaging ?? []).map((packaging) => ({
+        id: packaging.id,
+        item_id: packaging.item_id,
+        qty: Number(packaging.qty),
+        unit_price: Number(packaging.unit_price),
+        packaging_options: packaging.packaging_options
+          ? { name: packaging.packaging_options.name }
+          : null,
+        items: packaging.items
+          ? {
+              name: packaging.items.name,
+              units: packaging.items.units ? { code: packaging.items.units.code } : undefined,
+            }
+          : undefined,
+      })),
     })),
   };
 }
@@ -101,6 +138,7 @@ function toOrder(row: OrderWithRelations): OrderView {
 function toMovement(movement: MovementWithRelations) {
   return {
     id: movement.id,
+    branch_id: movement.branch_id,
     item_id: movement.item_id,
     type: movement.type,
     qty: Number(movement.qty),
@@ -110,7 +148,10 @@ function toMovement(movement: MovementWithRelations) {
     note: movement.note,
     ref_type: movement.ref_type,
     ref_id: movement.ref_id,
+    created_by: movement.created_by,
     created_at: movement.created_at,
+    branches: movement.branches ? { name: movement.branches.name } : null,
+    profiles: toStaff(movement.creator),
     items: movement.items
       ? {
           name: movement.items.name,
@@ -160,16 +201,30 @@ function toProductionWaste(line: ProductionWasteWithRelations) {
 }
 
 export const reportService = {
-  async listSales(fromIso: string, toIso: string) {
+  async listBranches() {
     const { data, error } = await supabase
+      .from("branches")
+      .select("id, code, name")
+      .eq("active", true)
+      .order("name");
+
+    raiseIfError(error, "Could not load branches");
+    return data ?? [];
+  },
+
+  async listSales(fromIso: string, toIso: string, branchId?: string | null) {
+    let query = supabase
       .from("orders")
       .select(
-        "*, payments(*), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)))",
+        "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
       )
       .eq("status", "paid")
       .gte("created_at", fromIso)
-      .lte("created_at", toIso)
-      .order("created_at", { ascending: false });
+      .lte("created_at", toIso);
+
+    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     raiseIfError(error, "Could not load sales report");
     return ((data ?? []) as OrderWithRelations[]).map(toOrder);
@@ -179,53 +234,70 @@ export const reportService = {
     return inventoryService.listItems({ activeOnly: true });
   },
 
-  async listStockMovements(fromIso: string, toIso: string) {
-    const { data, error } = await supabase
+  async listStockMovements(fromIso: string, toIso: string, branchId?: string | null) {
+    let query = supabase
       .from("stock_movements")
-      .select("*, items(name, stock_type, bottle_ml, shot_ml, units(code))")
+      .select(
+        "*, branches(name), creator:profiles!stock_movements_created_by_fkey(username, full_name), items(name, stock_type, bottle_ml, shot_ml, units(code))",
+      )
       .gte("created_at", fromIso)
-      .lte("created_at", toIso)
-      .order("created_at", { ascending: true });
+      .lte("created_at", toIso);
+
+    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+
+    const { data, error } = await query.order("created_at", { ascending: true });
 
     raiseIfError(error, "Could not load stock movement report");
     return ((data ?? []) as MovementWithRelations[]).map(toMovement);
   },
 
-  async listWastage(fromIso: string, toIso: string) {
-    const { data, error } = await supabase
+  async listWastage(fromIso: string, toIso: string, branchId?: string | null) {
+    let query = supabase
       .from("stock_movements")
-      .select("*, items(name, stock_type, bottle_ml, shot_ml, units(code))")
+      .select(
+        "*, branches(name), creator:profiles!stock_movements_created_by_fkey(username, full_name), items(name, stock_type, bottle_ml, shot_ml, units(code))",
+      )
       .eq("type", "wastage")
       .gte("created_at", fromIso)
-      .lte("created_at", toIso)
-      .order("created_at", { ascending: false });
+      .lte("created_at", toIso);
+
+    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     raiseIfError(error, "Could not load wastage report");
     return ((data ?? []) as MovementWithRelations[]).map(toMovement);
   },
 
-  async listProduction(fromIso: string, toIso: string) {
-    const { data, error } = await supabase
+  async listProduction(fromIso: string, toIso: string, branchId?: string | null) {
+    let query = supabase
       .from("production_batches")
       .select(
-        "*, production_inputs(*, items(name, units(code))), production_outputs(*, items(name, units(code))), production_wastage(*, items(name, units(code)))",
+        "*, branches(name), creator:profiles!production_batches_created_by_fkey(username, full_name), production_inputs(*, items(name, units(code))), production_outputs(*, items(name, units(code))), production_wastage(*, items(name, units(code)))",
       )
       .gte("created_at", fromIso)
-      .lte("created_at", toIso)
-      .order("created_at", { ascending: false });
+      .lte("created_at", toIso);
+
+    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+
+    const { data, error } = await query.order("created_at", { ascending: false });
 
     raiseIfError(error, "Could not load production report");
     return ((data ?? []) as ProductionBatchWithRelations[]).map((batch) => ({
       id: batch.id,
+      branch_id: batch.branch_id,
+      created_by: batch.created_by,
       created_at: batch.created_at,
       note: batch.note,
+      branches: batch.branches ? { name: batch.branches.name } : null,
+      profiles: toStaff(batch.creator),
       production_inputs: (batch.production_inputs ?? []).map(toProductionLine),
       production_outputs: (batch.production_outputs ?? []).map(toProductionLine),
       production_wastage: (batch.production_wastage ?? []).map(toProductionWaste),
     }));
   },
 
-  async listExpenses(from: string, to: string) {
-    return expenseService.listExpenses(from, to);
+  async listExpenses(from: string, to: string, branchId?: string | null) {
+    return expenseService.listExpenses(from, to, branchId);
   },
 };

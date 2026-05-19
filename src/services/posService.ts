@@ -11,6 +11,7 @@ export interface FinalizeOrderPayload {
     takeaway?: boolean;
     note?: string | null;
     modifiers: Array<{ modifier_id: string }>;
+    packaging?: { option_id: string; unit_price: number } | null;
   }>;
   payments: Array<{ method: string; amount: number }>;
 }

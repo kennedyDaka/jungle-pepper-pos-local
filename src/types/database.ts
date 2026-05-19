@@ -558,6 +558,68 @@ export type Database = {
           },
         ];
       };
+      order_item_packaging: {
+        Row: {
+          created_at: string;
+          id: string;
+          item_id: string;
+          order_item_id: string;
+          packaging_option_id: string | null;
+          qty: number;
+          stock_movement_id: string | null;
+          unit_price: number;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          item_id: string;
+          order_item_id: string;
+          packaging_option_id?: string | null;
+          qty: number;
+          stock_movement_id?: string | null;
+          unit_price?: number;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          item_id?: string;
+          order_item_id?: string;
+          packaging_option_id?: string | null;
+          qty?: number;
+          stock_movement_id?: string | null;
+          unit_price?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_item_packaging_item_id_fkey";
+            columns: ["item_id"];
+            isOneToOne: false;
+            referencedRelation: "items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_item_packaging_order_item_id_fkey";
+            columns: ["order_item_id"];
+            isOneToOne: false;
+            referencedRelation: "order_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_item_packaging_packaging_option_id_fkey";
+            columns: ["packaging_option_id"];
+            isOneToOne: false;
+            referencedRelation: "packaging_options";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_item_packaging_stock_movement_id_fkey";
+            columns: ["stock_movement_id"];
+            isOneToOne: false;
+            referencedRelation: "stock_movements";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       order_items: {
         Row: {
           created_at: string;
@@ -679,6 +741,57 @@ export type Database = {
             columns: ["voided_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      packaging_options: {
+        Row: {
+          active: boolean;
+          branch_id: string | null;
+          created_at: string;
+          id: string;
+          item_id: string;
+          name: string;
+          price: number;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          branch_id?: string | null;
+          created_at?: string;
+          id?: string;
+          item_id: string;
+          name: string;
+          price?: number;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          branch_id?: string | null;
+          created_at?: string;
+          id?: string;
+          item_id?: string;
+          name?: string;
+          price?: number;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "packaging_options_branch_id_fkey";
+            columns: ["branch_id"];
+            isOneToOne: false;
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "packaging_options_item_id_fkey";
+            columns: ["item_id"];
+            isOneToOne: false;
+            referencedRelation: "items";
             referencedColumns: ["id"];
           },
         ];

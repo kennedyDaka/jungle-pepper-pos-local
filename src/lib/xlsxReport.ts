@@ -1,17 +1,42 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import logoUrl from "@/assets/jungle-pepper-logo.png";
 
 export type ReportCell = string | number | boolean | null | undefined;
 export type ReportRow = Record<string, ReportCell>;
 export type ReportMatrix = ReportCell[][];
+export type ReportWorkbook = ExcelJS.Workbook;
 
 type AppendReportSheetOptions = {
   title?: string;
   rangeLabel?: string;
+  branchLabel?: string;
+  filters?: Record<string, ReportCell>;
   summary?: ReportRow[];
   generatedAt?: Date;
+  totals?: boolean;
 };
 
 const MAX_SHEET_NAME = 31;
+const MONEY_COLUMNS = new Set([
+  "Amount",
+  "Avg Cost",
+  "Average Cost",
+  "Cost",
+  "Discount",
+  "Gross Sales",
+  "Line Total",
+  "Loss Value",
+  "Net Sales",
+  "Profit",
+  "Recipe Cost",
+  "Revenue",
+  "Stock Value",
+  "Subtotal",
+  "Total",
+  "Total Value",
+  "Unit Cost",
+  "Value",
+]);
 
 function cleanSheetName(name: string) {
   return (
@@ -46,128 +71,181 @@ function rowsToTable(rows: ReportRow[]) {
   };
 }
 
-function columnWidths(columns: string[], rows: ReportRow[]) {
-  return columns.map((column) => {
-    const longest = rows.reduce(
-      (max, row) => Math.max(max, String(valueForSheet(row[column])).length),
-      column.length,
-    );
-    return { wch: Math.min(Math.max(longest + 2, 12), 48) };
+function buildTotalsRow(columns: string[], rows: ReportRow[]) {
+  if (!rows.length) return null;
+  const totals = columns.map((column, index) => {
+    if (index === 0) return "TOTAL";
+    const values = rows.map((row) => row[column]).filter((value) => typeof value === "number");
+    if (!values.length) return "";
+    return values.reduce((sum, value) => sum + Number(value), 0);
   });
+  return totals.some((value, index) => index > 0 && value !== "") ? totals : null;
 }
 
-function matrixColumnWidths(matrix: ReportMatrix) {
-  const cols = matrix.reduce((max, row) => Math.max(max, row.length), 0);
-  return Array.from({ length: cols }, (_, index) => {
-    const longest = matrix.reduce(
-      (max, row) => Math.max(max, String(valueForSheet(row[index])).length),
-      0,
-    );
-    return { wch: Math.min(Math.max(longest + 2, 10), 36) };
-  });
-}
-
-function applySheetLook(
-  ws: XLSX.WorkSheet,
-  headerRowIndex: number,
+function formatDataRange(
+  worksheet: ExcelJS.Worksheet,
+  startRow: number,
   rowCount: number,
   colCount: number,
 ) {
-  ws["!autofilter"] = {
-    ref: XLSX.utils.encode_range({
-      s: { r: headerRowIndex, c: 0 },
-      e: { r: Math.max(headerRowIndex, rowCount - 1), c: Math.max(0, colCount - 1) },
-    }),
+  worksheet.views = [{ state: "frozen", ySplit: startRow }];
+  worksheet.autoFilter = {
+    from: { row: startRow, column: 1 },
+    to: { row: Math.max(startRow, rowCount), column: Math.max(1, colCount) },
   };
-  (ws as XLSX.WorkSheet & { "!freeze"?: unknown })["!freeze"] = {
-    xSplit: 0,
-    ySplit: headerRowIndex + 1,
-  };
+}
+
+function styleHeaderRow(row: ExcelJS.Row) {
+  row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F5132" } };
+  row.alignment = { vertical: "middle" };
+  row.height = 22;
+}
+
+function styleSheet(
+  worksheet: ExcelJS.Worksheet,
+  columns: string[],
+  headerRow: number,
+  totalsRow?: number,
+) {
+  worksheet.properties.defaultRowHeight = 18;
+  worksheet.getRow(1).font = { bold: true, size: 16, color: { argb: "FF1F5132" } };
+  worksheet.getRow(2).font = { italic: true, color: { argb: "FF647067" } };
+  styleHeaderRow(worksheet.getRow(headerRow));
+
+  if (totalsRow) {
+    const row = worksheet.getRow(totalsRow);
+    row.font = { bold: true };
+    row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF4EE" } };
+  }
+
+  columns.forEach((column, index) => {
+    const excelColumn = worksheet.getColumn(index + 1);
+    let longest = column.length;
+    excelColumn.eachCell({ includeEmpty: true }, (cell) => {
+      longest = Math.max(longest, String(cell.value ?? "").length);
+    });
+    excelColumn.width = Math.min(Math.max(longest + 2, 12), 44);
+    if (MONEY_COLUMNS.has(column)) excelColumn.numFmt = "#,##0.00";
+  });
+}
+
+function addMetadata(
+  worksheet: ExcelJS.Worksheet,
+  options: AppendReportSheetOptions,
+  sheetName: string,
+) {
+  const generatedAt = options.generatedAt ?? new Date();
+  worksheet.addRow([options.title ?? sheetName]);
+  worksheet.addRow(["Generated", generatedAt.toLocaleString()]);
+  if (options.branchLabel) worksheet.addRow(["Branch", options.branchLabel]);
+  if (options.rangeLabel) worksheet.addRow(["Period", options.rangeLabel]);
+  if (options.filters) {
+    Object.entries(options.filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        worksheet.addRow([key, valueForSheet(value)]);
+      }
+    });
+  }
+  worksheet.addRow([]);
+}
+
+async function attachLogo(workbook: ExcelJS.Workbook) {
+  try {
+    const response = await fetch(logoUrl);
+    const imageBuffer = await response.arrayBuffer();
+    const imageId = workbook.addImage({ buffer: imageBuffer, extension: "png" });
+    workbook.worksheets.forEach((worksheet) => {
+      worksheet.addImage(imageId, {
+        tl: { col: Math.max(0, Math.min(worksheet.columnCount, 7)), row: 0 },
+        ext: { width: 64, height: 64 },
+      });
+    });
+  } catch {
+    // Reports still export correctly if the browser cannot fetch the bundled logo.
+  }
 }
 
 export function createReportWorkbook(title: string) {
-  const wb = XLSX.utils.book_new();
-  wb.Props = {
-    Title: title,
-    Subject: "Jungle Pepper POS report",
-    Author: "Jungle Pepper POS",
-    Company: "Jungle Pepper",
-    CreatedDate: new Date(),
-  };
-  return wb;
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Jungle Pepper POS";
+  workbook.company = "Jungle Pepper";
+  workbook.subject = "Jungle Pepper POS report";
+  workbook.title = title;
+  workbook.created = new Date();
+  return workbook;
 }
 
 export function appendReportSheet(
-  wb: XLSX.WorkBook,
+  workbook: ExcelJS.Workbook,
   sheetName: string,
   rows: ReportRow[],
   options: AppendReportSheetOptions = {},
 ) {
-  const generatedAt = options.generatedAt ?? new Date();
-  const aoa: (string | number | boolean)[][] = [];
-
-  aoa.push([options.title ?? sheetName]);
-  aoa.push(["Generated", generatedAt.toLocaleString()]);
-  if (options.rangeLabel) aoa.push(["Period", options.rangeLabel]);
-  aoa.push([]);
+  const worksheet = workbook.addWorksheet(cleanSheetName(sheetName));
+  addMetadata(worksheet, options, sheetName);
 
   if (options.summary?.length) {
     const summary = rowsToTable(options.summary);
-    aoa.push(["Summary"]);
-    aoa.push(summary.columns);
-    aoa.push(...summary.body);
-    aoa.push([]);
+    worksheet.addRow(["Summary"]);
+    const summaryHeader = worksheet.addRow(summary.columns);
+    styleHeaderRow(summaryHeader);
+    summary.body.forEach((row) => worksheet.addRow(row));
+    worksheet.addRow([]);
   }
 
   const table = rowsToTable(rows);
-  const headerRowIndex = aoa.length;
-  aoa.push(table.columns);
-  aoa.push(...table.body);
+  const headerRowNumber = worksheet.rowCount + 1;
+  worksheet.addRow(table.columns);
+  table.body.forEach((row) => worksheet.addRow(row));
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = columnWidths(table.columns, rows.length ? rows : [{ Message: "" }]);
-  applySheetLook(ws, headerRowIndex, aoa.length, table.columns.length);
+  let totalsRowNumber: number | undefined;
+  const totalsRow = options.totals === false ? null : buildTotalsRow(table.columns, rows);
+  if (totalsRow) {
+    totalsRowNumber = worksheet.rowCount + 1;
+    worksheet.addRow(totalsRow);
+  }
 
-  XLSX.utils.book_append_sheet(wb, ws, cleanSheetName(sheetName));
+  formatDataRange(worksheet, headerRowNumber, worksheet.rowCount, table.columns.length);
+  styleSheet(worksheet, table.columns, headerRowNumber, totalsRowNumber);
 }
 
 export function appendMatrixReportSheet(
-  wb: XLSX.WorkBook,
+  workbook: ExcelJS.Workbook,
   sheetName: string,
   matrix: ReportMatrix,
   options: AppendReportSheetOptions = {},
 ) {
-  const generatedAt = options.generatedAt ?? new Date();
+  const worksheet = workbook.addWorksheet(cleanSheetName(sheetName));
+  addMetadata(worksheet, options, sheetName);
+
   const tableRows = matrix.length ? matrix : [["No records for this period"]];
-  const aoa: (string | number | boolean)[][] = [];
+  const headerRowNumber = worksheet.rowCount + 1;
+  tableRows.forEach((row) => worksheet.addRow(row.map(valueForSheet)));
+  const colCount = tableRows.reduce((max, row) => Math.max(max, row.length), 0);
 
-  aoa.push([options.title ?? sheetName]);
-  aoa.push(["Generated", generatedAt.toLocaleString()]);
-  if (options.rangeLabel) aoa.push(["Period", options.rangeLabel]);
-  aoa.push([]);
-
-  if (options.summary?.length) {
-    const summary = rowsToTable(options.summary);
-    aoa.push(["Summary"]);
-    aoa.push(summary.columns);
-    aoa.push(...summary.body);
-    aoa.push([]);
-  }
-
-  const headerRowIndex = aoa.length;
-  aoa.push(...tableRows.map((row) => row.map(valueForSheet)));
-
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = matrixColumnWidths(tableRows);
-  applySheetLook(
-    ws,
-    headerRowIndex,
-    aoa.length,
-    tableRows.reduce((max, row) => Math.max(max, row.length), 0),
+  formatDataRange(worksheet, headerRowNumber, worksheet.rowCount, colCount);
+  styleHeaderRow(worksheet.getRow(headerRowNumber));
+  Array.from({ length: colCount }, (_, index) => worksheet.getColumn(index + 1)).forEach(
+    (column) => {
+      let longest = 10;
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        longest = Math.max(longest, String(cell.value ?? "").length);
+      });
+      column.width = Math.min(Math.max(longest + 2, 10), 40);
+    },
   );
-  XLSX.utils.book_append_sheet(wb, ws, cleanSheetName(sheetName));
 }
 
-export function writeReportWorkbook(wb: XLSX.WorkBook, filename: string) {
-  XLSX.writeFile(wb, filename);
+export async function writeReportWorkbook(workbook: ExcelJS.Workbook, filename: string) {
+  await attachLogo(workbook);
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }

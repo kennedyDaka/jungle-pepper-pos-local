@@ -11,6 +11,8 @@ import type {
 import type { Database } from "@/types/database";
 
 type ExpenseRowWithRelations = Database["public"]["Tables"]["expenses"]["Row"] & {
+  branches?: { name: string } | null;
+  creator?: { username: string; full_name: string } | null;
   expense_categories?: Pick<ExpenseCategory, "name"> | null;
   suppliers?: Pick<Supplier, "name"> | null;
   expense_stock_lines?: ExpenseStockLineRowWithRelations[];
@@ -78,8 +80,13 @@ function toExpense(row: ExpenseRowWithRelations): ExpenseView {
     payment_method: row.payment_method,
     description: row.description,
     supplier_id: row.supplier_id,
+    branch_id: row.branch_id,
     expense_date: row.expense_date,
     created_at: row.created_at,
+    branches: row.branches ? { name: row.branches.name } : null,
+    profiles: row.creator
+      ? { username: row.creator.username, full_name: row.creator.full_name }
+      : null,
     expense_categories: row.expense_categories ? { name: row.expense_categories.name } : undefined,
     suppliers: row.suppliers ? { name: row.suppliers.name } : null,
     expense_stock_lines: (row.expense_stock_lines ?? []).map(toExpenseStockLine),
@@ -109,14 +116,18 @@ export const expenseService = {
     return (data ?? []) as Supplier[];
   },
 
-  async listExpenses(from: string, to: string) {
-    const { data, error } = await supabase
+  async listExpenses(from: string, to: string, branchId?: string | null) {
+    let query = supabase
       .from("expenses")
       .select(
-        "*, expense_categories(name), suppliers(name), expense_stock_lines(*, items(name, units(code)), stock_movements(id, type, qty, qty_before, qty_after, note, created_at))",
+        "*, branches(name), creator:profiles!expenses_created_by_fkey(username, full_name), expense_categories(name), suppliers(name), expense_stock_lines(*, items(name, units(code)), stock_movements(id, type, qty, qty_before, qty_after, note, created_at))",
       )
       .gte("expense_date", from)
-      .lte("expense_date", to)
+      .lte("expense_date", to);
+
+    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+
+    const { data, error } = await query
       .order("expense_date", { ascending: false })
       .order("created_at", { ascending: false });
 

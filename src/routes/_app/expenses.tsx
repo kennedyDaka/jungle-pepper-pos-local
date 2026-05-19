@@ -291,7 +291,7 @@ function ExpensesPage() {
       title: "Detailed Expense Register",
       rangeLabel: `${from} to ${to}`,
     });
-    writeReportWorkbook(wb, `expenses-${from}_to_${to}.xlsx`);
+    void writeReportWorkbook(wb, `expenses-${from}_to_${to}.xlsx`);
   };
 
   const updateLine = (idx: number, patch: Partial<StockLine>) =>

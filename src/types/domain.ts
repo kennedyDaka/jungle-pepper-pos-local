@@ -115,6 +115,7 @@ export interface RecipeView extends Recipe {
 
 export interface Order {
   id: string;
+  branch_id?: string | null;
   created_at: string;
   cashier_id: string;
   subtotal: number;
@@ -148,6 +149,8 @@ export interface Payment {
 }
 
 export interface OrderView extends Order {
+  branches?: { name: string } | null;
+  profiles?: Pick<UserProfile, "username" | "full_name"> | null;
   payments?: Payment[];
   order_items?: Array<
     OrderItem & {
@@ -159,6 +162,14 @@ export interface OrderView extends Order {
           modifiers?: Pick<Modifier, "name" | "price_delta">;
         }
       >;
+      order_item_packaging?: Array<{
+        id: string;
+        item_id: string;
+        qty: number;
+        unit_price: number;
+        packaging_options?: { name: string } | null;
+        items?: Pick<InventoryItem, "name"> & { units?: Pick<Unit, "code"> };
+      }>;
     }
   >;
 }
@@ -172,6 +183,7 @@ export interface ExpenseCategory {
 
 export interface Expense {
   id: string;
+  branch_id?: string | null;
   ref_no: string;
   category_id: string;
   amount: number;
@@ -183,6 +195,8 @@ export interface Expense {
 }
 
 export interface ExpenseView extends Expense {
+  branches?: { name: string } | null;
+  profiles?: Pick<UserProfile, "username" | "full_name"> | null;
   expense_categories?: Pick<ExpenseCategory, "name">;
   suppliers?: Pick<Supplier, "name"> | null;
   expense_stock_lines?: ExpenseStockLineView[];
@@ -216,6 +230,7 @@ export interface ExpenseStockLineView {
 
 export interface StockMovement {
   id: string;
+  branch_id?: string | null;
   item_id: string;
   type: StockMovementType;
   qty: number;
@@ -223,17 +238,27 @@ export interface StockMovement {
   qty_before?: number | null;
   qty_after?: number | null;
   note?: string | null;
+  ref_type?: string | null;
+  ref_id?: string | null;
+  created_by?: string | null;
   created_at: string;
 }
 
 export interface StockMovementView extends StockMovement {
   items?: Pick<InventoryItem, "name"> & {
     units?: Pick<Unit, "code">;
+    stock_type?: StockType | string | null;
+    bottle_ml?: number | null;
+    shot_ml?: number | null;
   };
+  branches?: { name: string } | null;
+  profiles?: Pick<UserProfile, "username" | "full_name"> | null;
 }
 
 export interface ProductionBatch {
   id: string;
+  branch_id?: string | null;
+  created_by?: string | null;
   created_at: string;
   note?: string | null;
 }
@@ -257,6 +282,8 @@ export interface ProductionWaste {
 }
 
 export interface ProductionBatchView extends ProductionBatch {
+  branches?: { name: string } | null;
+  profiles?: Pick<UserProfile, "username" | "full_name"> | null;
   production_inputs: Array<
     ProductionLine & {
       items?: Pick<InventoryItem, "name"> & { units?: Pick<Unit, "code"> };

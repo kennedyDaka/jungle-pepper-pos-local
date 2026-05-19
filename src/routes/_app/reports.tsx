@@ -6,7 +6,15 @@ import { ErrorState, LoadingState } from "@/components/DataState";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { MWK, fmtDate, fmtQty } from "@/lib/format";
+import { exportRowsCsv, exportRowsPdf, printRows } from "@/lib/reportExport";
 import {
   appendMatrixReportSheet,
   appendReportSheet,
@@ -16,7 +24,7 @@ import {
   type ReportRow,
 } from "@/lib/xlsxReport";
 import { reportService } from "@/services/reportService";
-import { Download } from "lucide-react";
+import { Download, FileText, Printer, Search } from "lucide-react";
 
 export const Route = createFileRoute("/_app/reports")({ component: ReportsPage });
 
@@ -40,13 +48,23 @@ function ReportsPage() {
   monthStart.setDate(1);
   const [from, setFrom] = useState(monthStart.toISOString().slice(0, 10));
   const [to, setTo] = useState(today);
+  const [branchId, setBranchId] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [itemFilter, setItemFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [selectedReport, setSelectedReport] = useState("stock-ledger");
 
   const fromIso = new Date(from + "T00:00:00").toISOString();
   const toIso = new Date(to + "T23:59:59").toISOString();
 
+  const branches = useQuery({
+    queryKey: ["rep", "branches"],
+    queryFn: () => reportService.listBranches(),
+  });
+
   const sales = useQuery({
-    queryKey: ["rep", "sales", from, to],
-    queryFn: () => reportService.listSales(fromIso, toIso),
+    queryKey: ["rep", "sales", from, to, branchId],
+    queryFn: () => reportService.listSales(fromIso, toIso, branchId),
   });
 
   const items = useQuery({
@@ -55,24 +73,28 @@ function ReportsPage() {
   });
 
   const stockMovements = useQuery({
-    queryKey: ["rep", "stock-movements", from, to],
-    queryFn: () => reportService.listStockMovements(fromIso, toIso),
+    queryKey: ["rep", "stock-movements", from, to, branchId],
+    queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
   });
 
   const production = useQuery({
-    queryKey: ["rep", "production", from, to],
-    queryFn: () => reportService.listProduction(fromIso, toIso),
+    queryKey: ["rep", "production", from, to, branchId],
+    queryFn: () => reportService.listProduction(fromIso, toIso, branchId),
   });
 
   const expenses = useQuery({
-    queryKey: ["rep", "exp", from, to],
-    queryFn: () => reportService.listExpenses(from, to),
+    queryKey: ["rep", "exp", from, to, branchId],
+    queryFn: () => reportService.listExpenses(from, to, branchId),
   });
 
   const totalSales = sumBy(sales.data ?? [], (order: any) => Number(order.total));
   const totalExpenses = sumBy(expenses.data ?? [], (expense: any) => Number(expense.amount));
   const movements = stockMovements.data ?? [];
   const productionRows = production.data ?? [];
+  const branchLabel =
+    branchId === "all"
+      ? "All branches"
+      : (branches.data?.find((branch: any) => branch.id === branchId)?.name ?? "Selected branch");
 
   const itemAgg = new Map<string, { qty: number; revenue: number }>();
   const payAgg = new Map<string, number>();
@@ -125,6 +147,7 @@ function ReportsPage() {
     movements.map((movement) => ({
       Date: new Date(movement.created_at).toLocaleString(),
       Type: movement.type,
+      Branch: movement.branches?.name ?? "Main Branch",
       Item: movement.items?.name ?? "",
       "Stock Type": movement.items?.stock_type ?? "",
       Unit: movement.items?.units?.code ?? "",
@@ -135,12 +158,15 @@ function ReportsPage() {
       After: movement.qty_after ?? "",
       "Reference Type": movement.ref_type ?? "",
       "Reference ID": movement.ref_id ?? "",
+      Destination: movement.ref_type ?? "",
+      User: movement.profiles?.full_name || movement.profiles?.username || "",
       Note: movement.note ?? "",
     }));
 
   const inventoryRows = (): ReportRow[] =>
     (items.data ?? []).map((item: any) => ({
       Item: item.name,
+      Branch: item.branches?.name ?? "Main Branch",
       Category: item.categories?.name ?? "-",
       Type: item.stock_type,
       Unit: item.units?.code ?? "",
@@ -430,6 +456,260 @@ function ReportsPage() {
         };
       });
 
+  const salesSummaryRows = (): ReportRow[] =>
+    (sales.data ?? []).map((order: any) => {
+      const qty = sumBy(order.order_items ?? [], (line: any) => Number(line.qty));
+      const itemNames = (order.order_items ?? [])
+        .map((line: any) => `${line.menu_items?.name ?? "Item"} x${fmtQty(line.qty)}`)
+        .join(" | ");
+      const packagingTotal = sumBy(order.order_items ?? [], (line: any) =>
+        sumBy(
+          line.order_item_packaging ?? [],
+          (pack: any) => Number(pack.qty) * Number(pack.unit_price),
+        ),
+      );
+      return {
+        Date: new Date(order.created_at).toLocaleString(),
+        "Invoice #": order.id.slice(0, 8).toUpperCase(),
+        Cashier: order.profiles?.full_name || order.profiles?.username || "",
+        Branch: order.branches?.name ?? "Main Branch",
+        "Order Type": (order.order_items ?? []).some((line: any) => line.takeaway)
+          ? "Takeaway"
+          : "Table",
+        "Items Sold": itemNames,
+        Qty: qty,
+        "Gross Sales": Number(order.subtotal),
+        Discount: Number(order.discount),
+        "Packaging Sales": packagingTotal,
+        "Net Sales": Number(order.total),
+        "Payment Method": (order.payments ?? [])
+          .map((payment: any) => `${payment.method}: ${MWK(payment.amount)}`)
+          .join(" | "),
+      };
+    });
+
+  const salesItemDetailRows = (): ReportRow[] => {
+    const rows: ReportRow[] = [];
+    (sales.data ?? []).forEach((order: any) => {
+      (order.order_items ?? []).forEach((line: any) => {
+        const lineTotal = Number(line.qty) * Number(line.unit_price);
+        rows.push({
+          Date: new Date(order.created_at).toLocaleString(),
+          "Invoice #": order.id.slice(0, 8).toUpperCase(),
+          Branch: order.branches?.name ?? "Main Branch",
+          "Menu Item": line.menu_items?.name ?? "-",
+          Category: line.menu_items?.categories?.name ?? "-",
+          "Qty Sold": Number(line.qty),
+          "Unit Price": Number(line.unit_price),
+          Total: lineTotal,
+          "Recipe Cost": 0,
+          Profit: lineTotal,
+          Cashier: order.profiles?.full_name || order.profiles?.username || "",
+          Modifiers: modifierNames(line).join(", "),
+          Takeaway: line.takeaway ? "Yes" : "No",
+        });
+        (line.order_item_packaging ?? []).forEach((pack: any) => {
+          const packTotal = Number(pack.qty) * Number(pack.unit_price);
+          rows.push({
+            Date: new Date(order.created_at).toLocaleString(),
+            "Invoice #": order.id.slice(0, 8).toUpperCase(),
+            Branch: order.branches?.name ?? "Main Branch",
+            "Menu Item": pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
+            Category: "Packaging",
+            "Qty Sold": Number(pack.qty),
+            "Unit Price": Number(pack.unit_price),
+            Total: packTotal,
+            "Recipe Cost": 0,
+            Profit: packTotal,
+            Cashier: order.profiles?.full_name || order.profiles?.username || "",
+            Modifiers: "",
+            Takeaway: "Yes",
+          });
+        });
+      });
+    });
+    return rows;
+  };
+
+  const salesRecipeConsumptionRows = (): ReportRow[] =>
+    movements
+      .filter((movement) => movement.type === "sale")
+      .map((movement) => ({
+        Date: new Date(movement.created_at).toLocaleString(),
+        "Linked Sale": movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : "",
+        Branch: movement.branches?.name ?? "Main Branch",
+        "Menu Item": movement.note?.includes("packaging") ? "Takeaway Packaging" : "POS Sale",
+        "Ingredient Deducted": movement.items?.name ?? "",
+        "Qty Used": Math.abs(Number(movement.qty)),
+        Unit: movement.items?.units?.code ?? "",
+        "Total Deducted": `${fmtQty(Math.abs(Number(movement.qty)))} ${movement.items?.units?.code ?? ""}`,
+        Note: movement.note ?? "",
+      }));
+
+  const takeawayPackagingRows = (): ReportRow[] => {
+    const rows: ReportRow[] = [];
+    (sales.data ?? []).forEach((order: any) => {
+      (order.order_items ?? []).forEach((line: any) => {
+        (line.order_item_packaging ?? []).forEach((pack: any) =>
+          rows.push({
+            Date: new Date(order.created_at).toLocaleString(),
+            Branch: order.branches?.name ?? "Main Branch",
+            "Packaging Item": pack.packaging_options?.name ?? pack.items?.name ?? "",
+            Item: pack.items?.name ?? pack.packaging_options?.name ?? "",
+            "Qty Used": Number(pack.qty),
+            Unit: pack.items?.units?.code ?? "",
+            "Unit Price": Number(pack.unit_price),
+            Total: Number(pack.qty) * Number(pack.unit_price),
+            "Linked Sale": order.id.slice(0, 8).toUpperCase(),
+            Cashier: order.profiles?.full_name || order.profiles?.username || "",
+          }),
+        );
+      });
+    });
+    return rows;
+  };
+
+  const lowStockRows = (): ReportRow[] =>
+    inventoryRows()
+      .filter((row) => Number(row["Qty On Hand"]) <= Number(row["Reorder Level"]))
+      .map((row) => ({
+        Item: row.Item,
+        Category: row.Category,
+        "Current Qty": row["Qty On Hand"],
+        "Reorder Level": row["Reorder Level"],
+        Difference: Number(row["Qty On Hand"]) - Number(row["Reorder Level"]),
+        Unit: row.Unit,
+      }));
+
+  const productionInputRows = (): ReportRow[] => {
+    const rows: ReportRow[] = [];
+    productionRows.forEach((batch: any) => {
+      batch.production_inputs?.forEach((line: any) =>
+        rows.push({
+          Date: new Date(batch.created_at).toLocaleString(),
+          Branch: batch.branches?.name ?? "Main Branch",
+          "Production Ref": batch.id.slice(0, 8).toUpperCase(),
+          "Raw Material": line.items?.name ?? "",
+          Item: line.items?.name ?? "",
+          "Qty Used": Number(line.qty),
+          Unit: line.items?.units?.code ?? "",
+          Cost: line.unit_cost ?? 0,
+          "Produced By": batch.profiles?.full_name || batch.profiles?.username || "",
+          Note: batch.note ?? "",
+        }),
+      );
+    });
+    return rows;
+  };
+
+  const productionOutputRows = (): ReportRow[] => {
+    const rows: ReportRow[] = [];
+    productionRows.forEach((batch: any) => {
+      batch.production_outputs?.forEach((line: any) =>
+        rows.push({
+          Date: new Date(batch.created_at).toLocaleString(),
+          Branch: batch.branches?.name ?? "Main Branch",
+          "Production Ref": batch.id.slice(0, 8).toUpperCase(),
+          "Output Item": line.items?.name ?? "",
+          Item: line.items?.name ?? "",
+          "Qty Produced": Number(line.qty),
+          Unit: line.items?.units?.code ?? "",
+          "Unit Cost": line.unit_cost ?? 0,
+          "Produced By": batch.profiles?.full_name || batch.profiles?.username || "",
+          Note: batch.note ?? "",
+        }),
+      );
+    });
+    return rows;
+  };
+
+  const expenseCategoryRows = (): ReportRow[] =>
+    [...expByCat.entries()].map(([category, amount]) => ({
+      Category: category,
+      "Total Amount": amount,
+    }));
+
+  const categoryOptions = [
+    ...new Set([
+      ...(items.data ?? []).map((item: any) => item.categories?.name).filter(Boolean),
+      ...[...catAgg.keys()],
+      ...[...expByCat.keys()],
+      "Packaging",
+    ]),
+  ].sort((a, b) => String(a).localeCompare(String(b)));
+
+  const itemOptions = [
+    ...new Set([...(items.data ?? []).map((item: any) => item.name), ...[...itemAgg.keys()]]),
+  ].sort((a, b) => String(a).localeCompare(String(b)));
+
+  const reportFilters = {
+    Category: categoryFilter === "all" ? "" : categoryFilter,
+    Item: itemFilter === "all" ? "" : itemFilter,
+    Search: search,
+  };
+
+  const reportCatalog = [
+    { id: "stock-ledger", title: "Stock Ledger", rows: stockMovementRows() },
+    { id: "sales-detail", title: "Sales Item Detail", rows: salesItemDetailRows() },
+    { id: "sales-summary", title: "Sales Summary", rows: salesSummaryRows() },
+    {
+      id: "sales-consumption",
+      title: "Sales Recipe Consumption",
+      rows: salesRecipeConsumptionRows(),
+    },
+    { id: "takeaway-packaging", title: "Takeaway Packaging", rows: takeawayPackagingRows() },
+    { id: "inventory-master", title: "Inventory Master", rows: inventoryRows() },
+    { id: "low-stock", title: "Low Stock", rows: lowStockRows() },
+    { id: "bar-variance", title: "Bar Variance", rows: barControlRows() },
+    { id: "production-input", title: "Production Input", rows: productionInputRows() },
+    { id: "production-output", title: "Production Output", rows: productionOutputRows() },
+    { id: "expenses-detail", title: "Expense Detail", rows: expenseLineRows() },
+    { id: "expenses-category", title: "Expense Category", rows: expenseCategoryRows() },
+  ];
+
+  const currentReport =
+    reportCatalog.find((report) => report.id === selectedReport) ?? reportCatalog[0];
+
+  const rowMatchesFilters = (row: ReportRow) => {
+    const values = Object.values(row).map((value) => String(value ?? "").toLowerCase());
+    const categoryValue = String(row.Category ?? row["Stock Type"] ?? "").toLowerCase();
+    const itemValue = String(
+      row.Item ??
+        row["Menu Item"] ??
+        row["Ingredient Deducted"] ??
+        row.Bottle ??
+        row["Packaging Item"] ??
+        "",
+    ).toLowerCase();
+    if (categoryFilter !== "all" && categoryValue !== categoryFilter.toLowerCase()) return false;
+    if (itemFilter !== "all" && itemValue !== itemFilter.toLowerCase()) return false;
+    if (search.trim()) {
+      const needle = search.trim().toLowerCase();
+      if (!values.some((value) => value.includes(needle))) return false;
+    }
+    return true;
+  };
+
+  const currentRows = currentReport.rows.filter(rowMatchesFilters);
+  const exportMeta = {
+    title: currentReport.title,
+    filename: `${currentReport.id}-${reportDateRange(from, to)}`,
+    rangeLabel,
+    branchLabel,
+    filters: reportFilters,
+  };
+
+  const exportCurrentXlsx = () => {
+    const wb = createReportWorkbook(`Jungle Pepper ${currentReport.title}`);
+    appendReportSheet(wb, currentReport.title, currentRows, {
+      title: currentReport.title,
+      rangeLabel,
+      branchLabel,
+      filters: reportFilters,
+    });
+    void writeReportWorkbook(wb, `${currentReport.id}-${reportDateRange(from, to)}.xlsx`);
+  };
+
   const exportSalesXlsx = () => {
     const wb = createReportWorkbook("Jungle Pepper Sales Report");
     const orderRows: ReportRow[] = [];
@@ -511,7 +791,7 @@ function ReportsPage() {
       [...catAgg.entries()].map(([category, amount]) => ({ Category: category, Revenue: amount })),
       { title: "Category Mix", rangeLabel },
     );
-    writeReportWorkbook(wb, `sales-${reportDateRange(from, to)}.xlsx`);
+    void writeReportWorkbook(wb, `sales-${reportDateRange(from, to)}.xlsx`);
   };
 
   const exportInventoryXlsx = () => {
@@ -546,7 +826,7 @@ function ReportsPage() {
       rows.filter((row) => row["Below Reorder"] === "Yes" || Number(row["Qty On Hand"]) < 0),
       { title: "Inventory Exceptions", rangeLabel },
     );
-    writeReportWorkbook(wb, `inventory-${reportDateRange(from, to)}.xlsx`);
+    void writeReportWorkbook(wb, `inventory-${reportDateRange(from, to)}.xlsx`);
   };
 
   const exportStockLedgerXlsx = () => {
@@ -585,7 +865,7 @@ function ReportsPage() {
       ),
       { title: "Wastage, Complimentary, And Breakage", rangeLabel },
     );
-    writeReportWorkbook(wb, `stock-ledger-${reportDateRange(from, to)}.xlsx`);
+    void writeReportWorkbook(wb, `stock-ledger-${reportDateRange(from, to)}.xlsx`);
   };
 
   const exportBarControlXlsx = () => {
@@ -611,7 +891,7 @@ function ReportsPage() {
       title: "Beverage Movement Detail",
       rangeLabel,
     });
-    writeReportWorkbook(wb, `bar-control-${reportDateRange(from, to)}.xlsx`);
+    void writeReportWorkbook(wb, `bar-control-${reportDateRange(from, to)}.xlsx`);
   };
 
   const exportProductionXlsx = () => {
@@ -686,7 +966,7 @@ function ReportsPage() {
       title: "Production Wastage Detail",
       rangeLabel,
     });
-    writeReportWorkbook(wb, `production-${reportDateRange(from, to)}.xlsx`);
+    void writeReportWorkbook(wb, `production-${reportDateRange(from, to)}.xlsx`);
   };
 
   const exportExpensesXlsx = () => {
@@ -724,7 +1004,7 @@ function ReportsPage() {
       lineRows.filter((row) => row.Item),
       { title: "Stock Purchase Line Detail", rangeLabel },
     );
-    writeReportWorkbook(wb, `expenses-${reportDateRange(from, to)}.xlsx`);
+    void writeReportWorkbook(wb, `expenses-${reportDateRange(from, to)}.xlsx`);
   };
 
   const exportCsv = (filename: string, rows: (string | number)[][]) => {
@@ -739,12 +1019,18 @@ function ReportsPage() {
   };
 
   const dataError =
-    sales.error || items.error || stockMovements.error || production.error || expenses.error;
+    branches.error ||
+    sales.error ||
+    items.error ||
+    stockMovements.error ||
+    production.error ||
+    expenses.error;
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Reports</h1>
       {(sales.isLoading ||
+        branches.isLoading ||
         items.isLoading ||
         stockMovements.isLoading ||
         production.isLoading ||
@@ -759,6 +1045,98 @@ function ReportsPage() {
         <div>
           <Label>To</Label>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+        <div className="min-w-44">
+          <Label>Branch</Label>
+          <Select value={branchId} onValueChange={setBranchId}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All branches</SelectItem>
+              {branches.data?.map((branch: any) => (
+                <SelectItem key={branch.id} value={branch.id}>
+                  {branch.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-44">
+          <Label>Category</Label>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {categoryOptions.map((category) => (
+                <SelectItem key={String(category)} value={String(category)}>
+                  {String(category)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-52">
+          <Label>Item</Label>
+          <Select value={itemFilter} onValueChange={setItemFilter}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All items</SelectItem>
+              {itemOptions.map((item) => (
+                <SelectItem key={String(item)} value={String(item)}>
+                  {String(item)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-52">
+          <Label>Search</Label>
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-2 top-2.5 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder="Search reports"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+        </div>
+        <div className="min-w-56">
+          <Label>Report</Label>
+          <Select value={selectedReport} onValueChange={setSelectedReport}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {reportCatalog.map((report) => (
+                <SelectItem key={report.id} value={report.id}>
+                  {report.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={exportCurrentXlsx}>
+            <Download className="h-4 w-4 mr-1" />
+            Excel
+          </Button>
+          <Button variant="secondary" onClick={() => exportRowsPdf(exportMeta, currentRows)}>
+            <FileText className="h-4 w-4 mr-1" />
+            PDF
+          </Button>
+          <Button variant="secondary" onClick={() => exportRowsCsv(exportMeta, currentRows)}>
+            CSV
+          </Button>
+          <Button variant="secondary" onClick={() => printRows(exportMeta, currentRows)}>
+            <Printer className="h-4 w-4 mr-1" />
+            Print
+          </Button>
         </div>
         <div className="ml-auto flex gap-2 flex-wrap">
           <Button onClick={exportSalesXlsx}>
@@ -785,6 +1163,58 @@ function ReportsPage() {
             <Download className="h-4 w-4 mr-1" />
             Expenses
           </Button>
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-semibold">{currentReport.title}</h2>
+            <p className="text-xs text-muted-foreground">
+              {currentRows.length} rows after filters, {branchLabel}, {rangeLabel}
+            </p>
+          </div>
+          <div className="text-sm font-medium">
+            Total rows: <span className="text-primary">{currentRows.length}</span>
+          </div>
+        </div>
+        <div className="max-h-96 overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-muted-foreground">
+                {Object.keys(currentRows[0] ?? { Message: "No records" })
+                  .slice(0, 10)
+                  .map((column) => (
+                    <th key={column} className="p-1">
+                      {column}
+                    </th>
+                  ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(currentRows.length
+                ? currentRows
+                : ([{ Message: "No records for this period" }] as ReportRow[])
+              )
+                .slice(0, 50)
+                .map((row, rowIndex) => {
+                  const reportRow = row as ReportRow;
+                  return (
+                    <tr key={rowIndex} className="border-t border-border">
+                      {Object.keys(currentRows[0] ?? reportRow)
+                        .slice(0, 10)
+                        .map((column) => (
+                          <td key={column} className="p-1.5">
+                            {typeof reportRow[column] === "number"
+                              ? fmtQty(Number(reportRow[column]))
+                              : reportRow[column]}
+                          </td>
+                        ))}
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
         </div>
       </Card>
 
