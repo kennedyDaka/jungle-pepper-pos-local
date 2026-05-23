@@ -143,9 +143,31 @@ function ReportsPage() {
       .map((orderModifier: any) => String(orderModifier.modifiers?.name ?? ""))
       .filter((name: string) => name.length > 0);
 
+  const movementsForItem = (itemId: string) =>
+    movements.filter((movement) => movement.item_id === itemId);
+
+  const movementSummaryForItem = (item: any) => {
+    const itemMoves = movementsForItem(item.id);
+    const qtyIn = sumBy(itemMoves, (movement) => Math.max(0, moneyValue(movement.qty)));
+    const qtyOut = Math.abs(
+      sumBy(itemMoves, (movement) => Math.min(0, moneyValue(movement.qty))),
+    );
+    const netMovement = sumBy(itemMoves, (movement) => moneyValue(movement.qty));
+    const closingQty = moneyValue(item.qty_on_hand);
+    const openingQty = closingQty - netMovement;
+    return { itemMoves, qtyIn, qtyOut, netMovement, openingQty, closingQty };
+  };
+
   const stockMovementRows = (): ReportRow[] =>
     movements.map((movement) => ({
       Date: new Date(movement.created_at).toLocaleString(),
+      Source: movement.source_label ?? movement.ref_type ?? movement.type,
+      Reference:
+        movement.invoice_no ??
+        movement.production_ref ??
+        movement.expense_ref ??
+        (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
+      "Dish / Destination": movement.destination ?? movement.menu_item_names ?? "",
       Type: movement.type,
       Branch: movement.branches?.name ?? "Main Branch",
       Item: movement.items?.name ?? "",
@@ -158,28 +180,37 @@ function ReportsPage() {
       After: movement.qty_after ?? "",
       "Reference Type": movement.ref_type ?? "",
       "Reference ID": movement.ref_id ?? "",
-      Destination: movement.ref_type ?? "",
+      Destination: movement.destination ?? "",
+      "Source Detail": movement.source_detail ?? "",
+      "Menu Categories": movement.menu_categories ?? "",
       User: movement.profiles?.full_name || movement.profiles?.username || "",
       Note: movement.note ?? "",
     }));
 
   const inventoryRows = (): ReportRow[] =>
-    (items.data ?? []).map((item: any) => ({
-      Item: item.name,
-      Branch: item.branches?.name ?? "Main Branch",
-      Category: item.categories?.name ?? "-",
-      Type: item.stock_type,
-      Unit: item.units?.code ?? "",
-      "Unit Name": item.units?.name ?? "",
-      "Qty On Hand": Number(item.qty_on_hand),
-      "Average Cost": Number(item.avg_cost),
-      "Stock Value": Number(item.qty_on_hand) * Number(item.avg_cost),
-      "Reorder Level": Number(item.reorder_level),
-      "Below Reorder": Number(item.qty_on_hand) <= Number(item.reorder_level) ? "Yes" : "No",
-      "Bottle ML": item.bottle_ml ?? "",
-      "Serving ML": item.shot_ml ?? "",
-      Supplier: item.suppliers?.name ?? "",
-    }));
+    (items.data ?? []).map((item: any) => {
+      const summary = movementSummaryForItem(item);
+      return {
+        Item: item.name,
+        Branch: item.branches?.name ?? "Main Branch",
+        Category: item.categories?.name ?? "-",
+        Type: item.stock_type,
+        Unit: item.units?.code ?? "",
+        "Unit Name": item.units?.name ?? "",
+        "Opening Qty": summary.openingQty,
+        "Qty In": summary.qtyIn,
+        "Qty Out": summary.qtyOut,
+        "Closing Qty": summary.closingQty,
+        "Qty On Hand": summary.closingQty,
+        "Average Cost": Number(item.avg_cost),
+        "Stock Value": summary.closingQty * Number(item.avg_cost),
+        "Reorder Level": Number(item.reorder_level),
+        "Below Reorder": summary.closingQty <= Number(item.reorder_level) ? "Yes" : "No",
+        "Bottle ML": item.bottle_ml ?? "",
+        "Serving ML": item.shot_ml ?? "",
+        Supplier: item.suppliers?.name ?? "",
+      };
+    });
 
   const stockCountMatrixRows = (): ReportMatrix => {
     const header = [
@@ -211,13 +242,7 @@ function ReportsPage() {
           .slice()
           .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
           .forEach((item: any) => {
-            const itemMoves = movements.filter((movement) => movement.item_id === item.id);
-            const opening = itemMoves.length
-              ? moneyValue(itemMoves[0].qty_before)
-              : moneyValue(item.qty_on_hand);
-            const closing = itemMoves.length
-              ? moneyValue(itemMoves[itemMoves.length - 1].qty_after)
-              : moneyValue(item.qty_on_hand);
+            const { itemMoves, openingQty, closingQty } = movementSummaryForItem(item);
             const purchases = sumBy(
               itemMoves.filter((movement) => movement.type === "purchase_in"),
               (movement) => Math.max(0, moneyValue(movement.qty)),
@@ -242,7 +267,7 @@ function ReportsPage() {
             );
             rows.push([
               item.name,
-              opening,
+              openingQty,
               purchases ? purchases * moneyValue(item.avg_cost) : "",
               purchases,
               outQty,
@@ -250,7 +275,7 @@ function ReportsPage() {
               item.units?.code === "kg" ? produced : "",
               produced,
               waste,
-              closing,
+              closingQty,
               item.units?.code ?? "",
             ]);
           });
@@ -536,13 +561,17 @@ function ReportsPage() {
       .filter((movement) => movement.type === "sale")
       .map((movement) => ({
         Date: new Date(movement.created_at).toLocaleString(),
-        "Linked Sale": movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : "",
+        "Linked Sale":
+          movement.invoice_no ?? (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
         Branch: movement.branches?.name ?? "Main Branch",
-        "Menu Item": movement.note?.includes("packaging") ? "Takeaway Packaging" : "POS Sale",
+        Source: movement.source_label ?? "MW POS",
+        "Menu Item": movement.menu_item_names ?? movement.destination ?? "POS Sale",
+        Category: movement.menu_categories ?? "",
         "Ingredient Deducted": movement.items?.name ?? "",
         "Qty Used": Math.abs(Number(movement.qty)),
         Unit: movement.items?.units?.code ?? "",
         "Total Deducted": `${fmtQty(Math.abs(Number(movement.qty)))} ${movement.items?.units?.code ?? ""}`,
+        "Source Detail": movement.source_detail ?? "",
         Note: movement.note ?? "",
       }));
 
@@ -571,13 +600,13 @@ function ReportsPage() {
 
   const lowStockRows = (): ReportRow[] =>
     inventoryRows()
-      .filter((row) => Number(row["Qty On Hand"]) <= Number(row["Reorder Level"]))
+      .filter((row) => Number(row["Closing Qty"]) <= Number(row["Reorder Level"]))
       .map((row) => ({
         Item: row.Item,
         Category: row.Category,
-        "Current Qty": row["Qty On Hand"],
+        "Current Qty": row["Closing Qty"],
         "Reorder Level": row["Reorder Level"],
-        Difference: Number(row["Qty On Hand"]) - Number(row["Reorder Level"]),
+        Difference: Number(row["Closing Qty"]) - Number(row["Reorder Level"]),
         Unit: row.Unit,
       }));
 
@@ -672,11 +701,15 @@ function ReportsPage() {
 
   const rowMatchesFilters = (row: ReportRow) => {
     const values = Object.values(row).map((value) => String(value ?? "").toLowerCase());
-    const categoryValue = String(row.Category ?? row["Stock Type"] ?? "").toLowerCase();
+    const categoryValue = String(
+      row.Category ?? row["Stock Type"] ?? row["Menu Categories"] ?? "",
+    ).toLowerCase();
     const itemValue = String(
       row.Item ??
         row["Menu Item"] ??
         row["Ingredient Deducted"] ??
+        row["Dish / Destination"] ??
+        row.Destination ??
         row.Bottle ??
         row["Packaging Item"] ??
         "",

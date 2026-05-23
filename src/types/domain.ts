@@ -253,6 +253,19 @@ export interface StockMovementView extends StockMovement {
   };
   branches?: { name: string } | null;
   profiles?: Pick<UserProfile, "username" | "full_name"> | null;
+  source_label?: string | null;
+  source_detail?: string | null;
+  destination?: string | null;
+  invoice_no?: string | null;
+  order_type?: string | null;
+  menu_item_names?: string | null;
+  menu_categories?: string | null;
+  production_ref?: string | null;
+  production_outputs?: string | null;
+  production_inputs?: string | null;
+  expense_ref?: string | null;
+  expense_category?: string | null;
+  supplier_name?: string | null;
 }
 
 export interface ProductionBatch {

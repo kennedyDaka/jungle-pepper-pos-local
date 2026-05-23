@@ -508,7 +508,7 @@ function BinCardDialog({ item, onClose }: { item: any; onClose: () => void }) {
   });
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-5xl">
         <DialogHeader>
           <DialogTitle>Bin card — {item.name}</DialogTitle>
         </DialogHeader>
@@ -517,26 +517,49 @@ function BinCardDialog({ item, onClose }: { item: any; onClose: () => void }) {
             <thead className="sticky top-0 bg-card">
               <tr className="text-left">
                 <th className="p-2">Date</th>
+                <th className="p-2">Source</th>
+                <th className="p-2">Dish / destination</th>
                 <th className="p-2">Type</th>
-                <th className="p-2 text-right">Qty</th>
+                <th className="p-2 text-right">In</th>
+                <th className="p-2 text-right">Out</th>
+                <th className="p-2 text-right">Balance</th>
                 <th className="p-2 text-right">Unit cost</th>
+                <th className="p-2">User</th>
                 <th className="p-2">Note</th>
               </tr>
             </thead>
             <tbody>
-              {moves.data?.map((m: any) => (
-                <tr key={m.id} className="border-t border-border">
-                  <td className="p-2">{fmtDate(m.created_at)}</td>
-                  <td className="p-2 text-xs uppercase">{m.type}</td>
-                  <td
-                    className={`p-2 text-right ${Number(m.qty) < 0 ? "text-destructive" : "text-success"}`}
-                  >
-                    {fmtQty(m.qty)}
-                  </td>
-                  <td className="p-2 text-right">{MWK(m.unit_cost)}</td>
-                  <td className="p-2 text-muted-foreground">{m.note}</td>
-                </tr>
-              ))}
+              {moves.data?.map((m: any) => {
+                const qty = Number(m.qty);
+                const unit = m.items?.units?.code ?? item.units?.code ?? "";
+                return (
+                  <tr key={m.id} className="border-t border-border align-top">
+                    <td className="p-2 whitespace-nowrap">{fmtDate(m.created_at)}</td>
+                    <td className="p-2 font-medium">{m.source_label ?? m.ref_type ?? m.type}</td>
+                    <td className="p-2 min-w-56">
+                      <div>{m.destination || m.menu_item_names || m.source_detail || "-"}</div>
+                      {m.invoice_no && (
+                        <div className="text-xs text-muted-foreground">Invoice {m.invoice_no}</div>
+                      )}
+                    </td>
+                    <td className="p-2 text-xs uppercase">{m.type}</td>
+                    <td className="p-2 text-right text-success">
+                      {qty > 0 ? `${fmtQty(qty)} ${unit}` : ""}
+                    </td>
+                    <td className="p-2 text-right text-destructive">
+                      {qty < 0 ? `${fmtQty(Math.abs(qty))} ${unit}` : ""}
+                    </td>
+                    <td className="p-2 text-right">
+                      {m.qty_after === null || m.qty_after === undefined
+                        ? ""
+                        : `${fmtQty(m.qty_after)} ${unit}`}
+                    </td>
+                    <td className="p-2 text-right">{MWK(m.unit_cost)}</td>
+                    <td className="p-2">{m.profiles?.full_name || m.profiles?.username || ""}</td>
+                    <td className="p-2 text-muted-foreground">{m.source_detail || m.note}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

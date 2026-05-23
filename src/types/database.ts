@@ -1313,7 +1313,46 @@ export type Database = {
       };
     };
     Views: {
-      [_ in never]: never;
+      stock_movement_details: {
+        Row: {
+          bottle_ml: number | null;
+          branch_id: string | null;
+          branch_name: string | null;
+          created_at: string;
+          created_by: string | null;
+          destination: string | null;
+          expense_category: string | null;
+          expense_ref: string | null;
+          id: string;
+          invoice_no: string | null;
+          item_id: string;
+          item_name: string;
+          menu_categories: string | null;
+          menu_item_names: string | null;
+          note: string | null;
+          order_type: string | null;
+          production_inputs: string | null;
+          production_outputs: string | null;
+          production_ref: string | null;
+          qty: number;
+          qty_after: number | null;
+          qty_before: number | null;
+          ref_id: string | null;
+          ref_type: string | null;
+          shot_ml: number | null;
+          source_detail: string | null;
+          source_label: string | null;
+          stock_type: Database["public"]["Enums"]["stock_type"];
+          supplier_name: string | null;
+          type: Database["public"]["Enums"]["stock_movement_type"];
+          unit_code: string | null;
+          unit_cost: number;
+          unit_name: string | null;
+          user_full_name: string | null;
+          user_username: string | null;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       apply_production: {

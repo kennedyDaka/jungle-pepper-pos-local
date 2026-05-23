@@ -32,17 +32,7 @@ type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
   >;
 };
 
-type MovementWithRelations = Database["public"]["Tables"]["stock_movements"]["Row"] & {
-  branches?: BranchRelation;
-  creator?: StaffRelation;
-  items?: {
-    name: string;
-    stock_type?: string | null;
-    bottle_ml?: number | null;
-    shot_ml?: number | null;
-    units?: Pick<Unit, "code"> | null;
-  } | null;
-};
+type MovementWithRelations = Database["public"]["Views"]["stock_movement_details"]["Row"];
 
 type ProductionLineWithRelations = Database["public"]["Tables"]["production_inputs"]["Row"] & {
   items?: {
@@ -150,17 +140,33 @@ function toMovement(movement: MovementWithRelations) {
     ref_id: movement.ref_id,
     created_by: movement.created_by,
     created_at: movement.created_at,
-    branches: movement.branches ? { name: movement.branches.name } : null,
-    profiles: toStaff(movement.creator),
-    items: movement.items
+    branches: movement.branch_name ? { name: movement.branch_name } : null,
+    profiles:
+      movement.user_username || movement.user_full_name
+        ? { username: movement.user_username ?? "", full_name: movement.user_full_name ?? "" }
+        : null,
+    items: movement.item_name
       ? {
-          name: movement.items.name,
-          stock_type: movement.items.stock_type,
-          bottle_ml: movement.items.bottle_ml === null ? null : Number(movement.items.bottle_ml),
-          shot_ml: movement.items.shot_ml === null ? null : Number(movement.items.shot_ml),
-          units: movement.items.units ? { code: movement.items.units.code } : undefined,
+          name: movement.item_name,
+          stock_type: movement.stock_type,
+          bottle_ml: movement.bottle_ml === null ? null : Number(movement.bottle_ml),
+          shot_ml: movement.shot_ml === null ? null : Number(movement.shot_ml),
+          units: movement.unit_code ? { code: movement.unit_code } : undefined,
         }
       : undefined,
+    source_label: movement.source_label,
+    source_detail: movement.source_detail,
+    destination: movement.destination,
+    invoice_no: movement.invoice_no,
+    order_type: movement.order_type,
+    menu_item_names: movement.menu_item_names,
+    menu_categories: movement.menu_categories,
+    production_ref: movement.production_ref,
+    production_outputs: movement.production_outputs,
+    production_inputs: movement.production_inputs,
+    expense_ref: movement.expense_ref,
+    expense_category: movement.expense_category,
+    supplier_name: movement.supplier_name,
   };
 }
 
@@ -236,10 +242,8 @@ export const reportService = {
 
   async listStockMovements(fromIso: string, toIso: string, branchId?: string | null) {
     let query = supabase
-      .from("stock_movements")
-      .select(
-        "*, branches(name), creator:profiles!stock_movements_created_by_fkey(username, full_name), items(name, stock_type, bottle_ml, shot_ml, units(code))",
-      )
+      .from("stock_movement_details")
+      .select("*")
       .gte("created_at", fromIso)
       .lte("created_at", toIso);
 
@@ -253,10 +257,8 @@ export const reportService = {
 
   async listWastage(fromIso: string, toIso: string, branchId?: string | null) {
     let query = supabase
-      .from("stock_movements")
-      .select(
-        "*, branches(name), creator:profiles!stock_movements_created_by_fkey(username, full_name), items(name, stock_type, bottle_ml, shot_ml, units(code))",
-      )
+      .from("stock_movement_details")
+      .select("*")
       .eq("type", "wastage")
       .gte("created_at", fromIso)
       .lte("created_at", toIso);
