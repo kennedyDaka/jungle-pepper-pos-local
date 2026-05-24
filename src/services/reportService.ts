@@ -161,6 +161,8 @@ function toMovement(movement: MovementWithRelations) {
     order_type: movement.order_type,
     menu_item_names: movement.menu_item_names,
     menu_categories: movement.menu_categories,
+    modifier_names: movement.modifier_names,
+    order_item_qty: movement.order_item_qty === null ? null : Number(movement.order_item_qty),
     production_ref: movement.production_ref,
     production_outputs: movement.production_outputs,
     production_inputs: movement.production_inputs,
@@ -301,5 +303,25 @@ export const reportService = {
 
   async listExpenses(from: string, to: string, branchId?: string | null) {
     return expenseService.listExpenses(from, to, branchId);
+  },
+
+  async listDeductionAudit(fromIso: string, toIso: string, branchId?: string | null) {
+    let query = supabase
+      .from("order_inventory_deduction_audit")
+      .select("*")
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso);
+
+    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+
+    const { data, error } = await query.order("created_at", { ascending: false });
+    raiseIfError(error, "Could not load inventory deduction audit");
+    return (data ?? []).map((row) => ({
+      ...row,
+      expected_qty: Number(row.expected_qty),
+      actual_qty: Number(row.actual_qty),
+      movement_lines: Number(row.movement_lines),
+      difference_qty: Number(row.difference_qty),
+    }));
   },
 };

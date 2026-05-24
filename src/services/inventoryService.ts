@@ -74,6 +74,8 @@ function toMovement(row: MovementRowWithRelations): StockMovementView {
     order_type: row.order_type,
     menu_item_names: row.menu_item_names,
     menu_categories: row.menu_categories,
+    modifier_names: row.modifier_names,
+    order_item_qty: row.order_item_qty === null ? null : Number(row.order_item_qty),
     production_ref: row.production_ref,
     production_outputs: row.production_outputs,
     production_inputs: row.production_inputs,

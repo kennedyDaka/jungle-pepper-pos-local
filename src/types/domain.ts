@@ -260,6 +260,8 @@ export interface StockMovementView extends StockMovement {
   order_type?: string | null;
   menu_item_names?: string | null;
   menu_categories?: string | null;
+  modifier_names?: string | null;
+  order_item_qty?: number | null;
   production_ref?: string | null;
   production_outputs?: string | null;
   production_inputs?: string | null;

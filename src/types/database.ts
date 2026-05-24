@@ -1329,8 +1329,10 @@ export type Database = {
           item_name: string;
           menu_categories: string | null;
           menu_item_names: string | null;
+          modifier_names: string | null;
           note: string | null;
           order_type: string | null;
+          order_item_qty: number | null;
           production_inputs: string | null;
           production_outputs: string | null;
           production_ref: string | null;
@@ -1350,6 +1352,24 @@ export type Database = {
           unit_name: string | null;
           user_full_name: string | null;
           user_username: string | null;
+        };
+        Relationships: [];
+      };
+      order_inventory_deduction_audit: {
+        Row: {
+          actual_qty: number;
+          audit_status: string;
+          branch_id: string | null;
+          branch_name: string | null;
+          created_at: string;
+          difference_qty: number;
+          expected_qty: number;
+          invoice_no: string;
+          item_id: string;
+          item_name: string;
+          movement_lines: number;
+          order_id: string;
+          unit_code: string | null;
         };
         Relationships: [];
       };

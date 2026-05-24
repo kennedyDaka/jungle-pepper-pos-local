@@ -77,6 +77,11 @@ function ReportsPage() {
     queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
   });
 
+  const deductionAudit = useQuery({
+    queryKey: ["rep", "deduction-audit", from, to, branchId],
+    queryFn: () => reportService.listDeductionAudit(fromIso, toIso, branchId),
+  });
+
   const production = useQuery({
     queryKey: ["rep", "production", from, to, branchId],
     queryFn: () => reportService.listProduction(fromIso, toIso, branchId),
@@ -90,6 +95,7 @@ function ReportsPage() {
   const totalSales = sumBy(sales.data ?? [], (order: any) => Number(order.total));
   const totalExpenses = sumBy(expenses.data ?? [], (expense: any) => Number(expense.amount));
   const movements = stockMovements.data ?? [];
+  const deductionAuditData = deductionAudit.data ?? [];
   const productionRows = production.data ?? [];
   const branchLabel =
     branchId === "all"
@@ -149,9 +155,7 @@ function ReportsPage() {
   const movementSummaryForItem = (item: any) => {
     const itemMoves = movementsForItem(item.id);
     const qtyIn = sumBy(itemMoves, (movement) => Math.max(0, moneyValue(movement.qty)));
-    const qtyOut = Math.abs(
-      sumBy(itemMoves, (movement) => Math.min(0, moneyValue(movement.qty))),
-    );
+    const qtyOut = Math.abs(sumBy(itemMoves, (movement) => Math.min(0, moneyValue(movement.qty))));
     const netMovement = sumBy(itemMoves, (movement) => moneyValue(movement.qty));
     const closingQty = moneyValue(item.qty_on_hand);
     const openingQty = closingQty - netMovement;
@@ -652,6 +656,20 @@ function ReportsPage() {
     return rows;
   };
 
+  const deductionAuditRows = (): ReportRow[] =>
+    deductionAuditData.map((row: any) => ({
+      Date: new Date(row.created_at).toLocaleString(),
+      "Invoice #": row.invoice_no,
+      Branch: row.branch_name ?? "Main Branch",
+      Item: row.item_name,
+      Unit: row.unit_code ?? "",
+      Expected: Number(row.expected_qty),
+      Actual: Number(row.actual_qty),
+      Difference: Number(row.difference_qty),
+      "Movement Lines": Number(row.movement_lines),
+      Status: row.audit_status,
+    }));
+
   const expenseCategoryRows = (): ReportRow[] =>
     [...expByCat.entries()].map(([category, amount]) => ({
       Category: category,
@@ -692,6 +710,7 @@ function ReportsPage() {
     { id: "bar-variance", title: "Bar Variance", rows: barControlRows() },
     { id: "production-input", title: "Production Input", rows: productionInputRows() },
     { id: "production-output", title: "Production Output", rows: productionOutputRows() },
+    { id: "deduction-audit", title: "Inventory Deduction Audit", rows: deductionAuditRows() },
     { id: "expenses-detail", title: "Expense Detail", rows: expenseLineRows() },
     { id: "expenses-category", title: "Expense Category", rows: expenseCategoryRows() },
   ];
@@ -853,6 +872,10 @@ function ReportsPage() {
       title: "Inventory Movement Detail",
       rangeLabel,
     });
+    appendReportSheet(wb, "Deduction Audit", deductionAuditRows(), {
+      title: "Expected Vs Actual POS Deductions",
+      rangeLabel,
+    });
     appendReportSheet(
       wb,
       "Reorder And Negative",
@@ -882,6 +905,10 @@ function ReportsPage() {
     });
     appendMatrixReportSheet(wb, "Stock Count Sheet", stockCountMatrixRows(), {
       title: "Stock Count Sheet",
+      rangeLabel,
+    });
+    appendReportSheet(wb, "Deduction Audit", deductionAuditRows(), {
+      title: "Expected Vs Actual POS Deductions",
       rangeLabel,
     });
     appendReportSheet(
@@ -1056,6 +1083,7 @@ function ReportsPage() {
     sales.error ||
     items.error ||
     stockMovements.error ||
+    deductionAudit.error ||
     production.error ||
     expenses.error;
 
@@ -1066,6 +1094,7 @@ function ReportsPage() {
         branches.isLoading ||
         items.isLoading ||
         stockMovements.isLoading ||
+        deductionAudit.isLoading ||
         production.isLoading ||
         expenses.isLoading) && <LoadingState label="Loading live reports..." />}
       {dataError && <ErrorState error={dataError} label="Could not load reports" />}
