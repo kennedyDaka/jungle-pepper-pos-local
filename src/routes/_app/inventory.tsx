@@ -23,6 +23,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { MWK, fmtQty, fmtDate } from "@/lib/format";
+import { fmtServingQty, servingLabel, servingQty } from "@/lib/beverage";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -98,98 +99,112 @@ function InventoryPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((i: any) => (
-              <tr key={i.id} className="border-t border-border hover:bg-secondary/30">
-                <td className="p-2 font-medium">{i.name}</td>
-                <td className="p-2 text-muted-foreground">{i.categories?.name}</td>
-                <td className="p-2 text-xs uppercase text-muted-foreground">{i.stock_type}</td>
-                <td
-                  className={`p-2 text-right ${Number(i.qty_on_hand) < 0 ? "text-destructive" : Number(i.qty_on_hand) <= Number(i.reorder_level) && Number(i.reorder_level) > 0 ? "text-warning" : ""}`}
-                >
-                  {fmtQty(i.qty_on_hand)}
-                </td>
-                <td className="p-2">{i.units?.code}</td>
-                <td className="p-2 text-right">{MWK(i.avg_cost)}</td>
-                <td className="p-2 text-right">{fmtQty(i.reorder_level)}</td>
-                <td className="p-2 text-right whitespace-nowrap">
-                  <Button size="sm" variant="ghost" onClick={() => setStockOpen(i)}>
-                    <Plus className="h-3 w-3 mr-1" />
-                    Stock-in
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setAdjOpen(i)}>
-                    Adjust
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setRemoveOpen({
-                        item: i,
-                        type: "issue_out",
-                        title: "Issue out",
-                        notePlaceholder: "Department / staff / use",
-                      })
-                    }
+            {filtered.map((i: any) => {
+              const servings = servingQty(i.qty_on_hand, i);
+              return (
+                <tr key={i.id} className="border-t border-border hover:bg-secondary/30">
+                  <td className="p-2 font-medium">{i.name}</td>
+                  <td className="p-2 text-muted-foreground">{i.categories?.name}</td>
+                  <td className="p-2 text-xs uppercase text-muted-foreground">{i.stock_type}</td>
+                  <td
+                    className={`p-2 text-right ${Number(i.qty_on_hand) < 0 ? "text-destructive" : Number(i.qty_on_hand) <= Number(i.reorder_level) && Number(i.reorder_level) > 0 ? "text-warning" : ""}`}
                   >
-                    Issue
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setRemoveOpen({
-                        item: i,
-                        type: "wastage",
-                        title: "Record wastage",
-                        notePlaceholder: "Reason",
-                      })
-                    }
-                  >
-                    Waste
-                  </Button>
-                  {i.stock_type === "beverage" && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          setRemoveOpen({
-                            item: i,
-                            type: "breakage",
-                            title: "Record breakage",
-                            notePlaceholder: "Bottle / glass / reason",
-                          })
-                        }
-                      >
-                        Breakage
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          setRemoveOpen({
-                            item: i,
-                            type: "complimentary",
-                            title: "Complimentary issue",
-                            notePlaceholder: "Guest / approval / reason",
-                          })
-                        }
-                      >
-                        Comp
-                      </Button>
-                    </>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => setBinOpen(i)}>
-                    Bin card
-                  </Button>
-                  {isAdmin && (
-                    <Button size="sm" variant="ghost" onClick={() => deleteItem(i)}>
-                      <Trash2 className="h-3 w-3 text-destructive" />
+                    {servings === null ? (
+                      fmtQty(i.qty_on_hand)
+                    ) : (
+                      <>
+                        <div>
+                          {fmtServingQty(servings)} {servingLabel(i)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {fmtQty(i.qty_on_hand)} {i.units?.code}
+                        </div>
+                      </>
+                    )}
+                  </td>
+                  <td className="p-2">{i.units?.code}</td>
+                  <td className="p-2 text-right">{MWK(i.avg_cost)}</td>
+                  <td className="p-2 text-right">{fmtQty(i.reorder_level)}</td>
+                  <td className="p-2 text-right whitespace-nowrap">
+                    <Button size="sm" variant="ghost" onClick={() => setStockOpen(i)}>
+                      <Plus className="h-3 w-3 mr-1" />
+                      Stock-in
                     </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
+                    <Button size="sm" variant="ghost" onClick={() => setAdjOpen(i)}>
+                      Adjust
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setRemoveOpen({
+                          item: i,
+                          type: "issue_out",
+                          title: "Issue out",
+                          notePlaceholder: "Department / staff / use",
+                        })
+                      }
+                    >
+                      Issue
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setRemoveOpen({
+                          item: i,
+                          type: "wastage",
+                          title: "Record wastage",
+                          notePlaceholder: "Reason",
+                        })
+                      }
+                    >
+                      Waste
+                    </Button>
+                    {i.stock_type === "beverage" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setRemoveOpen({
+                              item: i,
+                              type: "breakage",
+                              title: "Record breakage",
+                              notePlaceholder: "Bottle / glass / reason",
+                            })
+                          }
+                        >
+                          Breakage
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setRemoveOpen({
+                              item: i,
+                              type: "complimentary",
+                              title: "Complimentary issue",
+                              notePlaceholder: "Guest / approval / reason",
+                            })
+                          }
+                        >
+                          Comp
+                        </Button>
+                      </>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => setBinOpen(i)}>
+                      Bin card
+                    </Button>
+                    {isAdmin && (
+                      <Button size="sm" variant="ghost" onClick={() => deleteItem(i)}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Card>
@@ -356,12 +371,12 @@ function NewItemDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           {stockType === "beverage" && (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label>Bottle volume (ml)</Label>
+                <Label>Bottle/container volume (ml)</Label>
                 <Input
                   type="number"
                   step="1"
                   value={bottleMl || ""}
-                  placeholder="e.g. 750"
+                  placeholder="750 or 5000"
                   onChange={(e) => setBottleMl(Number(e.target.value))}
                 />
               </div>
@@ -371,13 +386,13 @@ function NewItemDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                   type="number"
                   step="1"
                   value={shotMl || ""}
-                  placeholder="e.g. 25"
+                  placeholder="50 or 175"
                   onChange={(e) => setShotMl(Number(e.target.value))}
                 />
               </div>
               <p className="col-span-2 text-xs text-muted-foreground">
-                Set both for spirits sold per shot. Leave blank for bottled beverages sold whole
-                (300ml/330ml soft drinks, beers).
+                Set both for pour-controlled beverages: 50ml shots for spirits, 175ml glasses for
+                wine. Leave blank for bottled drinks sold whole.
               </p>
             </div>
           )}
@@ -531,7 +546,15 @@ function BinCardDialog({ item, onClose }: { item: any; onClose: () => void }) {
             <tbody>
               {moves.data?.map((m: any) => {
                 const qty = Number(m.qty);
-                const unit = m.items?.units?.code ?? item.units?.code ?? "";
+                const movementItem = m.items ?? item;
+                const unit = movementItem?.units?.code ?? item.units?.code ?? "";
+                const movementQty = (value: number) => {
+                  const raw = Math.abs(value);
+                  const servings = servingQty(raw, movementItem);
+                  if (servings === null) return `${fmtQty(raw)} ${unit}`;
+                  return `${fmtServingQty(servings)} ${servingLabel(movementItem)} (${fmtQty(raw)} ${unit})`;
+                };
+                const balanceServings = servingQty(m.qty_after, movementItem);
                 return (
                   <tr key={m.id} className="border-t border-border align-top">
                     <td className="p-2 whitespace-nowrap">{fmtDate(m.created_at)}</td>
@@ -544,15 +567,17 @@ function BinCardDialog({ item, onClose }: { item: any; onClose: () => void }) {
                     </td>
                     <td className="p-2 text-xs uppercase">{m.type}</td>
                     <td className="p-2 text-right text-success">
-                      {qty > 0 ? `${fmtQty(qty)} ${unit}` : ""}
+                      {qty > 0 ? movementQty(qty) : ""}
                     </td>
                     <td className="p-2 text-right text-destructive">
-                      {qty < 0 ? `${fmtQty(Math.abs(qty))} ${unit}` : ""}
+                      {qty < 0 ? movementQty(qty) : ""}
                     </td>
                     <td className="p-2 text-right">
                       {m.qty_after === null || m.qty_after === undefined
                         ? ""
-                        : `${fmtQty(m.qty_after)} ${unit}`}
+                        : balanceServings === null
+                          ? `${fmtQty(m.qty_after)} ${unit}`
+                          : `${fmtServingQty(balanceServings)} ${servingLabel(movementItem)} (${fmtQty(m.qty_after)} ${unit})`}
                     </td>
                     <td className="p-2 text-right">{MWK(m.unit_cost)}</td>
                     <td className="p-2">{m.profiles?.full_name || m.profiles?.username || ""}</td>

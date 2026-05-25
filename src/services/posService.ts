@@ -5,6 +5,8 @@ import type { Json } from "@/types/database";
 export interface FinalizeOrderPayload {
   discount: number;
   note?: string | null;
+  staff_meal?: boolean;
+  staff_meal_reason?: string | null;
   items: Array<{
     menu_item_id: string;
     qty: number;

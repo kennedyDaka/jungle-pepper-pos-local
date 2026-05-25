@@ -23,8 +23,10 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Plus, Minus, X, Printer, Download, Package } from "lucide-react";
+import { Plus, Minus, X, Printer, Download, Package, UserCheck } from "lucide-react";
 import { MWK } from "@/lib/format";
+import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
+import { authService } from "@/services/authService";
 import { menuService } from "@/services/menuService";
 import { packagingService, type PackagingOptionView } from "@/services/packagingService";
 import { posService } from "@/services/posService";
@@ -61,6 +63,7 @@ function PosPage() {
   const [discount, setDiscount] = useState(0);
   const [note, setNote] = useState("");
   const [payOpen, setPayOpen] = useState(false);
+  const [staffMealOpen, setStaffMealOpen] = useState(false);
   const [modOpen, setModOpen] = useState<{ menuId: string; lineKey: string } | null>(null);
   const [packOpen, setPackOpen] = useState<{ lineKey: string } | null>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
@@ -140,10 +143,16 @@ function PosPage() {
   const hasMissingCrust = cart.some((line) => requiresCrust(line) && !hasSelectedCrust(line));
 
   const finalize = useMutation({
-    mutationFn: async (payments: { method: string; amount: number }[]) => {
+    mutationFn: async (request: {
+      payments: { method: string; amount: number }[];
+      staffMealReason?: string;
+    }) => {
+      const isStaffMeal = Boolean(request.staffMealReason);
       const payload = {
-        discount,
+        discount: isStaffMeal ? subtotal : discount,
         note: note || null,
+        staff_meal: isStaffMeal,
+        staff_meal_reason: request.staffMealReason ?? null,
         items: cart.map((l) => ({
           menu_item_id: l.menu_item_id,
           qty: l.qty,
@@ -155,18 +164,23 @@ function PosPage() {
               ? { option_id: l.packaging.option_id, unit_price: Number(l.packaging.unit_price) }
               : null,
         })),
-        payments,
+        payments: request.payments,
       };
       return posService.finalizeOrder(payload);
     },
-    onSuccess: async (orderId) => {
+    onSuccess: async (orderId, request) => {
+      const isStaffMeal = Boolean(request.staffMealReason);
+      const receiptDiscount = isStaffMeal ? subtotal : discount;
+      const receiptTotal = isStaffMeal ? 0 : Math.max(subtotal - discount, 0);
       const receipt = {
         id: orderId,
         lines: cart.map((l) => ({ ...l, total: lineTotal(l) })),
         subtotal,
-        discount,
-        total,
+        discount: receiptDiscount,
+        total: receiptTotal,
         note,
+        saleType: isStaffMeal ? "staff_meal" : "regular",
+        staffMealReason: request.staffMealReason ?? null,
         at: new Date(),
       };
       setLastReceipt(receipt);
@@ -174,7 +188,8 @@ function PosPage() {
       setDiscount(0);
       setNote("");
       setPayOpen(false);
-      toast.success("Order completed");
+      setStaffMealOpen(false);
+      toast.success(isStaffMeal ? "Staff meal recorded" : "Order completed");
       qc.invalidateQueries({ queryKey: ["dash"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -371,13 +386,24 @@ function PosPage() {
           {hasMissingCrust && (
             <p className="text-xs text-destructive">Choose thin or thick crust for every pizza.</p>
           )}
-          <Button
-            className="w-full"
-            disabled={cart.length === 0 || hasMissingPackaging || hasMissingCrust}
-            onClick={() => setPayOpen(true)}
-          >
-            Pay {MWK(total)}
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              className="w-full"
+              disabled={cart.length === 0 || hasMissingPackaging || hasMissingCrust}
+              onClick={() => setPayOpen(true)}
+            >
+              Pay {MWK(total)}
+            </Button>
+            <Button
+              className="w-full"
+              variant="secondary"
+              disabled={cart.length === 0 || hasMissingPackaging || hasMissingCrust}
+              onClick={() => setStaffMealOpen(true)}
+            >
+              <UserCheck className="h-4 w-4 mr-1" />
+              Staff meal
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -441,7 +467,19 @@ function PosPage() {
         <PaymentDialog
           total={total}
           onClose={() => setPayOpen(false)}
-          onPay={(pmts) => finalize.mutate(pmts)}
+          onPay={(pmts) => finalize.mutate({ payments: pmts })}
+          busy={finalize.isPending}
+        />
+      )}
+
+      {staffMealOpen && (
+        <StaffMealDialog
+          subtotal={subtotal}
+          onClose={() => setStaffMealOpen(false)}
+          onApprove={async ({ reason, password }) => {
+            await authService.verifyCurrentCredential(password);
+            finalize.mutate({ payments: [], staffMealReason: reason });
+          }}
           busy={finalize.isPending}
         />
       )}
@@ -681,7 +719,87 @@ function PaymentDialog({
   );
 }
 
+function StaffMealDialog({
+  subtotal,
+  onClose,
+  onApprove,
+  busy,
+}: {
+  subtotal: number;
+  onClose: () => void;
+  onApprove: (approval: { reason: string; password: string }) => Promise<void> | void;
+  busy: boolean;
+}) {
+  const [reason, setReason] = useState("");
+  const [password, setPassword] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const cleaned = reason.trim();
+  const cleanedPassword = password.trim();
+  const locked = busy || verifying;
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Staff meal approval</DialogTitle>
+          <DialogDescription>Record the staff member or approval note.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Approval note</Label>
+            <Input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Staff name / approved by"
+            />
+          </div>
+          <div>
+            <Label>Approval password / PIN</Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </div>
+          <div className="rounded border border-border p-3 text-sm">
+            <div className="flex justify-between">
+              <span>Food value</span>
+              <span>{MWK(subtotal)}</span>
+            </div>
+            <div className="flex justify-between font-semibold">
+              <span>Amount due</span>
+              <span>{MWK(0)}</span>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={locked || cleaned.length < 2 || cleanedPassword.length < 4}
+            onClick={async () => {
+              setVerifying(true);
+              try {
+                await onApprove({ reason: cleaned, password: cleanedPassword });
+              } catch (error: any) {
+                toast.error(error.message ?? "Could not approve staff meal");
+              } finally {
+                setVerifying(false);
+              }
+            }}
+          >
+            Approve
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void }) {
+  const tax = vatBreakdownFromInclusive(receipt.total);
   const downloadPdf = () => {
     const doc = new jsPDF({ unit: "mm", format: [80, 200] });
     let y = 8;
@@ -697,6 +815,10 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
     y += 4;
     doc.text("Order: " + receipt.id.slice(0, 8), 40, y, { align: "center" });
     y += 4;
+    if (receipt.saleType === "staff_meal") {
+      doc.text("Staff meal", 40, y, { align: "center" });
+      y += 4;
+    }
     doc.line(4, y, 76, y);
     y += 4;
     receipt.lines.forEach((l: any) => {
@@ -721,12 +843,18 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
     doc.text(`MK${receipt.subtotal.toLocaleString()}`, 76, y, { align: "right" });
     y += 4;
     if (receipt.discount > 0) {
-      doc.text("Discount", 4, y);
+      doc.text(receipt.saleType === "staff_meal" ? "Staff meal discount" : "Discount", 4, y);
       doc.text(`-MK${receipt.discount.toLocaleString()}`, 76, y, { align: "right" });
       y += 4;
     }
+    doc.text("Net excl. VAT", 4, y);
+    doc.text(`MK${tax.net.toLocaleString()}`, 76, y, { align: "right" });
+    y += 4;
+    doc.text(`VAT ${(VAT_RATE * 100).toFixed(1)}% included`, 4, y);
+    doc.text(`MK${tax.vat.toLocaleString()}`, 76, y, { align: "right" });
+    y += 4;
     doc.setFont("helvetica", "bold");
-    doc.text("TOTAL", 4, y);
+    doc.text("TOTAL INCL. VAT", 4, y);
     doc.text(`MK${receipt.total.toLocaleString()}`, 76, y, { align: "right" });
     y += 6;
     doc.setFont("helvetica", "normal");
@@ -748,6 +876,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
             <div>Kidney Crescent, Blantyre</div>
             <div>{new Date(receipt.at).toLocaleString()}</div>
             <div>Order: {receipt.id.slice(0, 8)}</div>
+            {receipt.saleType === "staff_meal" && <div className="font-bold">STAFF MEAL</div>}
           </div>
           <hr className="my-2 border-black" />
           {receipt.lines.map((l: any) => (
@@ -779,14 +908,25 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
           </div>
           {receipt.discount > 0 && (
             <div className="flex justify-between">
-              <span>Discount</span>
+              <span>{receipt.saleType === "staff_meal" ? "Staff meal discount" : "Discount"}</span>
               <span>-MK{receipt.discount.toLocaleString()}</span>
             </div>
           )}
+          <div className="flex justify-between">
+            <span>Net excl. VAT</span>
+            <span>MK{tax.net.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>VAT {(VAT_RATE * 100).toFixed(1)}% included</span>
+            <span>MK{tax.vat.toLocaleString()}</span>
+          </div>
           <div className="flex justify-between font-bold text-sm">
-            <span>TOTAL</span>
+            <span>TOTAL INCL. VAT</span>
             <span>MK{receipt.total.toLocaleString()}</span>
           </div>
+          {receipt.staffMealReason && (
+            <div className="mt-2 text-[10px]">Approval: {receipt.staffMealReason}</div>
+          )}
           <div className="text-center mt-3">Obrigado!</div>
         </div>
         <DialogFooter>

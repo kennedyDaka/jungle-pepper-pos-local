@@ -113,6 +113,30 @@ export const authService = {
     return toSession(data.session);
   },
 
+  async verifyCurrentCredential(passwordOrPin: string) {
+    const credential = passwordOrPin.trim();
+    if (!credential) throw new Error("Approval password or PIN is required");
+
+    const { data: current, error: sessionError } = await supabase.auth.getSession();
+    raiseIfError(sessionError, "Could not verify current staff session");
+
+    const email = current.session?.user.email;
+    if (!email) throw new Error("Current staff account has no email to verify");
+
+    const attempts = credential.startsWith("pin-")
+      ? [credential]
+      : [credential, `pin-${credential}`];
+    for (const password of attempts) {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      if (!error && data.session) return toSession(data.session);
+    }
+
+    throw new Error("Invalid approval password or PIN");
+  },
+
   async signOut() {
     const { error } = await supabase.auth.signOut();
     raiseIfError(error, "Could not sign out");

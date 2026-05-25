@@ -14,6 +14,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { MWK, fmtDate, fmtQty } from "@/lib/format";
+import { fmtServingQty, servingLabel, servingQty } from "@/lib/beverage";
+import { VAT_RATE } from "@/lib/vat";
 import { exportRowsCsv, exportRowsPdf, printRows } from "@/lib/reportExport";
 import {
   appendMatrixReportSheet,
@@ -152,6 +154,23 @@ function ReportsPage() {
   const movementsForItem = (itemId: string) =>
     movements.filter((movement) => movement.item_id === itemId);
 
+  const quantityDisplay = (
+    qty: number | string | null | undefined,
+    item?: {
+      name?: string | null;
+      bottle_ml?: number | string | null;
+      shot_ml?: number | string | null;
+      units?: { code?: string | null } | null;
+    } | null,
+  ) => {
+    const rawQty = Number(qty ?? 0);
+    const servings = servingQty(rawQty, item);
+    const unit = item?.units?.code ?? "";
+
+    if (servings === null) return `${fmtQty(rawQty)} ${unit}`.trim();
+    return `${fmtServingQty(servings)} ${servingLabel(item)} (${fmtQty(rawQty)} ${unit})`;
+  };
+
   const movementSummaryForItem = (item: any) => {
     const itemMoves = movementsForItem(item.id);
     const qtyIn = sumBy(itemMoves, (movement) => Math.max(0, moneyValue(movement.qty)));
@@ -163,37 +182,51 @@ function ReportsPage() {
   };
 
   const stockMovementRows = (): ReportRow[] =>
-    movements.map((movement) => ({
-      Date: new Date(movement.created_at).toLocaleString(),
-      Source: movement.source_label ?? movement.ref_type ?? movement.type,
-      Reference:
-        movement.invoice_no ??
-        movement.production_ref ??
-        movement.expense_ref ??
-        (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
-      "Dish / Destination": movement.destination ?? movement.menu_item_names ?? "",
-      Type: movement.type,
-      Branch: movement.branches?.name ?? "Main Branch",
-      Item: movement.items?.name ?? "",
-      "Stock Type": movement.items?.stock_type ?? "",
-      Unit: movement.items?.units?.code ?? "",
-      Qty: Number(movement.qty),
-      "Unit Cost": Number(movement.unit_cost),
-      Value: Math.abs(Number(movement.qty) * Number(movement.unit_cost)),
-      Before: movement.qty_before ?? "",
-      After: movement.qty_after ?? "",
-      "Reference Type": movement.ref_type ?? "",
-      "Reference ID": movement.ref_id ?? "",
-      Destination: movement.destination ?? "",
-      "Source Detail": movement.source_detail ?? "",
-      "Menu Categories": movement.menu_categories ?? "",
-      User: movement.profiles?.full_name || movement.profiles?.username || "",
-      Note: movement.note ?? "",
-    }));
+    movements.map((movement) => {
+      const movementServings = servingQty(movement.qty, movement.items);
+      const balanceServings = servingQty(movement.qty_after, movement.items);
+      return {
+        Date: new Date(movement.created_at).toLocaleString(),
+        Source: movement.source_label ?? movement.ref_type ?? movement.type,
+        Reference:
+          movement.invoice_no ??
+          movement.production_ref ??
+          movement.expense_ref ??
+          (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
+        "Dish / Destination": movement.destination ?? movement.menu_item_names ?? "",
+        Type: movement.type,
+        Branch: movement.branches?.name ?? "Main Branch",
+        Item: movement.items?.name ?? "",
+        "Stock Type": movement.items?.stock_type ?? "",
+        Unit: movement.items?.units?.code ?? "",
+        Qty: Number(movement.qty),
+        "Qty Display": quantityDisplay(movement.qty, movement.items),
+        "Serving Type": movementServings === null ? "" : servingLabel(movement.items),
+        "Serving Qty": movementServings === null ? "" : movementServings,
+        "Unit Cost": Number(movement.unit_cost),
+        Value: Math.abs(Number(movement.qty) * Number(movement.unit_cost)),
+        Before: movement.qty_before ?? "",
+        After: movement.qty_after ?? "",
+        "Balance Display":
+          movement.qty_after === null || movement.qty_after === undefined
+            ? ""
+            : quantityDisplay(movement.qty_after, movement.items),
+        "Balance Servings": balanceServings === null ? "" : balanceServings,
+        "Reference Type": movement.ref_type ?? "",
+        "Reference ID": movement.ref_id ?? "",
+        Destination: movement.destination ?? "",
+        "Source Detail": movement.source_detail ?? "",
+        "Menu Categories": movement.menu_categories ?? "",
+        User: movement.profiles?.full_name || movement.profiles?.username || "",
+        Note: movement.note ?? "",
+      };
+    });
 
   const inventoryRows = (): ReportRow[] =>
     (items.data ?? []).map((item: any) => {
       const summary = movementSummaryForItem(item);
+      const openingServings = servingQty(summary.openingQty, item);
+      const closingServings = servingQty(summary.closingQty, item);
       return {
         Item: item.name,
         Branch: item.branches?.name ?? "Main Branch",
@@ -206,6 +239,10 @@ function ReportsPage() {
         "Qty Out": summary.qtyOut,
         "Closing Qty": summary.closingQty,
         "Qty On Hand": summary.closingQty,
+        "Closing Display": quantityDisplay(summary.closingQty, item),
+        "Opening Servings": openingServings ?? "",
+        "Closing Servings": closingServings ?? "",
+        "Serving Type": closingServings === null ? "" : servingLabel(item),
         "Average Cost": Number(item.avg_cost),
         "Stock Value": summary.closingQty * Number(item.avg_cost),
         "Reorder Level": Number(item.reorder_level),
@@ -444,6 +481,8 @@ function ReportsPage() {
       .map((item: any) => {
         const itemMoves = movements.filter((movement) => movement.item_id === item.id);
         const bottleMl = Number(item.bottle_ml);
+        const servingMl = Number(item.shot_ml) || 0;
+        const servingsPerBottle = servingMl > 0 ? bottleMl / servingMl : 0;
         const openingUnits = itemMoves.length
           ? Number(itemMoves[0].qty_before ?? 0)
           : Number(item.qty_on_hand);
@@ -472,15 +511,25 @@ function ReportsPage() {
         return {
           Bottle: item.name,
           "Bottle ML": bottleMl,
-          "Serving ML": Number(item.shot_ml) || 0,
+          "Serving ML": servingMl,
+          "Serving Type": servingMl > 0 ? servingLabel(item) : "",
+          "Servings / Bottle": servingsPerBottle,
           "Opening Bottles": openingUnits,
+          "Opening Servings": openingUnits * servingsPerBottle,
           "Opening ML": openingUnits * bottleMl,
+          "Purchases Bottles": purchasesUnits,
+          "Purchases Servings": purchasesUnits * servingsPerBottle,
           "Purchases ML": purchasesUnits * bottleMl,
+          "Sales Servings": salesUnits * servingsPerBottle,
           "Sales ML": salesUnits * bottleMl,
+          "Wastage/Comp/Breakage Servings": wastageUnits * servingsPerBottle,
           "Wastage/Comp/Breakage ML": wastageUnits * bottleMl,
           "Closing Bottles": closingUnits,
+          "Closing Servings": closingUnits * servingsPerBottle,
           "Closing ML": closingUnits * bottleMl,
+          "Expected Closing Servings": expectedClosingUnits * servingsPerBottle,
           "Expected Closing ML": expectedClosingUnits * bottleMl,
+          "System Variance Servings": (closingUnits - expectedClosingUnits) * servingsPerBottle,
           "System Variance ML": (closingUnits - expectedClosingUnits) * bottleMl,
         };
       });
@@ -502,6 +551,7 @@ function ReportsPage() {
         "Invoice #": order.id.slice(0, 8).toUpperCase(),
         Cashier: order.profiles?.full_name || order.profiles?.username || "",
         Branch: order.branches?.name ?? "Main Branch",
+        "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
         "Order Type": (order.order_items ?? []).some((line: any) => line.takeaway)
           ? "Takeaway"
           : "Table",
@@ -510,6 +560,8 @@ function ReportsPage() {
         "Gross Sales": Number(order.subtotal),
         Discount: Number(order.discount),
         "Packaging Sales": packagingTotal,
+        "Net Excl VAT": Number(order.net_amount ?? 0),
+        "VAT 17.5%": Number(order.vat_amount ?? 0),
         "Net Sales": Number(order.total),
         "Payment Method": (order.payments ?? [])
           .map((payment: any) => `${payment.method}: ${MWK(payment.amount)}`)
@@ -531,6 +583,7 @@ function ReportsPage() {
           "Qty Sold": Number(line.qty),
           "Unit Price": Number(line.unit_price),
           Total: lineTotal,
+          "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
           "Recipe Cost": 0,
           Profit: lineTotal,
           Cashier: order.profiles?.full_name || order.profiles?.username || "",
@@ -563,21 +616,32 @@ function ReportsPage() {
   const salesRecipeConsumptionRows = (): ReportRow[] =>
     movements
       .filter((movement) => movement.type === "sale")
-      .map((movement) => ({
-        Date: new Date(movement.created_at).toLocaleString(),
-        "Linked Sale":
-          movement.invoice_no ?? (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
-        Branch: movement.branches?.name ?? "Main Branch",
-        Source: movement.source_label ?? "MW POS",
-        "Menu Item": movement.menu_item_names ?? movement.destination ?? "POS Sale",
-        Category: movement.menu_categories ?? "",
-        "Ingredient Deducted": movement.items?.name ?? "",
-        "Qty Used": Math.abs(Number(movement.qty)),
-        Unit: movement.items?.units?.code ?? "",
-        "Total Deducted": `${fmtQty(Math.abs(Number(movement.qty)))} ${movement.items?.units?.code ?? ""}`,
-        "Source Detail": movement.source_detail ?? "",
-        Note: movement.note ?? "",
-      }));
+      .map((movement) => {
+        const rawQty = Math.abs(Number(movement.qty));
+        const servings = servingQty(rawQty, movement.items);
+        return {
+          Date: new Date(movement.created_at).toLocaleString(),
+          "Linked Sale":
+            movement.invoice_no ??
+            (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
+          Branch: movement.branches?.name ?? "Main Branch",
+          Source: movement.source_label ?? "MW POS",
+          "Menu Item": movement.menu_item_names ?? movement.destination ?? "POS Sale",
+          Category: movement.menu_categories ?? "",
+          "Ingredient Deducted": movement.items?.name ?? "",
+          "Qty Used": servings ?? rawQty,
+          Unit:
+            servings === null ? (movement.items?.units?.code ?? "") : servingLabel(movement.items),
+          "Stock Unit Qty": rawQty,
+          "Stock Unit": movement.items?.units?.code ?? "",
+          "Total Deducted":
+            servings === null
+              ? `${fmtQty(rawQty)} ${movement.items?.units?.code ?? ""}`
+              : `${fmtServingQty(servings)} ${servingLabel(movement.items)} (${fmtQty(rawQty)} ${movement.items?.units?.code ?? ""})`,
+          "Source Detail": movement.source_detail ?? "",
+          Note: movement.note ?? "",
+        };
+      });
 
   const takeawayPackagingRows = (): ReportRow[] => {
     const rows: ReportRow[] = [];
@@ -774,8 +838,11 @@ function ReportsPage() {
       orderRows.push({
         Date: new Date(order.created_at).toLocaleString(),
         OrderID: order.id,
+        "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
         Subtotal: Number(order.subtotal),
         Discount: Number(order.discount),
+        "Net Excl VAT": Number(order.net_amount ?? 0),
+        [`VAT ${(VAT_RATE * 100).toFixed(1)}%`]: Number(order.vat_amount ?? 0),
         Total: Number(order.total),
         Payments: payMethods,
         Note: order.note ?? "",
@@ -937,6 +1004,7 @@ function ReportsPage() {
       "Summary",
       [
         { Metric: "Tracked liquor/wine bottles", Value: rows.length },
+        { Metric: "Sales servings", Value: sumBy(rows, (row) => Number(row["Sales Servings"])) },
         { Metric: "Sales ML", Value: sumBy(rows, (row) => Number(row["Sales ML"])) },
         {
           Metric: "Wastage/comp/breakage ML",
@@ -946,7 +1014,7 @@ function ReportsPage() {
       ],
       { title: "Bar Control Summary", rangeLabel },
     );
-    appendReportSheet(wb, "Bar Count", rows, { title: "Bottle ML Count Sheet", rangeLabel });
+    appendReportSheet(wb, "Bar Count", rows, { title: "Bar Serving Count Sheet", rangeLabel });
     appendReportSheet(wb, "Beverage Movements", beverageMovements, {
       title: "Beverage Movement Detail",
       rangeLabel,

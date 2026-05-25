@@ -27,6 +27,7 @@ const MONEY_COLUMNS = new Set([
   "Line Total",
   "Loss Value",
   "Net Sales",
+  "Net Excl VAT",
   "Profit",
   "Recipe Cost",
   "Revenue",
@@ -36,6 +37,7 @@ const MONEY_COLUMNS = new Set([
   "Total Value",
   "Unit Cost",
   "Value",
+  "VAT 17.5%",
 ]);
 
 function cleanSheetName(name: string) {

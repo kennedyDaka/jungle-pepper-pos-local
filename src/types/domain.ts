@@ -121,6 +121,12 @@ export interface Order {
   subtotal: number;
   discount: number;
   total: number;
+  sale_type?: "regular" | "staff_meal";
+  vat_rate?: number;
+  net_amount?: number;
+  vat_amount?: number;
+  staff_meal_reason?: string | null;
+  staff_meal_approved_by?: string | null;
   status: "paid" | "void";
   note?: string | null;
 }

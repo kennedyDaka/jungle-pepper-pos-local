@@ -677,10 +677,16 @@ export type Database = {
           discount: number;
           id: string;
           note: string | null;
+          net_amount: number;
+          sale_type: string;
+          staff_meal_approved_by: string | null;
+          staff_meal_reason: string | null;
           status: Database["public"]["Enums"]["order_status"];
           subtotal: number;
           total: number;
           updated_at: string;
+          vat_amount: number;
+          vat_rate: number;
           voided_at: string | null;
           voided_by: string | null;
         };
@@ -692,10 +698,16 @@ export type Database = {
           discount?: number;
           id?: string;
           note?: string | null;
+          net_amount?: number;
+          sale_type?: string;
+          staff_meal_approved_by?: string | null;
+          staff_meal_reason?: string | null;
           status?: Database["public"]["Enums"]["order_status"];
           subtotal: number;
           total: number;
           updated_at?: string;
+          vat_amount?: number;
+          vat_rate?: number;
           voided_at?: string | null;
           voided_by?: string | null;
         };
@@ -707,10 +719,16 @@ export type Database = {
           discount?: number;
           id?: string;
           note?: string | null;
+          net_amount?: number;
+          sale_type?: string;
+          staff_meal_approved_by?: string | null;
+          staff_meal_reason?: string | null;
           status?: Database["public"]["Enums"]["order_status"];
           subtotal?: number;
           total?: number;
           updated_at?: string;
+          vat_amount?: number;
+          vat_rate?: number;
           voided_at?: string | null;
           voided_by?: string | null;
         };
@@ -734,6 +752,13 @@ export type Database = {
             columns: ["customer_id"];
             isOneToOne: false;
             referencedRelation: "customers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_staff_meal_approved_by_fkey";
+            columns: ["staff_meal_approved_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
           {
