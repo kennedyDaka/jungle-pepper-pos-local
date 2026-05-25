@@ -1,5 +1,6 @@
 import { supabase } from "@/services/repositories/supabaseClient";
 import { raiseIfError } from "@/services/repositories/supabaseErrors";
+import { groupPosSaleMovements } from "@/services/stockMovementDisplay";
 import type {
   Category,
   InventoryItemView,
@@ -179,6 +180,6 @@ export const inventoryService = {
       .limit(200);
 
     raiseIfError(error, "Could not load stock movements");
-    return ((data ?? []) as MovementRowWithRelations[]).map(toMovement);
+    return groupPosSaleMovements(((data ?? []) as MovementRowWithRelations[]).map(toMovement));
   },
 };

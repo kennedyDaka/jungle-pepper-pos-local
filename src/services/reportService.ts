@@ -2,6 +2,7 @@ import { expenseService } from "@/services/expenseService";
 import { inventoryService } from "@/services/inventoryService";
 import { supabase } from "@/services/repositories/supabaseClient";
 import { raiseIfError } from "@/services/repositories/supabaseErrors";
+import { groupPosSaleMovements } from "@/services/stockMovementDisplay";
 import type { Category, MenuItem, Modifier, OrderView, Unit } from "@/types/domain";
 import type { Database } from "@/types/database";
 
@@ -254,7 +255,7 @@ export const reportService = {
     const { data, error } = await query.order("created_at", { ascending: true });
 
     raiseIfError(error, "Could not load stock movement report");
-    return ((data ?? []) as MovementWithRelations[]).map(toMovement);
+    return groupPosSaleMovements(((data ?? []) as MovementWithRelations[]).map(toMovement), "asc");
   },
 
   async listWastage(fromIso: string, toIso: string, branchId?: string | null) {
