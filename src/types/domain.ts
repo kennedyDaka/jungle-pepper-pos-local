@@ -214,7 +214,11 @@ export interface ExpenseStockLineView {
   item_id: string;
   stock_movement_id?: string | null;
   qty: number;
+  qty_count?: number | null;
+  package_size?: number | null;
+  package_unit?: string | null;
   unit_cost: number;
+  total_cost?: number | null;
   line_total: number;
   created_at: string;
   items?: Pick<InventoryItem, "name"> & {

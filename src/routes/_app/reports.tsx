@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { MWK, fmtDate, fmtQty } from "@/lib/format";
 import { fmtServingQty, servingLabel, servingQty } from "@/lib/beverage";
+import { staffDisplay } from "@/lib/staffDisplay";
 import { VAT_RATE } from "@/lib/vat";
 import { exportRowsCsv, exportRowsPdf, printRows } from "@/lib/reportExport";
 import {
@@ -183,8 +184,7 @@ function ReportsPage() {
 
   const stockMovementRows = (): ReportRow[] =>
     movements.map((movement) => {
-      const movementServings = servingQty(movement.qty, movement.items);
-      const balanceServings = servingQty(movement.qty_after, movement.items);
+      const qty = Number(movement.qty);
       return {
         Date: new Date(movement.created_at).toLocaleString(),
         Source: movement.source_label ?? movement.ref_type ?? movement.type,
@@ -193,63 +193,55 @@ function ReportsPage() {
           movement.production_ref ??
           movement.expense_ref ??
           (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
+        Item: movement.items?.name ?? "",
         "Dish / Destination": movement.destination ?? movement.menu_item_names ?? "",
         Type: movement.type,
-        Branch: movement.branches?.name ?? "Main Branch",
-        Item: movement.items?.name ?? "",
-        "Stock Type": movement.items?.stock_type ?? "",
+        In: qty > 0 ? Math.abs(qty) : "",
+        Out: qty < 0 ? Math.abs(qty) : "",
         Unit: movement.items?.units?.code ?? "",
-        Qty: Number(movement.qty),
-        "Qty Display": quantityDisplay(movement.qty, movement.items),
-        "Serving Type": movementServings === null ? "" : servingLabel(movement.items),
-        "Serving Qty": movementServings === null ? "" : movementServings,
-        "Unit Cost": Number(movement.unit_cost),
-        Value: Math.abs(Number(movement.qty) * Number(movement.unit_cost)),
-        Before: movement.qty_before ?? "",
-        After: movement.qty_after ?? "",
+        Balance: movement.qty_after ?? "",
         "Balance Display":
           movement.qty_after === null || movement.qty_after === undefined
             ? ""
             : quantityDisplay(movement.qty_after, movement.items),
-        "Balance Servings": balanceServings === null ? "" : balanceServings,
+        "Unit Cost": Number(movement.unit_cost),
+        Value: Math.abs(qty * Number(movement.unit_cost)),
+        Branch: movement.branches?.name ?? "Main Branch",
+        Staff: staffDisplay(movement.profiles),
+        Note: movement.source_detail || movement.note || "",
+        "Stock Type": movement.items?.stock_type ?? "",
+        "Qty Display": quantityDisplay(movement.qty, movement.items),
+        Before: movement.qty_before ?? "",
+        After: movement.qty_after ?? "",
         "Reference Type": movement.ref_type ?? "",
         "Reference ID": movement.ref_id ?? "",
-        Destination: movement.destination ?? "",
-        "Source Detail": movement.source_detail ?? "",
         "Menu Categories": movement.menu_categories ?? "",
-        User: movement.profiles?.full_name || movement.profiles?.username || "",
-        Note: movement.note ?? "",
       };
     });
 
   const inventoryRows = (): ReportRow[] =>
     (items.data ?? []).map((item: any) => {
       const summary = movementSummaryForItem(item);
-      const openingServings = servingQty(summary.openingQty, item);
-      const closingServings = servingQty(summary.closingQty, item);
       return {
         Item: item.name,
         Branch: item.branches?.name ?? "Main Branch",
         Category: item.categories?.name ?? "-",
         Type: item.stock_type,
         Unit: item.units?.code ?? "",
-        "Unit Name": item.units?.name ?? "",
         "Opening Qty": summary.openingQty,
         "Qty In": summary.qtyIn,
         "Qty Out": summary.qtyOut,
         "Closing Qty": summary.closingQty,
-        "Qty On Hand": summary.closingQty,
         "Closing Display": quantityDisplay(summary.closingQty, item),
-        "Opening Servings": openingServings ?? "",
-        "Closing Servings": closingServings ?? "",
-        "Serving Type": closingServings === null ? "" : servingLabel(item),
-        "Average Cost": Number(item.avg_cost),
+        "Avg Cost": Number(item.avg_cost),
         "Stock Value": summary.closingQty * Number(item.avg_cost),
         "Reorder Level": Number(item.reorder_level),
-        "Below Reorder": summary.closingQty <= Number(item.reorder_level) ? "Yes" : "No",
-        "Bottle ML": item.bottle_ml ?? "",
-        "Serving ML": item.shot_ml ?? "",
-        Supplier: item.suppliers?.name ?? "",
+        Status:
+          summary.closingQty < 0
+            ? "Negative"
+            : summary.closingQty <= Number(item.reorder_level)
+              ? "Low"
+              : "OK",
       };
     });
 
@@ -297,7 +289,7 @@ function ReportsPage() {
               ),
             );
             const produced = sumBy(
-              itemMoves.filter((movement) => movement.type === "production_in"),
+              itemMoves.filter((movement) => movement.type === "production_out"),
               (movement) => Math.max(0, moneyValue(movement.qty)),
             );
             const waste = Math.abs(
@@ -351,7 +343,9 @@ function ReportsPage() {
           Method: expense.payment_method,
           Description: expense.description ?? "",
           Item: "",
-          Qty: "",
+          "Purchase Count": "",
+          "Size Each": "",
+          "Stock Qty": "",
           Unit: "",
           "Unit Cost": "",
           "Line Total": Number(expense.amount),
@@ -373,10 +367,15 @@ function ReportsPage() {
           Method: expense.payment_method,
           Description: expense.description ?? "",
           Item: line.items?.name ?? "",
-          Qty: Number(line.qty),
+          "Purchase Count": line.qty_count ?? "",
+          "Size Each":
+            line.package_size && line.package_unit
+              ? `${fmtQty(line.package_size)} ${line.package_unit}`
+              : "",
+          "Stock Qty": Number(line.qty),
           Unit: line.items?.units?.code ?? "",
           "Unit Cost": Number(line.unit_cost),
-          "Line Total": Number(line.line_total),
+          "Line Total": Number(line.total_cost ?? line.line_total),
           "Affects Stock": line.stock_movement_id ? "Yes" : "No",
           "Movement Type": line.stock_movements?.type ?? "",
           "Qty Before": line.stock_movements?.qty_before ?? "",
@@ -397,7 +396,9 @@ function ReportsPage() {
       "Payment",
       "Expense Detail",
       "Item Paid For",
-      "Qty",
+      "Purchase Count",
+      "Size Each",
+      "Stock Qty",
       "Unit",
       "Unit Cost",
       "Line Total",
@@ -413,7 +414,9 @@ function ReportsPage() {
       row.Method,
       row.Description,
       row.Item || row.Description,
-      row.Qty,
+      row["Purchase Count"],
+      row["Size Each"],
+      row["Stock Qty"],
       row.Unit,
       row["Unit Cost"],
       row["Line Total"],
@@ -549,7 +552,7 @@ function ReportsPage() {
       return {
         Date: new Date(order.created_at).toLocaleString(),
         "Invoice #": order.id.slice(0, 8).toUpperCase(),
-        Cashier: order.profiles?.full_name || order.profiles?.username || "",
+        Cashier: staffDisplay(order.profiles),
         Branch: order.branches?.name ?? "Main Branch",
         "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
         "Order Type": (order.order_items ?? []).some((line: any) => line.takeaway)
@@ -586,7 +589,7 @@ function ReportsPage() {
           "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
           "Recipe Cost": 0,
           Profit: lineTotal,
-          Cashier: order.profiles?.full_name || order.profiles?.username || "",
+          Cashier: staffDisplay(order.profiles),
           Modifiers: modifierNames(line).join(", "),
           Takeaway: line.takeaway ? "Yes" : "No",
         });
@@ -603,7 +606,7 @@ function ReportsPage() {
             Total: packTotal,
             "Recipe Cost": 0,
             Profit: packTotal,
-            Cashier: order.profiles?.full_name || order.profiles?.username || "",
+            Cashier: staffDisplay(order.profiles),
             Modifiers: "",
             Takeaway: "Yes",
           });
@@ -658,7 +661,7 @@ function ReportsPage() {
             "Unit Price": Number(pack.unit_price),
             Total: Number(pack.qty) * Number(pack.unit_price),
             "Linked Sale": order.id.slice(0, 8).toUpperCase(),
-            Cashier: order.profiles?.full_name || order.profiles?.username || "",
+            Cashier: staffDisplay(order.profiles),
           }),
         );
       });
@@ -691,7 +694,7 @@ function ReportsPage() {
           "Qty Used": Number(line.qty),
           Unit: line.items?.units?.code ?? "",
           Cost: line.unit_cost ?? 0,
-          "Produced By": batch.profiles?.full_name || batch.profiles?.username || "",
+          "Produced By": staffDisplay(batch.profiles),
           Note: batch.note ?? "",
         }),
       );
@@ -712,12 +715,121 @@ function ReportsPage() {
           "Qty Produced": Number(line.qty),
           Unit: line.items?.units?.code ?? "",
           "Unit Cost": line.unit_cost ?? 0,
-          "Produced By": batch.profiles?.full_name || batch.profiles?.username || "",
+          "Produced By": staffDisplay(batch.profiles),
           Note: batch.note ?? "",
         }),
       );
     });
     return rows;
+  };
+
+  const keyIngredientTerms = [
+    "FLOUR",
+    "DOUGH PIZZA BASES",
+    "BURGER BUNS",
+    "LOAF",
+    "MINCE",
+    "BURGERS (120G)",
+    "PIZZA PKTS & BOLOG",
+    "SLICED 120G",
+    "PREGOS",
+    "CHEESE",
+    "FETA",
+    "CAMARAO",
+    "FRANGO",
+    "FILLET",
+    "PIZZA PKTS (80G)",
+    "BURGER (120G)",
+    "CHIPS PEELED",
+    "POTATOES",
+    "RICE",
+    "EGGS",
+    "MILK",
+  ];
+
+  const ingredientLifecycleRows = (): ReportRow[] => {
+    const itemIndex = new Map((items.data ?? []).map((item: any) => [item.id, item]));
+
+    return (items.data ?? [])
+      .filter((item: any) => {
+        const name = String(item.name ?? "").toUpperCase();
+        return keyIngredientTerms.some((term) => name.includes(term));
+      })
+      .map((item: any) => {
+        const summary = movementSummaryForItem(item);
+        const itemMoves = summary.itemMoves;
+        const purchases = itemMoves.filter(
+          (movement) => movement.type === "purchase_in" && Number(movement.qty) > 0,
+        );
+        const purchasedQty = sumBy(purchases, (movement) => Math.max(0, Number(movement.qty)));
+        const usedInProduction = Math.abs(
+          sumBy(
+            itemMoves.filter((movement) => movement.type === "production_in"),
+            (movement) => Math.min(0, Number(movement.qty)),
+          ),
+        );
+        const producedQty = sumBy(
+          itemMoves.filter((movement) => movement.type === "production_out"),
+          (movement) => Math.max(0, Number(movement.qty)),
+        );
+        const soldQty = Math.abs(
+          sumBy(
+            itemMoves.filter((movement) => movement.type === "sale"),
+            (movement) => Math.min(0, Number(movement.qty)),
+          ),
+        );
+        const wasteOrIssueQty = Math.abs(
+          sumBy(
+            itemMoves.filter((movement) =>
+              ["wastage", "issue_out", "complimentary", "breakage"].includes(movement.type),
+            ),
+            (movement) => Math.min(0, Number(movement.qty)),
+          ),
+        );
+        const outputMap = new Map<string, { itemId: string; qty: number }>();
+
+        productionRows.forEach((batch: any) => {
+          const usedThisItem = (batch.production_inputs ?? []).some(
+            (line: any) => line.item_id === item.id,
+          );
+          if (!usedThisItem) return;
+
+          (batch.production_outputs ?? []).forEach((output: any) => {
+            const outputItem = itemIndex.get(output.item_id);
+            const outputName = outputItem?.name ?? output.items?.name ?? "Output";
+            const current = outputMap.get(outputName) ?? { itemId: output.item_id, qty: 0 };
+            current.qty += Number(output.qty) || 0;
+            outputMap.set(outputName, current);
+          });
+        });
+
+        return {
+          Item: item.name,
+          Category: item.categories?.name ?? "-",
+          Unit: item.units?.code ?? "",
+          Opening: summary.openingQty,
+          "Times Bought": purchases.length,
+          "Bought Qty": purchasedQty,
+          "Produced Qty": producedQty,
+          "Used In Production": usedInProduction,
+          "Sold / Recipe Used": soldQty,
+          "Waste / Issue": wasteOrIssueQty,
+          Closing: summary.closingQty,
+          "Made Into / Outputs": [...outputMap.entries()]
+            .map(([name, values]) => {
+              const sold = Math.abs(
+                sumBy(
+                  movements.filter(
+                    (movement) => movement.item_id === values.itemId && movement.type === "sale",
+                  ),
+                  (movement) => Math.min(0, Number(movement.qty)),
+                ),
+              );
+              return `${name}: made ${fmtQty(values.qty)}, sold ${fmtQty(sold)}`;
+            })
+            .join(" | "),
+        };
+      });
   };
 
   const deductionAuditRows = (): ReportRow[] =>
@@ -761,6 +873,7 @@ function ReportsPage() {
 
   const reportCatalog = [
     { id: "stock-ledger", title: "Stock Ledger", rows: stockMovementRows() },
+    { id: "ingredient-lifecycle", title: "Ingredient Lifecycle", rows: ingredientLifecycleRows() },
     { id: "sales-detail", title: "Sales Item Detail", rows: salesItemDetailRows() },
     { id: "sales-summary", title: "Sales Summary", rows: salesSummaryRows() },
     {
@@ -925,7 +1038,7 @@ function ReportsPage() {
         { Metric: "Negative stock items", Value: negativeStock.length },
         {
           Metric: "Below reorder items",
-          Value: rows.filter((row) => row["Below Reorder"] === "Yes").length,
+          Value: rows.filter((row) => row.Status === "Low" || row.Status === "Negative").length,
         },
       ],
       { title: "Inventory Summary", rangeLabel },
@@ -939,6 +1052,10 @@ function ReportsPage() {
       title: "Inventory Movement Detail",
       rangeLabel,
     });
+    appendReportSheet(wb, "Ingredient Lifecycle", ingredientLifecycleRows(), {
+      title: "Monthly Key Ingredient Lifecycle",
+      rangeLabel,
+    });
     appendReportSheet(wb, "Deduction Audit", deductionAuditRows(), {
       title: "Expected Vs Actual POS Deductions",
       rangeLabel,
@@ -946,7 +1063,7 @@ function ReportsPage() {
     appendReportSheet(
       wb,
       "Reorder And Negative",
-      rows.filter((row) => row["Below Reorder"] === "Yes" || Number(row["Qty On Hand"]) < 0),
+      rows.filter((row) => row.Status === "Low" || row.Status === "Negative"),
       { title: "Inventory Exceptions", rangeLabel },
     );
     void writeReportWorkbook(wb, `inventory-${reportDateRange(from, to)}.xlsx`);
@@ -968,6 +1085,10 @@ function ReportsPage() {
     );
     appendReportSheet(wb, "Stock Ledger", ledgerRows, {
       title: "Full Stock Movement Ledger",
+      rangeLabel,
+    });
+    appendReportSheet(wb, "Ingredient Lifecycle", ingredientLifecycleRows(), {
+      title: "Monthly Key Ingredient Lifecycle",
       rangeLabel,
     });
     appendMatrixReportSheet(wb, "Stock Count Sheet", stockCountMatrixRows(), {

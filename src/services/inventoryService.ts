@@ -151,6 +151,37 @@ export const inventoryService = {
     return toItem(data as ItemRowWithRelations);
   },
 
+  async updateItem(
+    id: string,
+    input: {
+      name: string;
+      stock_type: StockType;
+      category_id: string;
+      unit_id: string;
+      reorder_level: number;
+      bottle_ml?: number | null;
+      shot_ml?: number | null;
+    },
+  ) {
+    const { data, error } = await supabase
+      .from("items")
+      .update({
+        name: input.name,
+        stock_type: input.stock_type,
+        category_id: input.category_id,
+        unit_id: input.unit_id,
+        reorder_level: input.reorder_level,
+        bottle_ml: input.bottle_ml ?? null,
+        shot_ml: input.shot_ml ?? null,
+      })
+      .eq("id", id)
+      .select("*, categories(name), units(code, name), suppliers(name)")
+      .single();
+
+    raiseIfError(error, "Could not update inventory item");
+    return toItem(data as ItemRowWithRelations);
+  },
+
   async applyStockMovement(input: {
     itemId: string;
     type: StockMovementType;

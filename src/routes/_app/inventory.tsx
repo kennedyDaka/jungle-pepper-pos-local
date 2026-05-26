@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { staffDisplay } from "@/lib/staffDisplay";
 import { inventoryService } from "@/services/inventoryService";
 import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/DataState";
@@ -25,7 +26,7 @@ import {
 import { MWK, fmtQty, fmtDate } from "@/lib/format";
 import { fmtServingQty, servingLabel, servingQty } from "@/lib/beverage";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/inventory")({
   component: InventoryPage,
@@ -46,6 +47,7 @@ function InventoryPage() {
     notePlaceholder: string;
   } | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState<any | null>(null);
 
   const items = useQuery({
     queryKey: ["inv", "items"],
@@ -197,9 +199,15 @@ function InventoryPage() {
                       Bin card
                     </Button>
                     {isAdmin && (
-                      <Button size="sm" variant="ghost" onClick={() => deleteItem(i)}>
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => setEditOpen(i)}>
+                          <Pencil className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => deleteItem(i)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -253,6 +261,16 @@ function InventoryPage() {
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ["inv"] });
             setNewOpen(false);
+          }}
+        />
+      )}
+      {editOpen && (
+        <EditItemDialog
+          item={editOpen}
+          onClose={() => setEditOpen(null)}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["inv"] });
+            setEditOpen(null);
           }}
         />
       )}
@@ -403,6 +421,159 @@ function NewItemDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           </Button>
           <Button onClick={submit} disabled={busy}>
             Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditItemDialog({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: any;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(item.name ?? "");
+  const [stockType, setStockType] = useState(item.stock_type ?? "raw");
+  const [categoryId, setCategoryId] = useState<string>(item.category_id ?? "");
+  const [unitId, setUnitId] = useState<string>(item.unit_id ?? "");
+  const [reorder, setReorder] = useState(Number(item.reorder_level) || 0);
+  const [bottleMl, setBottleMl] = useState<number>(Number(item.bottle_ml) || 0);
+  const [shotMl, setShotMl] = useState<number>(Number(item.shot_ml) || 0);
+  const [busy, setBusy] = useState(false);
+  const cats = useQuery({
+    queryKey: ["edit-item-cats"],
+    queryFn: () => inventoryService.listCategories(),
+  });
+  const units = useQuery({
+    queryKey: ["edit-item-units"],
+    queryFn: () => inventoryService.listUnits(),
+  });
+
+  const submit = async () => {
+    if (!name.trim() || !categoryId || !unitId) {
+      toast.error("Name, category and unit are required");
+      return;
+    }
+    setBusy(true);
+    try {
+      await inventoryService.updateItem(item.id, {
+        name: name.trim(),
+        stock_type: stockType as any,
+        category_id: categoryId,
+        unit_id: unitId,
+        reorder_level: reorder,
+        bottle_ml: stockType === "beverage" && bottleMl > 0 ? bottleMl : null,
+        shot_ml: stockType === "beverage" && shotMl > 0 ? shotMl : null,
+      });
+      toast.success("Item updated");
+      onSaved();
+    } catch (error: any) {
+      toast.error(error.message ?? "Could not update item");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit inventory item</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <Label>Type</Label>
+            <Select value={stockType} onValueChange={setStockType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="raw">Raw</SelectItem>
+                <SelectItem value="production">Production (made in-house)</SelectItem>
+                <SelectItem value="consumable">Consumable</SelectItem>
+                <SelectItem value="beverage">Beverage</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Category</Label>
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pick category" />
+              </SelectTrigger>
+              <SelectContent>
+                {cats.data?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Unit</Label>
+            <Select value={unitId} onValueChange={setUnitId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pick unit" />
+              </SelectTrigger>
+              <SelectContent>
+                {units.data?.map((u: any) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.code} - {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Reorder level</Label>
+            <Input
+              type="number"
+              step="0.001"
+              value={reorder}
+              onChange={(e) => setReorder(Number(e.target.value))}
+            />
+          </div>
+          {stockType === "beverage" && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Bottle/container volume (ml)</Label>
+                <Input
+                  type="number"
+                  step="1"
+                  value={bottleMl || ""}
+                  placeholder="750 or 5000"
+                  onChange={(e) => setBottleMl(Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <Label>Serving size (ml)</Label>
+                <Input
+                  type="number"
+                  step="1"
+                  value={shotMl || ""}
+                  placeholder="50 or 175"
+                  onChange={(e) => setShotMl(Number(e.target.value))}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={busy}>
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -580,7 +751,7 @@ function BinCardDialog({ item, onClose }: { item: any; onClose: () => void }) {
                           : `${fmtServingQty(balanceServings)} ${servingLabel(movementItem)} (${fmtQty(m.qty_after)} ${unit})`}
                     </td>
                     <td className="p-2 text-right">{MWK(m.unit_cost)}</td>
-                    <td className="p-2">{m.profiles?.full_name || m.profiles?.username || ""}</td>
+                    <td className="p-2">{staffDisplay(m.profiles)}</td>
                     <td className="p-2 text-muted-foreground">{m.source_detail || m.note}</td>
                   </tr>
                 );

@@ -44,7 +44,11 @@ function toExpenseStockLine(row: ExpenseStockLineRowWithRelations): ExpenseStock
     item_id: row.item_id,
     stock_movement_id: row.stock_movement_id,
     qty: Number(row.qty),
+    qty_count: row.qty_count === null ? null : Number(row.qty_count),
+    package_size: row.package_size === null ? null : Number(row.package_size),
+    package_unit: row.package_unit,
     unit_cost: Number(row.unit_cost),
+    total_cost: row.total_cost === null ? null : Number(row.total_cost),
     line_total: Number(row.line_total),
     created_at: row.created_at,
     items: row.items
@@ -157,7 +161,15 @@ export const expenseService = {
   },
 
   async recordStockPurchase(input: {
-    lines: Array<{ item_id: string; qty: number; unit_cost: number }>;
+    lines: Array<{
+      item_id: string;
+      qty: number;
+      unit_cost: number;
+      qty_count?: number | null;
+      package_size?: number | null;
+      package_unit?: string | null;
+      total_cost?: number | null;
+    }>;
     payment_method: PaymentMethod;
     expense_date: string;
     description?: string;

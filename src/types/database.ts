@@ -177,8 +177,12 @@ export type Database = {
           id: string;
           item_id: string;
           line_total: number | null;
+          package_size: number | null;
+          package_unit: string | null;
           qty: number;
+          qty_count: number | null;
           stock_movement_id: string | null;
+          total_cost: number | null;
           unit_cost: number;
         };
         Insert: {
@@ -187,8 +191,12 @@ export type Database = {
           id?: string;
           item_id: string;
           line_total?: number | null;
+          package_size?: number | null;
+          package_unit?: string | null;
           qty: number;
+          qty_count?: number | null;
           stock_movement_id?: string | null;
+          total_cost?: number | null;
           unit_cost: number;
         };
         Update: {
@@ -197,8 +205,12 @@ export type Database = {
           id?: string;
           item_id?: string;
           line_total?: number | null;
+          package_size?: number | null;
+          package_unit?: string | null;
           qty?: number;
+          qty_count?: number | null;
           stock_movement_id?: string | null;
+          total_cost?: number | null;
           unit_cost?: number;
         };
         Relationships: [

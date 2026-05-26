@@ -24,7 +24,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Plus, Minus, X, Printer, Download, Package, UserCheck } from "lucide-react";
-import { MWK } from "@/lib/format";
+import { MWK, fmtQty } from "@/lib/format";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
 import { authService } from "@/services/authService";
 import { menuService } from "@/services/menuService";
@@ -52,8 +52,13 @@ type CartLine = {
     name: string;
     item_id: string;
     unit_price: number;
+    qty_per_item: number;
   } | null;
 };
+
+function receiptPackagingQty(line: any) {
+  return Number(line.qty ?? 0) * Math.max(1, Number(line.packaging?.qty_per_item ?? 1) || 1);
+}
 
 function PosPage() {
   const qc = useQueryClient();
@@ -111,6 +116,11 @@ function PosPage() {
       (modifier) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust",
     );
 
+  const linePackagingQty = (line: CartLine) =>
+    line.takeaway && line.packaging
+      ? line.qty * Math.max(1, Number(line.packaging.qty_per_item) || 1)
+      : 0;
+
   const addItem = (mi: any) => {
     if (menuOptionsLoading) {
       toast.info("Menu options are still loading. Try again in a moment.");
@@ -136,7 +146,7 @@ function PosPage() {
 
   const lineTotal = (l: CartLine) =>
     (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty +
-    (l.takeaway && l.packaging ? Number(l.packaging.unit_price) * l.qty : 0);
+    (l.takeaway && l.packaging ? Number(l.packaging.unit_price) * linePackagingQty(l) : 0);
   const subtotal = cart.reduce((s, l) => s + lineTotal(l), 0);
   const total = Math.max(subtotal - discount, 0);
   const hasMissingPackaging = cart.some((line) => line.takeaway && !line.packaging);
@@ -161,7 +171,11 @@ function PosPage() {
           modifiers: l.modifiers.map((m) => ({ modifier_id: m.id })),
           packaging:
             l.takeaway && l.packaging
-              ? { option_id: l.packaging.option_id, unit_price: Number(l.packaging.unit_price) }
+              ? {
+                  option_id: l.packaging.option_id,
+                  unit_price: Number(l.packaging.unit_price),
+                  qty_per_item: Math.max(1, Number(l.packaging.qty_per_item) || 1),
+                }
               : null,
         })),
         payments: request.payments,
@@ -318,7 +332,7 @@ function PosPage() {
                     <div className="flex items-center justify-between gap-2">
                       <span>
                         <Package className="h-3.5 w-3.5 inline mr-1" />
-                        {l.packaging.name} x {l.qty}
+                        {l.packaging.name} x {fmtQty(linePackagingQty(l))}
                       </span>
                       <button
                         className="font-medium text-primary"
@@ -449,6 +463,7 @@ function PosPage() {
                         name: selected.option.name,
                         item_id: selected.option.item_id,
                         unit_price: selected.unit_price,
+                        qty_per_item: selected.qty_per_item,
                       },
                     }
                   : x,
@@ -498,7 +513,11 @@ function PackagingDialog({
   options: PackagingOptionView[];
   current: CartLine["packaging"];
   onCancel: () => void;
-  onSave: (selection: { option: PackagingOptionView; unit_price: number }) => void;
+  onSave: (selection: {
+    option: PackagingOptionView;
+    unit_price: number;
+    qty_per_item: number;
+  }) => void;
 }) {
   const initialOption =
     options.find((option) => option.id === current?.option_id) ?? options[0] ?? null;
@@ -507,6 +526,7 @@ function PackagingDialog({
   const [unitPrice, setUnitPrice] = useState(
     current?.unit_price ?? Number(initialOption?.price ?? 0),
   );
+  const [qtyPerItem, setQtyPerItem] = useState(current?.qty_per_item ?? 1);
 
   return (
     <Dialog open onOpenChange={onCancel}>
@@ -549,8 +569,18 @@ function PackagingDialog({
               onChange={(event) => setUnitPrice(Math.max(0, Number(event.target.value)))}
             />
           </div>
+          <div>
+            <Label>Packaging quantity per dish</Label>
+            <Input
+              type="number"
+              min={1}
+              step="1"
+              value={qtyPerItem}
+              onChange={(event) => setQtyPerItem(Math.max(1, Number(event.target.value) || 1))}
+            />
+          </div>
           <p className="text-xs text-muted-foreground">
-            The charge is saved as the new default for this packaging option.
+            Use 2 for dishes that need two boxes. The charge is saved as the new default price.
           </p>
         </div>
         <DialogFooter>
@@ -559,7 +589,14 @@ function PackagingDialog({
           </Button>
           <Button
             disabled={!selected}
-            onClick={() => selected && onSave({ option: selected, unit_price: unitPrice })}
+            onClick={() =>
+              selected &&
+              onSave({
+                option: selected,
+                unit_price: unitPrice,
+                qty_per_item: Math.max(1, Number(qtyPerItem) || 1),
+              })
+            }
           >
             Apply
           </Button>
@@ -830,8 +867,8 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
         y += 4;
       }
       if (l.takeaway && l.packaging) {
-        doc.text(`  Packaging: ${l.packaging.name}`, 4, y);
-        doc.text(`MK${(l.packaging.unit_price * l.qty).toLocaleString()}`, 76, y, {
+        doc.text(`  Packaging: ${l.packaging.name} x${fmtQty(receiptPackagingQty(l))}`, 4, y);
+        doc.text(`MK${(l.packaging.unit_price * receiptPackagingQty(l)).toLocaleString()}`, 76, y, {
           align: "right",
         });
         y += 4;
@@ -895,8 +932,12 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
               )}
               {l.takeaway && l.packaging && (
                 <div className="flex justify-between pl-2 text-[10px]">
-                  <span>Packaging: {l.packaging.name}</span>
-                  <span>MK{(l.packaging.unit_price * l.qty).toLocaleString()}</span>
+                  <span>
+                    Packaging: {l.packaging.name} x{fmtQty(receiptPackagingQty(l))}
+                  </span>
+                  <span>
+                    MK{(l.packaging.unit_price * receiptPackagingQty(l)).toLocaleString()}
+                  </span>
                 </div>
               )}
             </div>

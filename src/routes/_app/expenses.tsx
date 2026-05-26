@@ -30,7 +30,59 @@ import { Download, Plus, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/expenses")({ component: ExpensesPage });
 
-type StockLine = { item_id: string; qty: number; unit_cost: number };
+type StockLine = {
+  item_id: string;
+  qty_count: number;
+  package_size: number;
+  package_unit: string;
+  total_cost: number;
+};
+
+const blankStockLine = (): StockLine => ({
+  item_id: "",
+  qty_count: 0,
+  package_size: 1,
+  package_unit: "",
+  total_cost: 0,
+});
+
+const measuredUnits = new Set(["kg", "g", "l", "ml"]);
+
+function unitFactor(fromUnit: string, toUnit: string) {
+  const from = fromUnit.toLowerCase();
+  const to = toUnit.toLowerCase();
+  if (!from || from === to) return 1;
+  if (from === "g" && to === "kg") return 0.001;
+  if (from === "kg" && to === "g") return 1000;
+  if (from === "ml" && to === "l") return 0.001;
+  if (from === "l" && to === "ml") return 1000;
+  return 1;
+}
+
+function stockQtyForLine(line: StockLine, item?: any) {
+  const count = Number(line.qty_count) || 0;
+  const size = Number(line.package_size) || 0;
+  const stockUnit = String(item?.units?.code ?? "").toLowerCase();
+  const packageUnit = String(line.package_unit || item?.units?.code || "").toLowerCase();
+
+  if (measuredUnits.has(stockUnit)) return count * (size || 1) * unitFactor(packageUnit, stockUnit);
+  return count;
+}
+
+function lineUnitCost(line: StockLine, item?: any) {
+  const qty = stockQtyForLine(line, item);
+  if (qty <= 0) return 0;
+  return (Number(line.total_cost) || 0) / qty;
+}
+
+function purchasedPackageDetail(line: any) {
+  const count = Number(line.qty_count ?? 0);
+  const size = Number(line.package_size ?? 0);
+  const unit = line.package_unit ?? line.items?.units?.code ?? "";
+  if (count > 0 && size > 0) return `${fmtQty(count)} x ${fmtQty(size)} ${unit}`.trim();
+  if (count > 0) return `${fmtQty(count)} ${unit}`.trim();
+  return "";
+}
 
 function ExpensesPage() {
   const qc = useQueryClient();
@@ -46,9 +98,7 @@ function ExpensesPage() {
   const [method, setMethod] = useState("cash");
   const [supplierId, setSupplierId] = useState<string>("none");
   const [description, setDescription] = useState("");
-  const [stockLines, setStockLines] = useState<StockLine[]>([
-    { item_id: "", qty: 0, unit_cost: 0 },
-  ]);
+  const [stockLines, setStockLines] = useState<StockLine[]>([blankStockLine()]);
   const [busy, setBusy] = useState(false);
 
   const cats = useQuery({
@@ -80,7 +130,7 @@ function ExpensesPage() {
   const isStockPurchase = selectedCategoryName === "Stock Purchase";
 
   const stockTotal = useMemo(
-    () => stockLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unit_cost) || 0), 0),
+    () => stockLines.reduce((s, l) => s + (Number(l.total_cost) || 0), 0),
     [stockLines],
   );
 
@@ -99,12 +149,21 @@ function ExpensesPage() {
     try {
       if (isStockPurchase) {
         const lines = stockLines
-          .filter((l) => l.item_id && Number(l.qty) > 0 && Number(l.unit_cost) >= 0)
-          .map((l) => ({
-            item_id: l.item_id,
-            qty: Number(l.qty),
-            unit_cost: Number(l.unit_cost),
-          }));
+          .map((l) => {
+            const item = itemMap.get(l.item_id);
+            const qty = stockQtyForLine(l, item);
+            const totalCost = Number(l.total_cost) || 0;
+            return {
+              item_id: l.item_id,
+              qty,
+              unit_cost: qty > 0 ? totalCost / qty : 0,
+              qty_count: Number(l.qty_count) || null,
+              package_size: Number(l.package_size) || null,
+              package_unit: l.package_unit || item?.units?.code || null,
+              total_cost: totalCost,
+            };
+          })
+          .filter((l) => l.item_id && Number(l.qty) > 0 && Number(l.unit_cost) >= 0);
         if (!lines.length) {
           toast.error("Add at least one item line");
           return;
@@ -130,7 +189,7 @@ function ExpensesPage() {
             ? `Stock purchase recorded (${MWK(stockTotal)}) and inventory updated`
             : `Backdated stock purchase recorded (${MWK(stockTotal)}) without changing inventory`,
         );
-        setStockLines([{ item_id: "", qty: 0, unit_cost: 0 }]);
+        setStockLines([blankStockLine()]);
         setDescription("");
         setSupplierId("none");
         qc.invalidateQueries({ queryKey: ["exp"] });
@@ -195,6 +254,8 @@ function ExpensesPage() {
           Method: e.payment_method,
           Description: e.description ?? "",
           Item: "",
+          "Purchase Count": "",
+          "Size Each": "",
           Qty: "",
           Unit: "",
           "Unit Cost": "",
@@ -216,10 +277,15 @@ function ExpensesPage() {
           Method: e.payment_method,
           Description: e.description ?? "",
           Item: line.items?.name ?? "",
+          "Purchase Count": line.qty_count ?? "",
+          "Size Each":
+            line.package_size && line.package_unit
+              ? `${fmtQty(line.package_size)} ${line.package_unit}`
+              : "",
           Qty: Number(line.qty),
           Unit: line.items?.units?.code ?? "",
           "Unit Cost": Number(line.unit_cost),
-          "Line Total": Number(line.line_total),
+          "Line Total": Number(line.total_cost ?? line.line_total),
           "Affects Stock": line.stock_movement_id ? "Yes" : "No",
           "Movement Type": line.stock_movements?.type ?? "",
           "Qty Before": line.stock_movements?.qty_before ?? "",
@@ -239,7 +305,9 @@ function ExpensesPage() {
       "Payment",
       "Expense Detail",
       "Item Paid For",
-      "Qty",
+      "Purchase Count",
+      "Size Each",
+      "Stock Qty",
       "Unit",
       "Unit Cost",
       "Line Total",
@@ -255,6 +323,8 @@ function ExpensesPage() {
       row.Method,
       row.Description,
       row.Item || row.Description,
+      row["Purchase Count"],
+      row["Size Each"],
       row.Qty,
       row.Unit,
       row["Unit Cost"],
@@ -394,13 +464,14 @@ function ExpensesPage() {
             </div>
             {stockLines.map((l, idx) => {
               const it = itemMap.get(l.item_id);
-              const lineTotal = (Number(l.qty) || 0) * (Number(l.unit_cost) || 0);
+              const stockQty = stockQtyForLine(l, it);
+              const unitCost = lineUnitCost(l, it);
               return (
                 <div
                   key={idx}
                   className="grid grid-cols-12 gap-2 items-end p-2 border border-border rounded-md"
                 >
-                  <div className="col-span-5">
+                  <div className="col-span-12 md:col-span-4">
                     <Label className="text-xs">Item</Label>
                     <Select
                       value={l.item_id}
@@ -408,7 +479,7 @@ function ExpensesPage() {
                         const itm = itemMap.get(v);
                         updateLine(idx, {
                           item_id: v,
-                          unit_cost: l.unit_cost || Number(itm?.avg_cost) || 0,
+                          package_unit: l.package_unit || itm?.units?.code || "",
                         });
                       }}
                     >
@@ -425,28 +496,47 @@ function ExpensesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs">Qty {it ? `(${it.units?.code})` : ""}</Label>
+                  <div className="col-span-4 md:col-span-2">
+                    <Label className="text-xs">Count / packs</Label>
                     <Input
                       type="number"
                       step="0.001"
-                      value={l.qty || ""}
-                      onChange={(e) => updateLine(idx, { qty: Number(e.target.value) })}
+                      value={l.qty_count || ""}
+                      onChange={(e) => updateLine(idx, { qty_count: Number(e.target.value) })}
                     />
                   </div>
-                  <div className="col-span-2">
-                    <Label className="text-xs">Unit cost</Label>
+                  <div className="col-span-4 md:col-span-2">
+                    <Label className="text-xs">Size each</Label>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Input
+                        type="number"
+                        step="0.001"
+                        value={l.package_size || ""}
+                        onChange={(e) => updateLine(idx, { package_size: Number(e.target.value) })}
+                      />
+                      <Input
+                        value={l.package_unit}
+                        placeholder={it?.units?.code ?? "unit"}
+                        onChange={(e) => updateLine(idx, { package_unit: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-span-4 md:col-span-2">
+                    <Label className="text-xs">Total paid</Label>
                     <Input
                       type="number"
-                      step="0.01"
-                      value={l.unit_cost || ""}
-                      onChange={(e) => updateLine(idx, { unit_cost: Number(e.target.value) })}
+                      step="1"
+                      value={l.total_cost || ""}
+                      onChange={(e) => updateLine(idx, { total_cost: Number(e.target.value) })}
                     />
                   </div>
-                  <div className="col-span-2 text-right text-sm font-medium pb-2">
-                    {MWK(lineTotal)}
+                  <div className="col-span-10 md:col-span-1 text-right text-xs font-medium pb-2">
+                    <div>
+                      Stock: {fmtQty(stockQty)} {it?.units?.code ?? ""}
+                    </div>
+                    <div className="text-muted-foreground">{MWK(unitCost)}/unit</div>
                   </div>
-                  <div className="col-span-1 text-right">
+                  <div className="col-span-2 md:col-span-1 text-right">
                     <Button
                       size="icon"
                       variant="ghost"
@@ -461,7 +551,7 @@ function ExpensesPage() {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => setStockLines([...stockLines, { item_id: "", qty: 0, unit_cost: 0 }])}
+              onClick={() => setStockLines([...stockLines, blankStockLine()])}
             >
               <Plus className="h-3 w-3 mr-1" />
               Add item
@@ -517,7 +607,10 @@ function ExpensesPage() {
                   e.expense_stock_lines
                     ?.map(
                       (line: any) =>
-                        `${line.items?.name ?? "Item"} ${fmtQty(line.qty)} ${line.items?.units?.code ?? ""} @ ${MWK(line.unit_cost)}`,
+                        `${line.items?.name ?? "Item"} ${
+                          purchasedPackageDetail(line) ||
+                          `${fmtQty(line.qty)} ${line.items?.units?.code ?? ""}`
+                        } = ${fmtQty(line.qty)} ${line.items?.units?.code ?? ""} @ ${MWK(line.unit_cost)}`,
                     )
                     .join(" | ") || "-";
                 return (
