@@ -13,6 +13,34 @@ function uniqText(values: Array<string | null | undefined>) {
   ).join(", ");
 }
 
+function formatMovementQty(value: number) {
+  return Number.isInteger(value) ? String(value) : Number(value.toFixed(3)).toString();
+}
+
+function itemizedDestination(group: StockMovementView[]) {
+  const itemTotals = new Map<string, number>();
+  const fallback: Array<string | null | undefined> = [];
+
+  group.forEach((movement) => {
+    if (movement.ref_type === "order_item" && movement.destination) {
+      itemTotals.set(
+        movement.destination,
+        (itemTotals.get(movement.destination) ?? 0) + Number(movement.order_item_qty ?? 1),
+      );
+      return;
+    }
+
+    fallback.push(movement.menu_item_names || movement.destination);
+  });
+
+  const itemized = Array.from(itemTotals.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, qty]) => `${name} x${formatMovementQty(qty)}`);
+
+  const fallbackText = uniqText(fallback);
+  return [itemized.join(", "), fallbackText].filter(Boolean).join(", ");
+}
+
 function movementGroupKey(movement: StockMovementView) {
   if (movement.type !== "sale" || !POS_SOURCE.has(movement.ref_type ?? "")) return null;
   const invoice = movement.invoice_no ?? movement.ref_id;
@@ -38,9 +66,7 @@ function collapseGroup(group: StockMovementView[]): StockMovementView {
     .map((movement) => movement.qty_after)
     .filter((value): value is number => value !== null && value !== undefined);
   const isOutflow = qty < 0;
-  const destination = uniqText(
-    group.map((movement) => movement.destination || movement.menu_item_names),
-  );
+  const destination = itemizedDestination(group);
   const sourceDetail =
     first.invoice_no || first.order_type || destination
       ? ["MW POS", first.invoice_no, first.order_type, destination].filter(Boolean).join(" - ")
