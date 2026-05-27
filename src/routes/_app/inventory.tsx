@@ -24,7 +24,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { MWK, fmtQty, fmtDate } from "@/lib/format";
-import { fmtServingQty, servingLabel, servingQty } from "@/lib/beverage";
+import { fmtServingQty, fullServingsPerContainer, servingLabel, servingQty } from "@/lib/beverage";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
@@ -116,7 +116,7 @@ function InventoryPage() {
                     ) : (
                       <>
                         <div>
-                          {fmtServingQty(servings)} {servingLabel(i)}
+                          {fmtServingQty(servings)} {servingLabel(i, servings)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {fmtQty(i.qty_on_hand)} {i.units?.code}
@@ -287,6 +287,8 @@ function NewItemDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const [bottleMl, setBottleMl] = useState<number>(0);
   const [shotMl, setShotMl] = useState<number>(0);
   const [busy, setBusy] = useState(false);
+  const servingPreview = { name, bottle_ml: bottleMl, shot_ml: shotMl };
+  const servingsPerContainer = fullServingsPerContainer(servingPreview);
   const cats = useQuery({
     queryKey: ["new-item-cats"],
     queryFn: async () => {
@@ -412,6 +414,12 @@ function NewItemDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                 Set both for pour-controlled beverages: 50ml shots for spirits, 175ml glasses for
                 wine. Leave blank for bottled drinks sold whole.
               </p>
+              {servingsPerContainer !== null && (
+                <div className="col-span-2 rounded border border-border bg-secondary/30 px-3 py-2 text-sm">
+                  {servingsPerContainer} {servingLabel(servingPreview, servingsPerContainer)} per
+                  container
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -445,6 +453,8 @@ function EditItemDialog({
   const [bottleMl, setBottleMl] = useState<number>(Number(item.bottle_ml) || 0);
   const [shotMl, setShotMl] = useState<number>(Number(item.shot_ml) || 0);
   const [busy, setBusy] = useState(false);
+  const servingPreview = { name, bottle_ml: bottleMl, shot_ml: shotMl };
+  const servingsPerContainer = fullServingsPerContainer(servingPreview);
   const cats = useQuery({
     queryKey: ["edit-item-cats"],
     queryFn: () => inventoryService.listCategories(),
@@ -565,6 +575,12 @@ function EditItemDialog({
                   onChange={(e) => setShotMl(Number(e.target.value))}
                 />
               </div>
+              {servingsPerContainer !== null && (
+                <div className="col-span-2 rounded border border-border bg-secondary/30 px-3 py-2 text-sm">
+                  {servingsPerContainer} {servingLabel(servingPreview, servingsPerContainer)} per
+                  container
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -723,7 +739,7 @@ function BinCardDialog({ item, onClose }: { item: any; onClose: () => void }) {
                   const raw = Math.abs(value);
                   const servings = servingQty(raw, movementItem);
                   if (servings === null) return `${fmtQty(raw)} ${unit}`;
-                  return `${fmtServingQty(servings)} ${servingLabel(movementItem)} (${fmtQty(raw)} ${unit})`;
+                  return `${fmtServingQty(servings)} ${servingLabel(movementItem, servings)} (${fmtQty(raw)} ${unit})`;
                 };
                 const balanceServings = servingQty(m.qty_after, movementItem);
                 return (
@@ -748,7 +764,7 @@ function BinCardDialog({ item, onClose }: { item: any; onClose: () => void }) {
                         ? ""
                         : balanceServings === null
                           ? `${fmtQty(m.qty_after)} ${unit}`
-                          : `${fmtServingQty(balanceServings)} ${servingLabel(movementItem)} (${fmtQty(m.qty_after)} ${unit})`}
+                          : `${fmtServingQty(balanceServings)} ${servingLabel(movementItem, balanceServings)} (${fmtQty(m.qty_after)} ${unit})`}
                     </td>
                     <td className="p-2 text-right">{MWK(m.unit_cost)}</td>
                     <td className="p-2">{staffDisplay(m.profiles)}</td>

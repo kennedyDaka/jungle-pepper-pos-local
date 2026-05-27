@@ -14,7 +14,14 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { MWK, fmtDate, fmtQty } from "@/lib/format";
-import { fmtServingQty, servingLabel, servingQty } from "@/lib/beverage";
+import {
+  fmtServingQty,
+  fullServingsPerContainer,
+  servingLabel,
+  servingQty,
+  stockQtyMl,
+  wholeServingQty,
+} from "@/lib/beverage";
 import { staffDisplay } from "@/lib/staffDisplay";
 import { VAT_RATE } from "@/lib/vat";
 import { exportRowsCsv, exportRowsPdf, printRows } from "@/lib/reportExport";
@@ -169,7 +176,7 @@ function ReportsPage() {
     const unit = item?.units?.code ?? "";
 
     if (servings === null) return `${fmtQty(rawQty)} ${unit}`.trim();
-    return `${fmtServingQty(servings)} ${servingLabel(item)} (${fmtQty(rawQty)} ${unit})`;
+    return `${fmtServingQty(servings)} ${servingLabel(item, servings)} (${fmtQty(rawQty)} ${unit})`;
   };
 
   const movementSummaryForItem = (item: any) => {
@@ -485,7 +492,7 @@ function ReportsPage() {
         const itemMoves = movements.filter((movement) => movement.item_id === item.id);
         const bottleMl = Number(item.bottle_ml);
         const servingMl = Number(item.shot_ml) || 0;
-        const servingsPerBottle = servingMl > 0 ? bottleMl / servingMl : 0;
+        const servingsPerBottle = fullServingsPerContainer(item) ?? 0;
         const openingUnits = itemMoves.length
           ? Number(itemMoves[0].qty_before ?? 0)
           : Number(item.qty_on_hand);
@@ -511,29 +518,43 @@ function ReportsPage() {
           (movement) => Number(movement.qty),
         );
         const expectedClosingUnits = openingUnits + sumBy(itemMoves, (movement) => movement.qty);
+        const openingServings = wholeServingQty(servingQty(openingUnits, item) ?? 0);
+        const purchaseServings = wholeServingQty(servingQty(purchasesUnits, item) ?? 0);
+        const salesServings = wholeServingQty(servingQty(salesUnits, item) ?? 0);
+        const wastageServings = wholeServingQty(servingQty(wastageUnits, item) ?? 0);
+        const closingServings = wholeServingQty(servingQty(closingUnits, item) ?? 0);
+        const expectedClosingServings = wholeServingQty(
+          servingQty(expectedClosingUnits, item) ?? 0,
+        );
+        const openingMl = stockQtyMl(openingUnits, item) ?? 0;
+        const purchasesMl = stockQtyMl(purchasesUnits, item) ?? 0;
+        const salesMl = stockQtyMl(salesUnits, item) ?? 0;
+        const wastageMl = stockQtyMl(wastageUnits, item) ?? 0;
+        const closingMl = stockQtyMl(closingUnits, item) ?? 0;
+        const expectedClosingMl = stockQtyMl(expectedClosingUnits, item) ?? 0;
         return {
           Bottle: item.name,
           "Bottle ML": bottleMl,
           "Serving ML": servingMl,
-          "Serving Type": servingMl > 0 ? servingLabel(item) : "",
+          "Serving Type": servingMl > 0 ? servingLabel(item, 2) : "",
           "Servings / Bottle": servingsPerBottle,
           "Opening Bottles": openingUnits,
-          "Opening Servings": openingUnits * servingsPerBottle,
-          "Opening ML": openingUnits * bottleMl,
+          "Opening Servings": openingServings,
+          "Opening ML": openingMl,
           "Purchases Bottles": purchasesUnits,
-          "Purchases Servings": purchasesUnits * servingsPerBottle,
-          "Purchases ML": purchasesUnits * bottleMl,
-          "Sales Servings": salesUnits * servingsPerBottle,
-          "Sales ML": salesUnits * bottleMl,
-          "Wastage/Comp/Breakage Servings": wastageUnits * servingsPerBottle,
-          "Wastage/Comp/Breakage ML": wastageUnits * bottleMl,
+          "Purchases Servings": purchaseServings,
+          "Purchases ML": purchasesMl,
+          "Sales Servings": salesServings,
+          "Sales ML": salesMl,
+          "Wastage/Comp/Breakage Servings": wastageServings,
+          "Wastage/Comp/Breakage ML": wastageMl,
           "Closing Bottles": closingUnits,
-          "Closing Servings": closingUnits * servingsPerBottle,
-          "Closing ML": closingUnits * bottleMl,
-          "Expected Closing Servings": expectedClosingUnits * servingsPerBottle,
-          "Expected Closing ML": expectedClosingUnits * bottleMl,
-          "System Variance Servings": (closingUnits - expectedClosingUnits) * servingsPerBottle,
-          "System Variance ML": (closingUnits - expectedClosingUnits) * bottleMl,
+          "Closing Servings": closingServings,
+          "Closing ML": closingMl,
+          "Expected Closing Servings": expectedClosingServings,
+          "Expected Closing ML": expectedClosingMl,
+          "System Variance Servings": closingServings - expectedClosingServings,
+          "System Variance ML": closingMl - expectedClosingMl,
         };
       });
 
@@ -622,6 +643,7 @@ function ReportsPage() {
       .map((movement) => {
         const rawQty = Math.abs(Number(movement.qty));
         const servings = servingQty(rawQty, movement.items);
+        const servingCount = servings === null ? null : wholeServingQty(servings);
         return {
           Date: new Date(movement.created_at).toLocaleString(),
           "Linked Sale":
@@ -632,15 +654,17 @@ function ReportsPage() {
           "Menu Item": movement.menu_item_names ?? movement.destination ?? "POS Sale",
           Category: movement.menu_categories ?? "",
           "Ingredient Deducted": movement.items?.name ?? "",
-          "Qty Used": servings ?? rawQty,
+          "Qty Used": servingCount ?? rawQty,
           Unit:
-            servings === null ? (movement.items?.units?.code ?? "") : servingLabel(movement.items),
+            servings === null
+              ? (movement.items?.units?.code ?? "")
+              : servingLabel(movement.items, servings),
           "Stock Unit Qty": rawQty,
           "Stock Unit": movement.items?.units?.code ?? "",
           "Total Deducted":
             servings === null
               ? `${fmtQty(rawQty)} ${movement.items?.units?.code ?? ""}`
-              : `${fmtServingQty(servings)} ${servingLabel(movement.items)} (${fmtQty(rawQty)} ${movement.items?.units?.code ?? ""})`,
+              : `${fmtServingQty(servings)} ${servingLabel(movement.items, servings)} (${fmtQty(rawQty)} ${movement.items?.units?.code ?? ""})`,
           "Source Detail": movement.source_detail ?? "",
           Note: movement.note ?? "",
         };
