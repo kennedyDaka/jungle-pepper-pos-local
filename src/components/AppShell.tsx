@@ -1,8 +1,11 @@
 import { Link, useRouter } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import logo from "@/assets/jungle-pepper-logo.png";
 import { useAuth, type Role } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
+
+const IDLE_SLEEP_MS = 5 * 60 * 1000;
 
 const NAV: { to: string; label: string; roles: Role[] }[] = [
   { to: "/", label: "Dashboard", roles: ["admin", "storekeeper", "cashier"] },
@@ -64,6 +67,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="flex-1 p-4 md:p-6">{children}</main>
+      <IdleSleepScreen />
     </div>
   );
+}
+
+function IdleSleepScreen() {
+  const [sleeping, setSleeping] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const armTimer = useCallback(() => {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => setSleeping(true), IDLE_SLEEP_MS);
+  }, [clearTimer]);
+
+  useEffect(() => {
+    armTimer();
+    return clearTimer;
+  }, [armTimer, clearTimer]);
+
+  useEffect(() => {
+    const onActivity = () => {
+      if (!sleeping) armTimer();
+    };
+    const events: Array<keyof WindowEventMap> = ["pointerdown", "touchstart", "wheel", "keydown"];
+    events.forEach((eventName) => window.addEventListener(eventName, onActivity, true));
+    return () =>
+      events.forEach((eventName) => window.removeEventListener(eventName, onActivity, true));
+  }, [armTimer, sleeping]);
+
+  useEffect(() => {
+    if (!sleeping) return;
+    clearTimer();
+    const onKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key.toLowerCase() === "k") {
+        setSleeping(false);
+        armTimer();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [armTimer, clearTimer, sleeping]);
+
+  if (!sleeping) return null;
+  return <div aria-hidden="true" className="fixed inset-0 z-[9999] bg-white" />;
 }

@@ -678,6 +678,8 @@ function ReportsPage() {
           rows.push({
             Date: new Date(order.created_at).toLocaleString(),
             Branch: order.branches?.name ?? "Main Branch",
+            "Menu Item": line.menu_items?.name ?? "",
+            "Meal Qty": Number(line.qty),
             "Packaging Item": pack.packaging_options?.name ?? pack.items?.name ?? "",
             Item: pack.items?.name ?? pack.packaging_options?.name ?? "",
             "Qty Used": Number(pack.qty),

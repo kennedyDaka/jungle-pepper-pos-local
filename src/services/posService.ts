@@ -2,6 +2,12 @@ import { supabase } from "@/services/repositories/supabaseClient";
 import { raiseIfError } from "@/services/repositories/supabaseErrors";
 import type { Json } from "@/types/database";
 
+export type OrderPackagingPayload = {
+  option_id: string;
+  unit_price: number;
+  qty_per_item?: number;
+};
+
 export interface FinalizeOrderPayload {
   discount: number;
   note?: string | null;
@@ -13,7 +19,7 @@ export interface FinalizeOrderPayload {
     takeaway?: boolean;
     note?: string | null;
     modifiers: Array<{ modifier_id: string }>;
-    packaging?: { option_id: string; unit_price: number; qty_per_item?: number } | null;
+    packaging?: OrderPackagingPayload[] | OrderPackagingPayload | null;
   }>;
   payments: Array<{ method: string; amount: number }>;
 }

@@ -23,12 +23,16 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Plus, Minus, X, Printer, Download, Package, UserCheck } from "lucide-react";
+import { Plus, Minus, X, Printer, Download, Package, UserCheck, Trash2 } from "lucide-react";
 import { MWK, fmtQty } from "@/lib/format";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
 import { authService } from "@/services/authService";
 import { menuService } from "@/services/menuService";
-import { packagingService, type PackagingOptionView } from "@/services/packagingService";
+import {
+  packagingService,
+  type PackagingOptionView,
+  type PackagingStockItemView,
+} from "@/services/packagingService";
 import { posService } from "@/services/posService";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
@@ -47,17 +51,19 @@ type CartLine = {
   takeaway: boolean;
   note?: string;
   modifiers: { id: string; name: string; price_delta: number }[];
-  packaging?: {
-    option_id: string;
-    name: string;
-    item_id: string;
-    unit_price: number;
-    qty_per_item: number;
-  } | null;
+  packaging: PackagingSelection[];
 };
 
-function receiptPackagingQty(line: any) {
-  return Number(line.qty ?? 0) * Math.max(1, Number(line.packaging?.qty_per_item ?? 1) || 1);
+type PackagingSelection = {
+  option_id: string;
+  name: string;
+  item_id: string;
+  unit_price: number;
+  qty_per_item: number;
+};
+
+function receiptPackagingQty(line: any, pack: PackagingSelection) {
+  return Number(line.qty ?? 0) * Math.max(1, Number(pack.qty_per_item) || 1);
 }
 
 function PosPage() {
@@ -71,6 +77,7 @@ function PosPage() {
   const [staffMealOpen, setStaffMealOpen] = useState(false);
   const [modOpen, setModOpen] = useState<{ menuId: string; lineKey: string } | null>(null);
   const [packOpen, setPackOpen] = useState<{ lineKey: string } | null>(null);
+  const [packManagerOpen, setPackManagerOpen] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
 
   const cats = useQuery({
@@ -93,6 +100,11 @@ function PosPage() {
     queryFn: () => packagingService.listOptions(),
   });
 
+  const packagingItems = useQuery({
+    queryKey: ["pos", "packaging-items"],
+    queryFn: () => packagingService.listPackagingItems(),
+  });
+
   const filtered = useMemo(() => {
     let list = items.data ?? [];
     if (activeCat) list = list.filter((i: any) => i.category_id === activeCat);
@@ -100,9 +112,14 @@ function PosPage() {
       list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
     return list;
   }, [items.data, activeCat, search]);
-  const dataError = cats.error || items.error || mods.error || packaging.error;
+  const dataError =
+    cats.error || items.error || mods.error || packaging.error || packagingItems.error;
   const menuOptionsLoading =
-    cats.isLoading || items.isLoading || mods.isLoading || packaging.isLoading;
+    cats.isLoading ||
+    items.isLoading ||
+    mods.isLoading ||
+    packaging.isLoading ||
+    packagingItems.isLoading;
 
   const requiresCrust = (line: CartLine) =>
     (mods.data ?? []).some(
@@ -116,9 +133,15 @@ function PosPage() {
       (modifier) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust",
     );
 
-  const linePackagingQty = (line: CartLine) =>
-    line.takeaway && line.packaging
-      ? line.qty * Math.max(1, Number(line.packaging.qty_per_item) || 1)
+  const linePackagingQty = (line: CartLine, pack: PackagingSelection) =>
+    line.takeaway ? line.qty * Math.max(1, Number(pack.qty_per_item) || 1) : 0;
+
+  const linePackagingTotal = (line: CartLine) =>
+    line.takeaway
+      ? line.packaging.reduce(
+          (sum, pack) => sum + Number(pack.unit_price) * linePackagingQty(line, pack),
+          0,
+        )
       : 0;
 
   const addItem = (mi: any) => {
@@ -139,6 +162,7 @@ function PosPage() {
         qty: 1,
         takeaway: false,
         modifiers: [],
+        packaging: [],
       },
     ]);
     if (itemMods.length) setModOpen({ menuId: mi.id, lineKey: key });
@@ -146,10 +170,10 @@ function PosPage() {
 
   const lineTotal = (l: CartLine) =>
     (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty +
-    (l.takeaway && l.packaging ? Number(l.packaging.unit_price) * linePackagingQty(l) : 0);
+    linePackagingTotal(l);
   const subtotal = cart.reduce((s, l) => s + lineTotal(l), 0);
   const total = Math.max(subtotal - discount, 0);
-  const hasMissingPackaging = cart.some((line) => line.takeaway && !line.packaging);
+  const hasMissingPackaging = cart.some((line) => line.takeaway && line.packaging.length === 0);
   const hasMissingCrust = cart.some((line) => requiresCrust(line) && !hasSelectedCrust(line));
 
   const finalize = useMutation({
@@ -169,14 +193,13 @@ function PosPage() {
           takeaway: l.takeaway,
           note: l.note ?? null,
           modifiers: l.modifiers.map((m) => ({ modifier_id: m.id })),
-          packaging:
-            l.takeaway && l.packaging
-              ? {
-                  option_id: l.packaging.option_id,
-                  unit_price: Number(l.packaging.unit_price),
-                  qty_per_item: Math.max(1, Number(l.packaging.qty_per_item) || 1),
-                }
-              : null,
+          packaging: l.takeaway
+            ? l.packaging.map((pack) => ({
+                option_id: pack.option_id,
+                unit_price: Number(pack.unit_price),
+                qty_per_item: Math.max(1, Number(pack.qty_per_item) || 1),
+              }))
+            : null,
         })),
         payments: request.payments,
       };
@@ -222,6 +245,10 @@ function PosPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <Button variant="secondary" onClick={() => setPackManagerOpen(true)}>
+            <Package className="h-4 w-4 mr-1" />
+            Takeaway boxes
+          </Button>
         </div>
         <Tabs
           value={activeCat ?? "all"}
@@ -320,7 +347,7 @@ function PosPage() {
                     }
                     setCart((c) =>
                       c.map((x) =>
-                        x.key === l.key ? { ...x, takeaway: false, packaging: null } : x,
+                        x.key === l.key ? { ...x, takeaway: false, packaging: [] } : x,
                       ),
                     );
                   }}
@@ -328,18 +355,25 @@ function PosPage() {
               </div>
               {l.takeaway && (
                 <div className="mt-2 rounded border border-dashed border-border p-2 text-xs">
-                  {l.packaging ? (
-                    <div className="flex items-center justify-between gap-2">
-                      <span>
-                        <Package className="h-3.5 w-3.5 inline mr-1" />
-                        {l.packaging.name} x {fmtQty(linePackagingQty(l))}
-                      </span>
-                      <button
-                        className="font-medium text-primary"
-                        onClick={() => setPackOpen({ lineKey: l.key })}
-                      >
-                        {MWK(l.packaging.unit_price)} each
-                      </button>
+                  {l.packaging.length ? (
+                    <div className="space-y-1">
+                      {l.packaging.map((pack) => (
+                        <div
+                          key={pack.option_id}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span>
+                            <Package className="h-3.5 w-3.5 inline mr-1" />
+                            {pack.name} x {fmtQty(linePackagingQty(l, pack))}
+                          </span>
+                          <button
+                            className="font-medium text-primary"
+                            onClick={() => setPackOpen({ lineKey: l.key })}
+                          >
+                            {MWK(pack.unit_price)} each
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <button
@@ -442,11 +476,13 @@ function PosPage() {
       {packOpen && (
         <PackagingDialog
           options={packaging.data ?? []}
-          current={cart.find((line) => line.key === packOpen.lineKey)?.packaging ?? null}
+          current={cart.find((line) => line.key === packOpen.lineKey)?.packaging ?? []}
           onCancel={() => {
             setCart((c) =>
               c.map((x) =>
-                x.key === packOpen.lineKey && !x.packaging ? { ...x, takeaway: false } : x,
+                x.key === packOpen.lineKey && x.packaging.length === 0
+                  ? { ...x, takeaway: false }
+                  : x,
               ),
             );
             setPackOpen(null);
@@ -458,22 +494,29 @@ function PosPage() {
                   ? {
                       ...x,
                       takeaway: true,
-                      packaging: {
-                        option_id: selected.option.id,
-                        name: selected.option.name,
-                        item_id: selected.option.item_id,
-                        unit_price: selected.unit_price,
-                        qty_per_item: selected.qty_per_item,
-                      },
+                      packaging: selected,
                     }
                   : x,
               ),
             );
             setPackOpen(null);
-            void packagingService
-              .updatePrice(selected.option.id, selected.unit_price)
+            void Promise.all(
+              selected.map((pack) => packagingService.updatePrice(pack.option_id, pack.unit_price)),
+            )
               .then(() => qc.invalidateQueries({ queryKey: ["pos", "packaging"] }))
               .catch((error: any) => toast.error(error.message));
+          }}
+        />
+      )}
+
+      {packManagerOpen && (
+        <PackagingManagerDialog
+          options={packaging.data ?? []}
+          stockItems={packagingItems.data ?? []}
+          onClose={() => setPackManagerOpen(false)}
+          onChanged={() => {
+            void qc.invalidateQueries({ queryKey: ["pos", "packaging"] });
+            void qc.invalidateQueries({ queryKey: ["pos", "packaging-items"] });
           }}
         />
       )}
@@ -511,22 +554,41 @@ function PackagingDialog({
   onSave,
 }: {
   options: PackagingOptionView[];
-  current: CartLine["packaging"];
+  current: PackagingSelection[];
   onCancel: () => void;
-  onSave: (selection: {
-    option: PackagingOptionView;
-    unit_price: number;
-    qty_per_item: number;
-  }) => void;
+  onSave: (selection: PackagingSelection[]) => void;
 }) {
-  const initialOption =
-    options.find((option) => option.id === current?.option_id) ?? options[0] ?? null;
-  const [selectedId, setSelectedId] = useState(initialOption?.id ?? "");
-  const selected = options.find((option) => option.id === selectedId) ?? initialOption;
-  const [unitPrice, setUnitPrice] = useState(
-    current?.unit_price ?? Number(initialOption?.price ?? 0),
+  const firstOption = options[0];
+  const [selected, setSelected] = useState<PackagingSelection[]>(
+    current.length || !firstOption
+      ? current
+      : [
+          {
+            option_id: firstOption.id,
+            name: firstOption.name,
+            item_id: firstOption.item_id,
+            unit_price: Number(firstOption.price),
+            qty_per_item: 1,
+          },
+        ],
   );
-  const [qtyPerItem, setQtyPerItem] = useState(current?.qty_per_item ?? 1);
+  const addPackaging = () => {
+    const option = options.find((item) => !selected.some((pack) => pack.option_id === item.id));
+    if (!option) return;
+    setSelected((rows) => [
+      ...rows,
+      {
+        option_id: option.id,
+        name: option.name,
+        item_id: option.item_id,
+        unit_price: Number(option.price),
+        qty_per_item: 1,
+      },
+    ]);
+  };
+  const updatePackaging = (index: number, patch: Partial<PackagingSelection>) => {
+    setSelected((rows) => rows.map((row, idx) => (idx === index ? { ...row, ...patch } : row)));
+  };
 
   return (
     <Dialog open onOpenChange={onCancel}>
@@ -534,53 +596,91 @@ function PackagingDialog({
         <DialogHeader>
           <DialogTitle>Takeaway packaging</DialogTitle>
           <DialogDescription>
-            Select the charged packaging item for this takeaway line.
+            Add every charged packaging item for this takeaway line.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div>
-            <Label>Packaging</Label>
-            <Select
-              value={selectedId}
-              onValueChange={(value) => {
-                const option = options.find((item) => item.id === value);
-                setSelectedId(value);
-                setUnitPrice(Number(option?.price ?? 0));
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Choose packaging" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.name} {option.items?.units?.code ? `(${option.items.units.code})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Charge per item</Label>
-            <Input
-              type="number"
-              min={0}
-              value={unitPrice}
-              onChange={(event) => setUnitPrice(Math.max(0, Number(event.target.value)))}
-            />
-          </div>
-          <div>
-            <Label>Packaging quantity per dish</Label>
-            <Input
-              type="number"
-              min={1}
-              step="1"
-              value={qtyPerItem}
-              onChange={(event) => setQtyPerItem(Math.max(1, Number(event.target.value) || 1))}
-            />
-          </div>
+          {selected.map((row, index) => (
+            <div key={`${row.option_id}-${index}`} className="rounded border border-border p-3">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_110px_110px_36px] gap-2 items-end">
+                <div>
+                  <Label>Packaging</Label>
+                  <Select
+                    value={row.option_id}
+                    onValueChange={(value) => {
+                      const option = options.find((item) => item.id === value);
+                      if (!option) return;
+                      updatePackaging(index, {
+                        option_id: option.id,
+                        name: option.name,
+                        item_id: option.item_id,
+                        unit_price: Number(option.price),
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose packaging" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                          {option.items?.units?.code ? ` (${option.items.units.code})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Price each</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={row.unit_price}
+                    onChange={(event) =>
+                      updatePackaging(index, {
+                        unit_price: Math.max(0, Number(event.target.value) || 0),
+                      })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Qty / dish</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step="1"
+                    value={row.qty_per_item}
+                    onChange={(event) =>
+                      updatePackaging(index, {
+                        qty_per_item: Math.max(1, Number(event.target.value) || 1),
+                      })
+                    }
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelected((rows) => rows.filter((_, idx) => idx !== index))}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={addPackaging}
+            disabled={options.length === 0}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add box
+          </Button>
           <p className="text-xs text-muted-foreground">
-            Use 2 for dishes that need two boxes. The charge is saved as the new default price.
+            Use multiple rows when one meal needs two different boxes. Edited prices become the new
+            default.
           </p>
         </div>
         <DialogFooter>
@@ -588,18 +688,227 @@ function PackagingDialog({
             Cancel
           </Button>
           <Button
-            disabled={!selected}
+            disabled={selected.length === 0}
             onClick={() =>
-              selected &&
-              onSave({
-                option: selected,
-                unit_price: unitPrice,
-                qty_per_item: Math.max(1, Number(qtyPerItem) || 1),
-              })
+              onSave(
+                selected.map((pack) => ({
+                  ...pack,
+                  unit_price: Math.max(0, Number(pack.unit_price) || 0),
+                  qty_per_item: Math.max(1, Number(pack.qty_per_item) || 1),
+                })),
+              )
             }
           >
             Apply
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PackagingManagerDialog({
+  options,
+  stockItems,
+  onClose,
+  onChanged,
+}: {
+  options: PackagingOptionView[];
+  stockItems: PackagingStockItemView[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const firstStockItem = stockItems[0];
+  const [name, setName] = useState("");
+  const [itemId, setItemId] = useState(firstStockItem?.id ?? "");
+  const [price, setPrice] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, { name: string; price: number }>>(() =>
+    Object.fromEntries(
+      options.map((option) => [option.id, { name: option.name, price: Number(option.price) }]),
+    ),
+  );
+
+  const saveNew = async () => {
+    const cleaned = name.trim();
+    if (!cleaned || !itemId) {
+      toast.error("Choose a name and stock item for the box");
+      return;
+    }
+    setBusy(true);
+    try {
+      await packagingService.createOption({ name: cleaned, item_id: itemId, price });
+      setName("");
+      setPrice(0);
+      onChanged();
+      toast.success("Takeaway box added");
+    } catch (error: any) {
+      toast.error(error.message ?? "Could not add takeaway box");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveExisting = async (option: PackagingOptionView) => {
+    const draft = drafts[option.id];
+    if (!draft?.name.trim()) {
+      toast.error("Box name cannot be empty");
+      return;
+    }
+    setBusy(true);
+    try {
+      await packagingService.updateOption(option.id, draft);
+      onChanged();
+      toast.success("Takeaway box updated");
+    } catch (error: any) {
+      toast.error(error.message ?? "Could not update takeaway box");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteExisting = async (option: PackagingOptionView) => {
+    setBusy(true);
+    try {
+      await packagingService.deactivateOption(option.id);
+      onChanged();
+      toast.success("Takeaway box deleted");
+    } catch (error: any) {
+      toast.error(error.message ?? "Could not delete takeaway box");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Takeaway boxes</DialogTitle>
+          <DialogDescription>
+            Add, price, or delete the packaging choices used on POS takeaway orders.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_120px_auto] gap-2 items-end">
+            <div>
+              <Label>Box name</Label>
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="White small box"
+              />
+            </div>
+            <div>
+              <Label>Stock item</Label>
+              <Select value={itemId} onValueChange={setItemId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose stock item" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stockItems.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name} ({fmtQty(item.qty_on_hand)} {item.units?.code ?? ""})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Price</Label>
+              <Input
+                type="number"
+                min={0}
+                value={price}
+                onChange={(event) => setPrice(Math.max(0, Number(event.target.value) || 0))}
+              />
+            </div>
+            <Button disabled={busy || !name.trim() || !itemId} onClick={saveNew}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          </div>
+
+          <div className="max-h-80 overflow-auto rounded border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-muted-foreground">
+                  <th className="p-2">Box</th>
+                  <th className="p-2">Stock item</th>
+                  <th className="p-2 text-right">Price</th>
+                  <th className="p-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {options.map((option) => {
+                  const draft = drafts[option.id] ?? {
+                    name: option.name,
+                    price: Number(option.price),
+                  };
+                  return (
+                    <tr key={option.id} className="border-t border-border">
+                      <td className="p-2">
+                        <Input
+                          value={draft.name}
+                          onChange={(event) =>
+                            setDrafts((rows) => ({
+                              ...rows,
+                              [option.id]: { ...draft, name: event.target.value },
+                            }))
+                          }
+                        />
+                      </td>
+                      <td className="p-2 text-muted-foreground">
+                        {option.items?.name ?? "Stock item"}
+                      </td>
+                      <td className="p-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          className="text-right"
+                          value={draft.price}
+                          onChange={(event) =>
+                            setDrafts((rows) => ({
+                              ...rows,
+                              [option.id]: {
+                                ...draft,
+                                price: Math.max(0, Number(event.target.value) || 0),
+                              },
+                            }))
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={busy}
+                            onClick={() => saveExisting(option)}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => deleteExisting(option)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -866,12 +1175,15 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
         doc.text("  " + l.modifiers.map((m: any) => m.name).join(", "), 4, y);
         y += 4;
       }
-      if (l.takeaway && l.packaging) {
-        doc.text(`  Packaging: ${l.packaging.name} x${fmtQty(receiptPackagingQty(l))}`, 4, y);
-        doc.text(`MK${(l.packaging.unit_price * receiptPackagingQty(l)).toLocaleString()}`, 76, y, {
-          align: "right",
+      if (l.takeaway && l.packaging?.length) {
+        l.packaging.forEach((pack: PackagingSelection) => {
+          const packQty = receiptPackagingQty(l, pack);
+          doc.text(`  Packaging: ${pack.name} x${fmtQty(packQty)}`, 4, y);
+          doc.text(`MK${(pack.unit_price * packQty).toLocaleString()}`, 76, y, {
+            align: "right",
+          });
+          y += 4;
         });
-        y += 4;
       }
     });
     doc.line(4, y, 76, y);
@@ -930,16 +1242,21 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
                   {l.modifiers.map((m: any) => m.name).join(", ")}
                 </div>
               )}
-              {l.takeaway && l.packaging && (
-                <div className="flex justify-between pl-2 text-[10px]">
-                  <span>
-                    Packaging: {l.packaging.name} x{fmtQty(receiptPackagingQty(l))}
-                  </span>
-                  <span>
-                    MK{(l.packaging.unit_price * receiptPackagingQty(l)).toLocaleString()}
-                  </span>
-                </div>
-              )}
+              {l.takeaway &&
+                l.packaging?.map((pack: PackagingSelection, index: number) => {
+                  const packQty = receiptPackagingQty(l, pack);
+                  return (
+                    <div
+                      key={`${pack.option_id}-${index}`}
+                      className="flex justify-between pl-2 text-[10px]"
+                    >
+                      <span>
+                        Packaging: {pack.name} x{fmtQty(packQty)}
+                      </span>
+                      <span>MK{(pack.unit_price * packQty).toLocaleString()}</span>
+                    </div>
+                  );
+                })}
             </div>
           ))}
           <hr className="my-2 border-black" />
