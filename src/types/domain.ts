@@ -121,6 +121,7 @@ export interface Order {
   subtotal: number;
   discount: number;
   total: number;
+  physical_order_no?: string | null;
   sale_type?: "regular" | "staff_meal";
   vat_rate?: number;
   net_amount?: number;
@@ -178,6 +179,14 @@ export interface OrderView extends Order {
       }>;
     }
   >;
+  order_packaging?: Array<{
+    id: string;
+    item_id: string;
+    qty: number;
+    unit_price: number;
+    packaging_options?: { name: string } | null;
+    items?: Pick<InventoryItem, "name"> & { units?: Pick<Unit, "code"> };
+  }>;
 }
 
 export interface ExpenseCategory {

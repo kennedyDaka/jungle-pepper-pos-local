@@ -130,6 +130,16 @@ function ReportsPage() {
       const category = line.menu_items?.categories?.name ?? "-";
       catAgg.set(category, (catAgg.get(category) ?? 0) + lineRevenue);
     });
+    order.order_packaging?.forEach((pack: any) => {
+      const itemName = pack.packaging_options?.name ?? pack.items?.name ?? "Packaging";
+      const lineRevenue = Number(pack.qty) * Number(pack.unit_price);
+      const current = itemAgg.get(itemName) ?? { qty: 0, revenue: 0 };
+      itemAgg.set(itemName, {
+        qty: current.qty + Number(pack.qty),
+        revenue: current.revenue + lineRevenue,
+      });
+      catAgg.set("Packaging", (catAgg.get("Packaging") ?? 0) + lineRevenue);
+    });
   });
 
   const top = [...itemAgg.entries()].sort((a, b) => b[1].qty - a[1].qty).slice(0, 15);
@@ -158,6 +168,9 @@ function ReportsPage() {
     (line.order_item_modifiers ?? [])
       .map((orderModifier: any) => String(orderModifier.modifiers?.name ?? ""))
       .filter((name: string) => name.length > 0);
+
+  const orderReference = (order: any) =>
+    order.physical_order_no || order.id.slice(0, 8).toUpperCase();
 
   const movementsForItem = (itemId: string) =>
     movements.filter((movement) => movement.item_id === itemId);
@@ -560,25 +573,41 @@ function ReportsPage() {
 
   const salesSummaryRows = (): ReportRow[] =>
     (sales.data ?? []).map((order: any) => {
-      const qty = sumBy(order.order_items ?? [], (line: any) => Number(line.qty));
-      const itemNames = (order.order_items ?? [])
-        .map((line: any) => `${line.menu_items?.name ?? "Item"} x${fmtQty(line.qty)}`)
-        .join(" | ");
-      const packagingTotal = sumBy(order.order_items ?? [], (line: any) =>
-        sumBy(
-          line.order_item_packaging ?? [],
-          (pack: any) => Number(pack.qty) * Number(pack.unit_price),
-        ),
+      const standalonePackagingQty = sumBy(order.order_packaging ?? [], (pack: any) =>
+        Number(pack.qty),
       );
+      const qty =
+        sumBy(order.order_items ?? [], (line: any) => Number(line.qty)) + standalonePackagingQty;
+      const itemNames = [
+        ...(order.order_items ?? []).map(
+          (line: any) => `${line.menu_items?.name ?? "Item"} x${fmtQty(line.qty)}`,
+        ),
+        ...(order.order_packaging ?? []).map(
+          (pack: any) =>
+            `${pack.packaging_options?.name ?? pack.items?.name ?? "Packaging"} x${fmtQty(pack.qty)}`,
+        ),
+      ].join(" | ");
+      const packagingTotal =
+        sumBy(order.order_items ?? [], (line: any) =>
+          sumBy(
+            line.order_item_packaging ?? [],
+            (pack: any) => Number(pack.qty) * Number(pack.unit_price),
+          ),
+        ) +
+        sumBy(
+          order.order_packaging ?? [],
+          (pack: any) => Number(pack.qty) * Number(pack.unit_price),
+        );
+      const hasTakeaway =
+        (order.order_items ?? []).some((line: any) => line.takeaway) ||
+        (order.order_packaging ?? []).length > 0;
       return {
         Date: new Date(order.created_at).toLocaleString(),
-        "Invoice #": order.id.slice(0, 8).toUpperCase(),
+        "Invoice #": orderReference(order),
         Cashier: staffDisplay(order.profiles),
         Branch: order.branches?.name ?? "Main Branch",
         "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
-        "Order Type": (order.order_items ?? []).some((line: any) => line.takeaway)
-          ? "Takeaway"
-          : "Table",
+        "Order Type": hasTakeaway ? "Takeaway" : "Table",
         "Items Sold": itemNames,
         Qty: qty,
         "Gross Sales": Number(order.subtotal),
@@ -600,7 +629,7 @@ function ReportsPage() {
         const lineTotal = Number(line.qty) * Number(line.unit_price);
         rows.push({
           Date: new Date(order.created_at).toLocaleString(),
-          "Invoice #": order.id.slice(0, 8).toUpperCase(),
+          "Invoice #": orderReference(order),
           Branch: order.branches?.name ?? "Main Branch",
           "Menu Item": line.menu_items?.name ?? "-",
           Category: line.menu_items?.categories?.name ?? "-",
@@ -618,7 +647,7 @@ function ReportsPage() {
           const packTotal = Number(pack.qty) * Number(pack.unit_price);
           rows.push({
             Date: new Date(order.created_at).toLocaleString(),
-            "Invoice #": order.id.slice(0, 8).toUpperCase(),
+            "Invoice #": orderReference(order),
             Branch: order.branches?.name ?? "Main Branch",
             "Menu Item": pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
             Category: "Packaging",
@@ -631,6 +660,25 @@ function ReportsPage() {
             Modifiers: "",
             Takeaway: "Yes",
           });
+        });
+      });
+      (order.order_packaging ?? []).forEach((pack: any) => {
+        const packTotal = Number(pack.qty) * Number(pack.unit_price);
+        rows.push({
+          Date: new Date(order.created_at).toLocaleString(),
+          "Invoice #": orderReference(order),
+          Branch: order.branches?.name ?? "Main Branch",
+          "Menu Item": pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
+          Category: "Packaging",
+          "Qty Sold": Number(pack.qty),
+          "Unit Price": Number(pack.unit_price),
+          Total: packTotal,
+          "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
+          "Recipe Cost": 0,
+          Profit: packTotal,
+          Cashier: staffDisplay(order.profiles),
+          Modifiers: "",
+          Takeaway: "Standalone",
         });
       });
     });
@@ -686,11 +734,27 @@ function ReportsPage() {
             Unit: pack.items?.units?.code ?? "",
             "Unit Price": Number(pack.unit_price),
             Total: Number(pack.qty) * Number(pack.unit_price),
-            "Linked Sale": order.id.slice(0, 8).toUpperCase(),
+            "Linked Sale": orderReference(order),
             Cashier: staffDisplay(order.profiles),
           }),
         );
       });
+      (order.order_packaging ?? []).forEach((pack: any) =>
+        rows.push({
+          Date: new Date(order.created_at).toLocaleString(),
+          Branch: order.branches?.name ?? "Main Branch",
+          "Menu Item": "Standalone packaging sale",
+          "Meal Qty": "",
+          "Packaging Item": pack.packaging_options?.name ?? pack.items?.name ?? "",
+          Item: pack.items?.name ?? pack.packaging_options?.name ?? "",
+          "Qty Used": Number(pack.qty),
+          Unit: pack.items?.units?.code ?? "",
+          "Unit Price": Number(pack.unit_price),
+          Total: Number(pack.qty) * Number(pack.unit_price),
+          "Linked Sale": orderReference(order),
+          Cashier: staffDisplay(order.profiles),
+        }),
+      );
     });
     return rows;
   };

@@ -575,7 +575,8 @@ export type Database = {
           created_at: string;
           id: string;
           item_id: string;
-          order_item_id: string;
+          order_id: string | null;
+          order_item_id: string | null;
           packaging_option_id: string | null;
           qty: number;
           stock_movement_id: string | null;
@@ -585,7 +586,8 @@ export type Database = {
           created_at?: string;
           id?: string;
           item_id: string;
-          order_item_id: string;
+          order_id?: string | null;
+          order_item_id?: string | null;
           packaging_option_id?: string | null;
           qty: number;
           stock_movement_id?: string | null;
@@ -595,7 +597,8 @@ export type Database = {
           created_at?: string;
           id?: string;
           item_id?: string;
-          order_item_id?: string;
+          order_id?: string | null;
+          order_item_id?: string | null;
           packaging_option_id?: string | null;
           qty?: number;
           stock_movement_id?: string | null;
@@ -607,6 +610,13 @@ export type Database = {
             columns: ["item_id"];
             isOneToOne: false;
             referencedRelation: "items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "order_item_packaging_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
             referencedColumns: ["id"];
           },
           {
@@ -690,6 +700,7 @@ export type Database = {
           id: string;
           note: string | null;
           net_amount: number;
+          physical_order_no: string | null;
           sale_type: string;
           staff_meal_approved_by: string | null;
           staff_meal_reason: string | null;
@@ -711,6 +722,7 @@ export type Database = {
           id?: string;
           note?: string | null;
           net_amount?: number;
+          physical_order_no?: string | null;
           sale_type?: string;
           staff_meal_approved_by?: string | null;
           staff_meal_reason?: string | null;
@@ -732,6 +744,7 @@ export type Database = {
           id?: string;
           note?: string | null;
           net_amount?: number;
+          physical_order_no?: string | null;
           sale_type?: string;
           staff_meal_approved_by?: string | null;
           staff_meal_reason?: string | null;

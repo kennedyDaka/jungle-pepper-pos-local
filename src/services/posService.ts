@@ -11,6 +11,7 @@ export type OrderPackagingPayload = {
 export interface FinalizeOrderPayload {
   discount: number;
   note?: string | null;
+  physical_order_no?: string | null;
   staff_meal?: boolean;
   staff_meal_reason?: string | null;
   items: Array<{
@@ -20,6 +21,11 @@ export interface FinalizeOrderPayload {
     note?: string | null;
     modifiers: Array<{ modifier_id: string }>;
     packaging?: OrderPackagingPayload[] | OrderPackagingPayload | null;
+  }>;
+  packaging_sales?: Array<{
+    option_id: string;
+    qty: number;
+    unit_price: number;
   }>;
   payments: Array<{ method: string; amount: number }>;
 }

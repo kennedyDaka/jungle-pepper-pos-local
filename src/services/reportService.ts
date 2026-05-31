@@ -13,6 +13,12 @@ type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
   branches?: BranchRelation;
   cashier?: StaffRelation;
   payments?: Database["public"]["Tables"]["payments"]["Row"][];
+  order_packaging?: Array<
+    Database["public"]["Tables"]["order_item_packaging"]["Row"] & {
+      packaging_options?: { name: string } | null;
+      items?: { name: string; units?: Pick<Unit, "code"> | null } | null;
+    }
+  >;
   order_items?: Array<
     Database["public"]["Tables"]["order_items"]["Row"] & {
       menu_items?: Pick<MenuItem, "name"> & {
@@ -61,6 +67,29 @@ function toStaff(row?: StaffRelation) {
   return row ? { username: row.username, full_name: row.full_name } : null;
 }
 
+function toPackagingRow(
+  packaging: Database["public"]["Tables"]["order_item_packaging"]["Row"] & {
+    packaging_options?: { name: string } | null;
+    items?: { name: string; units?: Pick<Unit, "code"> | null } | null;
+  },
+) {
+  return {
+    id: packaging.id,
+    item_id: packaging.item_id,
+    qty: Number(packaging.qty),
+    unit_price: Number(packaging.unit_price),
+    packaging_options: packaging.packaging_options
+      ? { name: packaging.packaging_options.name }
+      : null,
+    items: packaging.items
+      ? {
+          name: packaging.items.name,
+          units: packaging.items.units ? { code: packaging.items.units.code } : undefined,
+        }
+      : undefined,
+  };
+}
+
 function toOrder(row: OrderWithRelations): OrderView {
   return {
     id: row.id,
@@ -70,6 +99,7 @@ function toOrder(row: OrderWithRelations): OrderView {
     subtotal: Number(row.subtotal),
     discount: Number(row.discount),
     total: Number(row.total),
+    physical_order_no: (row as any).physical_order_no ?? null,
     sale_type: (row as any).sale_type ?? "regular",
     vat_rate: Number((row as any).vat_rate ?? 0.175),
     net_amount: Number((row as any).net_amount ?? 0),
@@ -113,22 +143,9 @@ function toOrder(row: OrderWithRelations): OrderView {
             }
           : undefined,
       })),
-      order_item_packaging: (item.order_item_packaging ?? []).map((packaging) => ({
-        id: packaging.id,
-        item_id: packaging.item_id,
-        qty: Number(packaging.qty),
-        unit_price: Number(packaging.unit_price),
-        packaging_options: packaging.packaging_options
-          ? { name: packaging.packaging_options.name }
-          : null,
-        items: packaging.items
-          ? {
-              name: packaging.items.name,
-              units: packaging.items.units ? { code: packaging.items.units.code } : undefined,
-            }
-          : undefined,
-      })),
+      order_item_packaging: (item.order_item_packaging ?? []).map(toPackagingRow),
     })),
+    order_packaging: (row.order_packaging ?? []).map(toPackagingRow),
   };
 }
 
@@ -231,7 +248,7 @@ export const reportService = {
     let query = supabase
       .from("orders")
       .select(
-        "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
+        "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_packaging:order_item_packaging!order_item_packaging_order_id_fkey(*, packaging_options(name), items(name, units(code))), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
       )
       .eq("status", "paid")
       .gte("created_at", fromIso)

@@ -44,7 +44,10 @@ export const Route = createFileRoute("/_app/pos")({
 
 type CartLine = {
   key: string;
-  menu_item_id: string;
+  kind: "menu" | "packaging";
+  menu_item_id?: string;
+  packaging_option_id?: string;
+  item_id?: string;
   name: string;
   price: number;
   qty: number;
@@ -62,8 +65,21 @@ type PackagingSelection = {
   qty_per_item: number;
 };
 
+const BOXES_CATEGORY = "__takeaway_boxes";
+const EXTRAS_CATEGORY = "__extras";
+
 function receiptPackagingQty(line: any, pack: PackagingSelection) {
   return Number(line.qty ?? 0) * Math.max(1, Number(pack.qty_per_item) || 1);
+}
+
+function isMenuLine(line: CartLine): line is CartLine & { menu_item_id: string } {
+  return line.kind === "menu" && Boolean(line.menu_item_id);
+}
+
+function isPackagingSaleLine(
+  line: CartLine,
+): line is CartLine & { packaging_option_id: string; item_id: string } {
+  return line.kind === "packaging" && Boolean(line.packaging_option_id) && Boolean(line.item_id);
 }
 
 function PosPage() {
@@ -75,9 +91,17 @@ function PosPage() {
   const [note, setNote] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [staffMealOpen, setStaffMealOpen] = useState(false);
-  const [modOpen, setModOpen] = useState<{ menuId: string; lineKey: string } | null>(null);
+  const [modOpen, setModOpen] = useState<{
+    menuId: string;
+    lineKey: string;
+    removeOnCancel?: boolean;
+  } | null>(null);
   const [packOpen, setPackOpen] = useState<{ lineKey: string } | null>(null);
   const [packManagerOpen, setPackManagerOpen] = useState(false);
+  const [extraAttachOpen, setExtraAttachOpen] = useState<{
+    extraName: string;
+    candidateKeys: string[];
+  } | null>(null);
   const [lastReceipt, setLastReceipt] = useState<any>(null);
 
   const cats = useQuery({
@@ -107,11 +131,38 @@ function PosPage() {
 
   const filtered = useMemo(() => {
     let list = items.data ?? [];
-    if (activeCat) list = list.filter((i: any) => i.category_id === activeCat);
+    if (activeCat && activeCat !== BOXES_CATEGORY && activeCat !== EXTRAS_CATEGORY) {
+      list = list.filter((i: any) => i.category_id === activeCat);
+    }
     if (search.trim())
       list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
     return list;
   }, [items.data, activeCat, search]);
+
+  const extraCards = useMemo(() => {
+    const options = new Map<string, { name: string; price_delta: number }>();
+    (mods.data ?? [])
+      .filter((modifier: any) => modifier.name !== "Thin Crust" && modifier.name !== "Thick Crust")
+      .forEach((modifier: any) => {
+        if (!options.has(modifier.name)) {
+          options.set(modifier.name, {
+            name: modifier.name,
+            price_delta: Number(modifier.price_delta),
+          });
+        }
+      });
+    const list = Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name));
+    if (!search.trim()) return list;
+    const needle = search.toLowerCase();
+    return list.filter((option) => option.name.toLowerCase().includes(needle));
+  }, [mods.data, search]);
+
+  const packagingCards = useMemo(() => {
+    const list = packaging.data ?? [];
+    if (!search.trim()) return list;
+    const needle = search.toLowerCase();
+    return list.filter((option) => option.name.toLowerCase().includes(needle));
+  }, [packaging.data, search]);
   const dataError =
     cats.error || items.error || mods.error || packaging.error || packagingItems.error;
   const menuOptionsLoading =
@@ -122,6 +173,7 @@ function PosPage() {
     packagingItems.isLoading;
 
   const requiresCrust = (line: CartLine) =>
+    isMenuLine(line) &&
     (mods.data ?? []).some(
       (modifier: any) =>
         modifier.menu_item_id === line.menu_item_id &&
@@ -156,6 +208,7 @@ function PosPage() {
       ...c,
       {
         key,
+        kind: "menu",
         menu_item_id: mi.id,
         name: mi.name,
         price: Number(mi.price),
@@ -165,29 +218,110 @@ function PosPage() {
         packaging: [],
       },
     ]);
-    if (itemMods.length) setModOpen({ menuId: mi.id, lineKey: key });
+    if (itemMods.length) setModOpen({ menuId: mi.id, lineKey: key, removeOnCancel: true });
+  };
+
+  const addPackagingSale = (option: PackagingOptionView) => {
+    const key = crypto.randomUUID();
+    setCart((c) => [
+      ...c,
+      {
+        key,
+        kind: "packaging",
+        packaging_option_id: option.id,
+        item_id: option.item_id,
+        name: option.name,
+        price: Number(option.price),
+        qty: 1,
+        takeaway: false,
+        modifiers: [],
+        packaging: [],
+      },
+    ]);
+  };
+
+  const attachExtraToLine = (lineKey: string, extraName: string) => {
+    const line = cart.find((row) => row.key === lineKey);
+    if (!line || !isMenuLine(line)) return;
+    const modifier = (mods.data ?? []).find(
+      (item: any) => item.menu_item_id === line.menu_item_id && item.name === extraName,
+    );
+    if (!modifier) return;
+    setCart((rows) =>
+      rows.map((row) =>
+        row.key === lineKey
+          ? {
+              ...row,
+              modifiers: row.modifiers.some((selected) => selected.id === modifier.id)
+                ? row.modifiers
+                : [
+                    ...row.modifiers,
+                    {
+                      id: modifier.id,
+                      name: modifier.name,
+                      price_delta: Number(modifier.price_delta),
+                    },
+                  ],
+            }
+          : row,
+      ),
+    );
+  };
+
+  const addExtraByName = (extraName: string) => {
+    const candidateKeys = cart
+      .filter(isMenuLine)
+      .filter((line) =>
+        (mods.data ?? []).some(
+          (modifier: any) =>
+            modifier.menu_item_id === line.menu_item_id &&
+            modifier.name === extraName &&
+            !line.modifiers.some((selected) => selected.id === modifier.id),
+        ),
+      )
+      .map((line) => line.key);
+
+    if (candidateKeys.length === 0) {
+      toast.info("Add a dish that supports this extra first.");
+      return;
+    }
+
+    if (candidateKeys.length === 1) {
+      attachExtraToLine(candidateKeys[0], extraName);
+      return;
+    }
+
+    setExtraAttachOpen({ extraName, candidateKeys });
   };
 
   const lineTotal = (l: CartLine) =>
-    (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty +
-    linePackagingTotal(l);
+    isPackagingSaleLine(l)
+      ? Number(l.price) * Number(l.qty)
+      : (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty +
+        linePackagingTotal(l);
   const subtotal = cart.reduce((s, l) => s + lineTotal(l), 0);
   const total = Math.max(subtotal - discount, 0);
-  const hasMissingPackaging = cart.some((line) => line.takeaway && line.packaging.length === 0);
+  const hasMissingPackaging = cart.some(
+    (line) => isMenuLine(line) && line.takeaway && line.packaging.length === 0,
+  );
   const hasMissingCrust = cart.some((line) => requiresCrust(line) && !hasSelectedCrust(line));
 
   const finalize = useMutation({
     mutationFn: async (request: {
       payments: { method: string; amount: number }[];
+      physicalOrderNo: string;
       staffMealReason?: string;
     }) => {
       const isStaffMeal = Boolean(request.staffMealReason);
+      const menuLines = cart.filter(isMenuLine);
+      const packagingLines = cart.filter(isPackagingSaleLine);
       const payload = {
         discount: isStaffMeal ? subtotal : discount,
         note: note || null,
+        physical_order_no: request.physicalOrderNo.trim(),
         staff_meal: isStaffMeal,
         staff_meal_reason: request.staffMealReason ?? null,
-        items: cart.map((l) => ({
+        items: menuLines.map((l) => ({
           menu_item_id: l.menu_item_id,
           qty: l.qty,
           takeaway: l.takeaway,
@@ -200,6 +334,11 @@ function PosPage() {
                 qty_per_item: Math.max(1, Number(pack.qty_per_item) || 1),
               }))
             : null,
+        })),
+        packaging_sales: packagingLines.map((line) => ({
+          option_id: line.packaging_option_id,
+          qty: line.qty,
+          unit_price: Number(line.price),
         })),
         payments: request.payments,
       };
@@ -217,6 +356,7 @@ function PosPage() {
         total: receiptTotal,
         note,
         saleType: isStaffMeal ? "staff_meal" : "regular",
+        physicalOrderNo: request.physicalOrderNo.trim(),
         staffMealReason: request.staffMealReason ?? null,
         at: new Date(),
       };
@@ -256,6 +396,8 @@ function PosPage() {
         >
           <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value={BOXES_CATEGORY}>Takeaway Boxes</TabsTrigger>
+            <TabsTrigger value={EXTRAS_CATEGORY}>Extras</TabsTrigger>
             {cats.data?.map((c: any) => (
               <TabsTrigger key={c.id} value={c.id}>
                 {c.name}
@@ -264,17 +406,46 @@ function PosPage() {
           </TabsList>
         </Tabs>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 overflow-auto pb-2">
-          {filtered.map((mi: any) => (
-            <button
-              key={mi.id}
-              onClick={() => addItem(mi)}
-              disabled={menuOptionsLoading}
-              className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
-            >
-              <div className="font-medium text-sm leading-tight">{mi.name}</div>
-              <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
-            </button>
-          ))}
+          {activeCat === BOXES_CATEGORY
+            ? packagingCards.map((option) => (
+                <button
+                  key={option.id}
+                  onClick={() => addPackagingSale(option)}
+                  disabled={menuOptionsLoading}
+                  className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                >
+                  <div className="font-medium text-sm leading-tight">{option.name}</div>
+                  <div className="text-primary font-semibold text-sm mt-1">{MWK(option.price)}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">
+                    {option.items?.name ?? "Packaging stock"}
+                  </div>
+                </button>
+              ))
+            : activeCat === EXTRAS_CATEGORY
+              ? extraCards.map((extra) => (
+                  <button
+                    key={extra.name}
+                    onClick={() => addExtraByName(extra.name)}
+                    disabled={menuOptionsLoading}
+                    className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <div className="font-medium text-sm leading-tight">{extra.name}</div>
+                    <div className="text-primary font-semibold text-sm mt-1">
+                      {extra.price_delta > 0 ? `+${MWK(extra.price_delta)}` : MWK(0)}
+                    </div>
+                  </button>
+                ))
+              : filtered.map((mi: any) => (
+                  <button
+                    key={mi.id}
+                    onClick={() => addItem(mi)}
+                    disabled={menuOptionsLoading}
+                    className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <div className="font-medium text-sm leading-tight">{mi.name}</div>
+                    <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
+                  </button>
+                ))}
         </div>
       </div>
 
@@ -330,30 +501,51 @@ function PosPage() {
                 </div>
                 <div className="font-semibold">{MWK(lineTotal(l))}</div>
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                <Label htmlFor={`takeaway-${l.key}`} className="text-xs">
-                  Takeaway
-                </Label>
-                <Switch
-                  id={`takeaway-${l.key}`}
-                  checked={l.takeaway}
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      setCart((c) =>
-                        c.map((x) => (x.key === l.key ? { ...x, takeaway: true } : x)),
-                      );
-                      setPackOpen({ lineKey: l.key });
-                      return;
+              {isPackagingSaleLine(l) ? (
+                <div className="mt-2">
+                  <Label className="text-xs">Price each</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={l.price}
+                    onChange={(event) =>
+                      setCart((rows) =>
+                        rows.map((row) =>
+                          row.key === l.key
+                            ? { ...row, price: Math.max(0, Number(event.target.value) || 0) }
+                            : row,
+                        ),
+                      )
                     }
-                    setCart((c) =>
-                      c.map((x) =>
-                        x.key === l.key ? { ...x, takeaway: false, packaging: [] } : x,
-                      ),
-                    );
-                  }}
-                />
-              </div>
-              {l.takeaway && (
+                    className="h-8 text-right"
+                  />
+                </div>
+              ) : (
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <Label htmlFor={`takeaway-${l.key}`} className="text-xs">
+                    Takeaway
+                  </Label>
+                  <Switch
+                    id={`takeaway-${l.key}`}
+                    checked={l.takeaway}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setCart((c) =>
+                          c.map((x) => (x.key === l.key ? { ...x, takeaway: true } : x)),
+                        );
+                        setPackOpen({ lineKey: l.key });
+                        return;
+                      }
+                      setCart((c) =>
+                        c.map((x) =>
+                          x.key === l.key ? { ...x, takeaway: false, packaging: [] } : x,
+                        ),
+                      );
+                    }}
+                  />
+                </div>
+              )}
+              {isMenuLine(l) && l.takeaway && (
                 <div className="mt-2 rounded border border-dashed border-border p-2 text-xs">
                   {l.packaging.length ? (
                     <div className="space-y-1">
@@ -385,19 +577,20 @@ function PosPage() {
                   )}
                 </div>
               )}
-              {(mods.data ?? []).some(
-                (modifier: any) => modifier.menu_item_id === l.menu_item_id,
-              ) && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="mt-2 h-7 w-full text-xs"
-                  onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}
-                >
-                  Edit options / toppings
-                </Button>
-              )}
+              {isMenuLine(l) &&
+                (mods.data ?? []).some(
+                  (modifier: any) => modifier.menu_item_id === l.menu_item_id,
+                ) && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2 h-7 w-full text-xs"
+                    onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}
+                  >
+                    Edit options / toppings
+                  </Button>
+                )}
             </div>
           ))}
         </div>
@@ -459,9 +652,12 @@ function PosPage() {
         <ModifierDialog
           menuId={modOpen.menuId}
           mods={(mods.data ?? []).filter((m: any) => m.menu_item_id === modOpen.menuId)}
+          current={cart.find((line) => line.key === modOpen.lineKey)?.modifiers ?? []}
           onClose={() => setModOpen(null)}
           onCancel={() => {
-            setCart((c) => c.filter((x) => x.key !== modOpen.lineKey));
+            if (modOpen.removeOnCancel) {
+              setCart((c) => c.filter((x) => x.key !== modOpen.lineKey));
+            }
             setModOpen(null);
           }}
           onSave={(selected) => {
@@ -521,11 +717,23 @@ function PosPage() {
         />
       )}
 
+      {extraAttachOpen && (
+        <ExtraAttachDialog
+          extraName={extraAttachOpen.extraName}
+          lines={cart.filter((line) => extraAttachOpen.candidateKeys.includes(line.key))}
+          onClose={() => setExtraAttachOpen(null)}
+          onSelect={(lineKey) => {
+            attachExtraToLine(lineKey, extraAttachOpen.extraName);
+            setExtraAttachOpen(null);
+          }}
+        />
+      )}
+
       {payOpen && (
         <PaymentDialog
           total={total}
           onClose={() => setPayOpen(false)}
-          onPay={(pmts) => finalize.mutate({ payments: pmts })}
+          onPay={(physicalOrderNo, pmts) => finalize.mutate({ physicalOrderNo, payments: pmts })}
           busy={finalize.isPending}
         />
       )}
@@ -534,9 +742,9 @@ function PosPage() {
         <StaffMealDialog
           subtotal={subtotal}
           onClose={() => setStaffMealOpen(false)}
-          onApprove={async ({ reason, password }) => {
+          onApprove={async ({ reason, password, physicalOrderNo }) => {
             await authService.verifyCurrentCredential(password);
-            finalize.mutate({ payments: [], staffMealReason: reason });
+            finalize.mutate({ payments: [], physicalOrderNo, staffMealReason: reason });
           }}
           busy={finalize.isPending}
         />
@@ -544,6 +752,47 @@ function PosPage() {
 
       {lastReceipt && <ReceiptDialog receipt={lastReceipt} onClose={() => setLastReceipt(null)} />}
     </div>
+  );
+}
+
+function ExtraAttachDialog({
+  extraName,
+  lines,
+  onClose,
+  onSelect,
+}: {
+  extraName: string;
+  lines: CartLine[];
+  onClose: () => void;
+  onSelect: (lineKey: string) => void;
+}) {
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add {extraName}</DialogTitle>
+          <DialogDescription>Choose the dish this extra belongs to.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {lines.filter(isMenuLine).map((line) => (
+            <button
+              key={line.key}
+              type="button"
+              onClick={() => onSelect(line.key)}
+              className="w-full rounded border border-border p-3 text-left hover:border-primary hover:bg-secondary"
+            >
+              <div className="font-medium">{line.name}</div>
+              <div className="text-xs text-muted-foreground">Qty {fmtQty(line.qty)}</div>
+            </button>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -917,20 +1166,32 @@ function PackagingManagerDialog({
 
 function ModifierDialog({
   mods,
+  current,
   onClose,
   onCancel,
   onSave,
 }: {
   menuId: string;
   mods: any[];
+  current: { id: string; name: string; price_delta: number }[];
   onClose: () => void;
   onCancel: () => void;
   onSave: (s: any[]) => void;
 }) {
   const crustMods = mods.filter((m) => m.name === "Thin Crust" || m.name === "Thick Crust");
   const extraMods = mods.filter((m) => m.name !== "Thin Crust" && m.name !== "Thick Crust");
-  const [crust, setCrust] = useState<string | null>(null);
-  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [crust, setCrust] = useState<string | null>(
+    current.find((modifier) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust")
+      ?.id ?? null,
+  );
+  const [sel, setSel] = useState<Set<string>>(
+    () =>
+      new Set(
+        current
+          .filter((modifier) => modifier.name !== "Thin Crust" && modifier.name !== "Thick Crust")
+          .map((modifier) => modifier.id),
+      ),
+  );
   const toggle = (id: string) => {
     const n = new Set(sel);
     if (n.has(id)) n.delete(id);
@@ -1008,19 +1269,32 @@ function PaymentDialog({
 }: {
   total: number;
   onClose: () => void;
-  onPay: (p: { method: string; amount: number }[]) => void;
+  onPay: (physicalOrderNo: string, p: { method: string; amount: number }[]) => void;
   busy: boolean;
 }) {
   const [method, setMethod] = useState("cash");
   const [amount, setAmount] = useState(total);
+  const [physicalOrderNo, setPhysicalOrderNo] = useState("");
+  const cleanedOrderNo = physicalOrderNo.trim();
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Payment - {MWK(total)}</DialogTitle>
-          <DialogDescription>Confirm the payment method and amount received.</DialogDescription>
+          <DialogDescription>
+            Enter the physical order number, then confirm payment.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          <div>
+            <Label>Physical receipt / order no.</Label>
+            <Input
+              value={physicalOrderNo}
+              onChange={(e) => setPhysicalOrderNo(e.target.value)}
+              placeholder="Receipt book number"
+              autoFocus
+            />
+          </div>
           <div>
             <Label>Method</Label>
             <Select value={method} onValueChange={setMethod}>
@@ -1054,8 +1328,8 @@ function PaymentDialog({
             Cancel
           </Button>
           <Button
-            onClick={() => onPay([{ method, amount: Math.min(amount, total) }])}
-            disabled={busy || amount < total}
+            onClick={() => onPay(cleanedOrderNo, [{ method, amount: Math.min(amount, total) }])}
+            disabled={busy || amount < total || cleanedOrderNo.length === 0}
           >
             Confirm
           </Button>
@@ -1073,14 +1347,20 @@ function StaffMealDialog({
 }: {
   subtotal: number;
   onClose: () => void;
-  onApprove: (approval: { reason: string; password: string }) => Promise<void> | void;
+  onApprove: (approval: {
+    reason: string;
+    password: string;
+    physicalOrderNo: string;
+  }) => Promise<void> | void;
   busy: boolean;
 }) {
   const [reason, setReason] = useState("");
   const [password, setPassword] = useState("");
+  const [physicalOrderNo, setPhysicalOrderNo] = useState("");
   const [verifying, setVerifying] = useState(false);
   const cleaned = reason.trim();
   const cleanedPassword = password.trim();
+  const cleanedOrderNo = physicalOrderNo.trim();
   const locked = busy || verifying;
 
   return (
@@ -1091,6 +1371,15 @@ function StaffMealDialog({
           <DialogDescription>Record the staff member or approval note.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          <div>
+            <Label>Physical receipt / order no.</Label>
+            <Input
+              value={physicalOrderNo}
+              onChange={(e) => setPhysicalOrderNo(e.target.value)}
+              placeholder="Receipt book number"
+              autoFocus
+            />
+          </div>
           <div>
             <Label>Approval note</Label>
             <Input
@@ -1124,11 +1413,20 @@ function StaffMealDialog({
             Cancel
           </Button>
           <Button
-            disabled={locked || cleaned.length < 2 || cleanedPassword.length < 4}
+            disabled={
+              locked ||
+              cleaned.length < 2 ||
+              cleanedPassword.length < 4 ||
+              cleanedOrderNo.length === 0
+            }
             onClick={async () => {
               setVerifying(true);
               try {
-                await onApprove({ reason: cleaned, password: cleanedPassword });
+                await onApprove({
+                  reason: cleaned,
+                  password: cleanedPassword,
+                  physicalOrderNo: cleanedOrderNo,
+                });
               } catch (error: any) {
                 toast.error(error.message ?? "Could not approve staff meal");
               } finally {
@@ -1146,6 +1444,8 @@ function StaffMealDialog({
 
 function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void }) {
   const tax = vatBreakdownFromInclusive(receipt.total);
+  const receiptRef = receipt.physicalOrderNo || receipt.id.slice(0, 8).toUpperCase();
+  const receiptFileRef = String(receiptRef).replace(/[^a-z0-9_-]+/gi, "-");
   const downloadPdf = () => {
     const doc = new jsPDF({ unit: "mm", format: [80, 200] });
     let y = 8;
@@ -1159,7 +1459,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
     y += 4;
     doc.text(new Date(receipt.at).toLocaleString(), 40, y, { align: "center" });
     y += 4;
-    doc.text("Order: " + receipt.id.slice(0, 8), 40, y, { align: "center" });
+    doc.text("Order: " + receiptRef, 40, y, { align: "center" });
     y += 4;
     if (receipt.saleType === "staff_meal") {
       doc.text("Staff meal", 40, y, { align: "center" });
@@ -1209,7 +1509,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.text("Obrigado! Thank you.", 40, y, { align: "center" });
-    doc.save(`receipt-${receipt.id.slice(0, 8)}.pdf`);
+    doc.save(`receipt-${receiptFileRef}.pdf`);
   };
   return (
     <Dialog open onOpenChange={onClose}>
@@ -1224,7 +1524,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
             <div className="font-bold">JUNGLE PEPPER</div>
             <div>Kidney Crescent, Blantyre</div>
             <div>{new Date(receipt.at).toLocaleString()}</div>
-            <div>Order: {receipt.id.slice(0, 8)}</div>
+            <div>Order: {receiptRef}</div>
             {receipt.saleType === "staff_meal" && <div className="font-bold">STAFF MEAL</div>}
           </div>
           <hr className="my-2 border-black" />

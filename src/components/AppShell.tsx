@@ -5,7 +5,7 @@ import { useAuth, type Role } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 
-const IDLE_SLEEP_MS = 5 * 60 * 1000;
+const IDLE_SLEEP_MS = 60 * 1000;
 
 const NAV: { to: string; label: string; roles: Role[] }[] = [
   { to: "/", label: "Dashboard", roles: ["admin", "storekeeper", "cashier"] },
