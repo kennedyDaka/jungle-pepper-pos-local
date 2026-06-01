@@ -29,6 +29,15 @@ type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
           modifiers?: Pick<Modifier, "name" | "price_delta"> | null;
         }
       >;
+      order_item_omissions?: Array<{
+        id: string;
+        order_item_id: string;
+        recipe_id: string | null;
+        item_id: string;
+        qty: number;
+        created_at: string;
+        items?: { name: string; units?: Pick<Unit, "code"> | null } | null;
+      }>;
       order_item_packaging?: Array<
         Database["public"]["Tables"]["order_item_packaging"]["Row"] & {
           packaging_options?: { name: string } | null;
@@ -143,6 +152,19 @@ function toOrder(row: OrderWithRelations): OrderView {
             }
           : undefined,
       })),
+      order_item_omissions: (item.order_item_omissions ?? []).map((omission) => ({
+        id: omission.id,
+        order_item_id: omission.order_item_id,
+        recipe_id: omission.recipe_id,
+        item_id: omission.item_id,
+        qty: Number(omission.qty),
+        items: omission.items
+          ? {
+              name: omission.items.name,
+              units: omission.items.units ? { code: omission.items.units.code } : undefined,
+            }
+          : undefined,
+      })),
       order_item_packaging: (item.order_item_packaging ?? []).map(toPackagingRow),
     })),
     order_packaging: (row.order_packaging ?? []).map(toPackagingRow),
@@ -248,7 +270,7 @@ export const reportService = {
     let query = supabase
       .from("orders")
       .select(
-        "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_packaging:order_item_packaging!order_item_packaging_order_id_fkey(*, packaging_options(name), items(name, units(code))), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
+        "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_packaging:order_item_packaging!order_item_packaging_order_id_fkey(*, packaging_options(name), items(name, units(code))), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_omissions(*, items(name, units(code))), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
       )
       .eq("status", "paid")
       .gte("created_at", fromIso)
@@ -259,7 +281,7 @@ export const reportService = {
     const { data, error } = await query.order("created_at", { ascending: false });
 
     raiseIfError(error, "Could not load sales report");
-    return ((data ?? []) as OrderWithRelations[]).map(toOrder);
+    return ((data ?? []) as unknown as OrderWithRelations[]).map(toOrder);
   },
 
   async listItems() {

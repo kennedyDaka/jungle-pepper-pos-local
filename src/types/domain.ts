@@ -169,6 +169,13 @@ export interface OrderView extends Order {
           modifiers?: Pick<Modifier, "name" | "price_delta">;
         }
       >;
+      order_item_omissions?: Array<{
+        id: string;
+        recipe_id?: string | null;
+        item_id: string;
+        qty: number;
+        items?: Pick<InventoryItem, "name"> & { units?: Pick<Unit, "code"> };
+      }>;
       order_item_packaging?: Array<{
         id: string;
         item_id: string;

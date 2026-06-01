@@ -54,6 +54,28 @@ export const menuService = {
     return (data ?? []) as Modifier[];
   },
 
+  async listRecipeOptions() {
+    const { data, error } = await supabase
+      .from("recipes")
+      .select("id, menu_item_id, item_id, qty, takeaway_only, items(name, units(code))")
+      .order("created_at");
+
+    raiseIfError(error, "Could not load recipe options");
+    return (data ?? []).map((row: any) => ({
+      id: row.id,
+      menu_item_id: row.menu_item_id,
+      item_id: row.item_id,
+      qty: Number(row.qty),
+      takeaway_only: Boolean(row.takeaway_only),
+      items: row.items
+        ? {
+            name: row.items.name,
+            units: row.items.units ? { code: row.items.units.code } : undefined,
+          }
+        : undefined,
+    }));
+  },
+
   async deleteMenuItem(id: string) {
     const { error } = await supabase.from("menu_items").update({ active: false }).eq("id", id);
     raiseIfError(error, "Could not delete menu item");

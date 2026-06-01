@@ -33,6 +33,8 @@ import {
   UserCheck,
   Trash2,
   History,
+  Ban,
+  CalendarClock,
 } from "lucide-react";
 import { MWK, fmtQty } from "@/lib/format";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
@@ -65,7 +67,17 @@ type CartLine = {
   takeaway: boolean;
   note?: string;
   modifiers: { id: string; name: string; price_delta: number }[];
+  omissions: OmissionSelection[];
   packaging: PackagingSelection[];
+};
+
+type OmissionSelection = {
+  recipe_id: string;
+  item_id: string;
+  name: string;
+  qty: number;
+  unit?: string;
+  takeaway_only?: boolean;
 };
 
 type PackagingSelection = {
@@ -98,13 +110,29 @@ function orderReference(order: any) {
 function orderSummary(order: any) {
   return [
     ...(order.order_items ?? []).map(
-      (line: any) => `${line.menu_items?.name ?? "Item"} x${fmtQty(line.qty)}`,
+      (line: any) =>
+        `${line.menu_items?.name ?? "Item"} x${fmtQty(line.qty)}${omissionLabel(line.order_item_omissions)}`,
     ),
     ...(order.order_packaging ?? []).map(
       (pack: any) =>
         `${pack.packaging_options?.name ?? pack.items?.name ?? "Packaging"} x${fmtQty(pack.qty)}`,
     ),
   ].join(" | ");
+}
+
+function omissionLabel(omissions: any[] = []) {
+  const names = omissions.map((omission) => omission.items?.name).filter(Boolean);
+  return names.length ? ` (no ${names.join(", ")})` : "";
+}
+
+function dateTimeLocalValue(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function dateTimeLocalToIso(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
 function orderCashier(order: any) {
@@ -142,6 +170,13 @@ function receiptFromOrder(order: any) {
         name: modifier.modifiers?.name ?? "Extra",
         price_delta: Number(modifier.modifiers?.price_delta ?? 0),
       })),
+      omissions: (line.order_item_omissions ?? []).map((omission: any) => ({
+        recipe_id: omission.recipe_id,
+        item_id: omission.item_id,
+        name: omission.items?.name ?? "Removed item",
+        qty: Number(omission.qty),
+        unit: omission.items?.units?.code,
+      })),
       packaging,
       total: qty * Number(line.unit_price) + packagingTotal,
     };
@@ -157,6 +192,7 @@ function receiptFromOrder(order: any) {
     qty: Number(pack.qty),
     takeaway: false,
     modifiers: [],
+    omissions: [],
     packaging: [],
     total: Number(pack.qty) * Number(pack.unit_price),
   }));
@@ -199,6 +235,7 @@ function PosPage() {
     lineKey: string;
     removeOnCancel?: boolean;
   } | null>(null);
+  const [omitOpen, setOmitOpen] = useState<{ lineKey: string } | null>(null);
   const [packOpen, setPackOpen] = useState<{ lineKey: string } | null>(null);
   const [packManagerOpen, setPackManagerOpen] = useState(false);
   const [extraAttachOpen, setExtraAttachOpen] = useState<{
@@ -224,6 +261,11 @@ function PosPage() {
   const mods = useQuery({
     queryKey: ["pos", "mods"],
     queryFn: () => menuService.listModifiers(),
+  });
+
+  const recipeOptions = useQuery({
+    queryKey: ["pos", "recipe-options"],
+    queryFn: () => menuService.listRecipeOptions(),
   });
 
   const packaging = useQuery({
@@ -281,11 +323,17 @@ function PosPage() {
     return list.filter((option) => option.name.toLowerCase().includes(needle));
   }, [packaging.data, search]);
   const dataError =
-    cats.error || items.error || mods.error || packaging.error || packagingItems.error;
+    cats.error ||
+    items.error ||
+    mods.error ||
+    recipeOptions.error ||
+    packaging.error ||
+    packagingItems.error;
   const menuOptionsLoading =
     cats.isLoading ||
     items.isLoading ||
     mods.isLoading ||
+    recipeOptions.isLoading ||
     packaging.isLoading ||
     packagingItems.isLoading;
 
@@ -301,6 +349,23 @@ function PosPage() {
     line.modifiers.some(
       (modifier) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust",
     );
+
+  const recipeOptionsForLine = (line: CartLine): OmissionSelection[] =>
+    isMenuLine(line)
+      ? (recipeOptions.data ?? [])
+          .filter(
+            (recipe: any) =>
+              recipe.menu_item_id === line.menu_item_id && (!recipe.takeaway_only || line.takeaway),
+          )
+          .map((recipe: any) => ({
+            recipe_id: recipe.id,
+            item_id: recipe.item_id,
+            name: recipe.items?.name ?? "Recipe item",
+            qty: Number(recipe.qty),
+            unit: recipe.items?.units?.code,
+            takeaway_only: Boolean(recipe.takeaway_only),
+          }))
+      : [];
 
   const linePackagingQty = (line: CartLine, pack: PackagingSelection) =>
     line.takeaway ? line.qty * Math.max(1, Number(pack.qty_per_item) || 1) : 0;
@@ -332,6 +397,7 @@ function PosPage() {
         qty: 1,
         takeaway: false,
         modifiers: [],
+        omissions: [],
         packaging: [],
       },
     ]);
@@ -352,6 +418,7 @@ function PosPage() {
         qty: 1,
         takeaway: false,
         modifiers: [],
+        omissions: [],
         packaging: [],
       },
     ]);
@@ -427,6 +494,7 @@ function PosPage() {
     mutationFn: async (request: {
       payments: { method: string; amount: number }[];
       physicalOrderNo: string;
+      saleAt: string;
       staffMealReason?: string;
     }) => {
       const isStaffMeal = Boolean(request.staffMealReason);
@@ -436,6 +504,7 @@ function PosPage() {
         discount: isStaffMeal ? subtotal : discount,
         note: note || null,
         physical_order_no: request.physicalOrderNo.trim(),
+        sale_at: request.saleAt,
         staff_meal: isStaffMeal,
         staff_meal_reason: request.staffMealReason ?? null,
         items: menuLines.map((l) => ({
@@ -444,6 +513,10 @@ function PosPage() {
           takeaway: l.takeaway,
           note: l.note ?? null,
           modifiers: l.modifiers.map((m) => ({ modifier_id: m.id })),
+          omissions: l.omissions.map((omission) => ({
+            recipe_id: omission.recipe_id,
+            item_id: omission.item_id,
+          })),
           packaging: l.takeaway
             ? l.packaging.map((pack) => ({
                 option_id: pack.option_id,
@@ -475,7 +548,7 @@ function PosPage() {
         saleType: isStaffMeal ? "staff_meal" : "regular",
         physicalOrderNo: request.physicalOrderNo.trim(),
         staffMealReason: request.staffMealReason ?? null,
-        at: new Date(),
+        at: new Date(request.saleAt),
       };
       setLastReceipt(receipt);
       setCart([]);
@@ -490,12 +563,16 @@ function PosPage() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const omitLine = omitOpen ? cart.find((line) => line.key === omitOpen.lineKey) : null;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-9rem)]">
       <div className="lg:col-span-2 flex flex-col gap-3 min-h-0">
-        {(cats.isLoading || items.isLoading || mods.isLoading || packaging.isLoading) && (
-          <LoadingState label="Loading live menu..." />
-        )}
+        {(cats.isLoading ||
+          items.isLoading ||
+          mods.isLoading ||
+          recipeOptions.isLoading ||
+          packaging.isLoading) && <LoadingState label="Loading live menu..." />}
         {dataError && <ErrorState error={dataError} label="Could not load POS data" />}
         <div className="flex flex-wrap gap-2">
           <Input
@@ -595,6 +672,14 @@ function PosPage() {
                     .join(", ")}
                 </div>
               )}
+              {isMenuLine(l) && l.omissions.length > 0 && (
+                <div className="text-xs text-destructive">
+                  No{" "}
+                  {l.omissions
+                    .map((omission) => `${omission.name} x${fmtQty(omission.qty * l.qty)}`)
+                    .join(", ")}
+                </div>
+              )}
               {requiresCrust(l) && !hasSelectedCrust(l) && (
                 <p className="text-xs text-destructive mt-1">Choose thin or thick crust.</p>
               )}
@@ -661,7 +746,16 @@ function PosPage() {
                       }
                       setCart((c) =>
                         c.map((x) =>
-                          x.key === l.key ? { ...x, takeaway: false, packaging: [] } : x,
+                          x.key === l.key
+                            ? {
+                                ...x,
+                                takeaway: false,
+                                packaging: [],
+                                omissions: x.omissions.filter(
+                                  (omission) => !omission.takeaway_only,
+                                ),
+                              }
+                            : x,
                         ),
                       );
                     }}
@@ -714,6 +808,18 @@ function PosPage() {
                     Edit options / toppings
                   </Button>
                 )}
+              {isMenuLine(l) && recipeOptionsForLine(l).length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 h-7 w-full text-xs"
+                  onClick={() => setOmitOpen({ lineKey: l.key })}
+                >
+                  <Ban className="h-3.5 w-3.5 mr-1" />
+                  Remove recipe items
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -788,6 +894,22 @@ function PosPage() {
               c.map((x) => (x.key === modOpen.lineKey ? { ...x, modifiers: selected } : x)),
             );
             setModOpen(null);
+          }}
+        />
+      )}
+
+      {omitOpen && omitLine && (
+        <OmissionDialog
+          options={recipeOptionsForLine(omitLine)}
+          current={omitLine.omissions}
+          onClose={() => setOmitOpen(null)}
+          onSave={(selected) => {
+            setCart((rows) =>
+              rows.map((line) =>
+                line.key === omitOpen.lineKey ? { ...line, omissions: selected } : line,
+              ),
+            );
+            setOmitOpen(null);
           }}
         />
       )}
@@ -875,7 +997,9 @@ function PosPage() {
         <PaymentDialog
           total={total}
           onClose={() => setPayOpen(false)}
-          onPay={(physicalOrderNo, pmts) => finalize.mutate({ physicalOrderNo, payments: pmts })}
+          onPay={(physicalOrderNo, saleAt, pmts) =>
+            finalize.mutate({ physicalOrderNo, saleAt, payments: pmts })
+          }
           busy={finalize.isPending}
         />
       )}
@@ -884,9 +1008,9 @@ function PosPage() {
         <StaffMealDialog
           subtotal={subtotal}
           onClose={() => setStaffMealOpen(false)}
-          onApprove={async ({ reason, password, physicalOrderNo }) => {
+          onApprove={async ({ reason, password, physicalOrderNo, saleAt }) => {
             await authService.verifyCurrentCredential(password);
-            finalize.mutate({ payments: [], physicalOrderNo, staffMealReason: reason });
+            finalize.mutate({ payments: [], physicalOrderNo, saleAt, staffMealReason: reason });
           }}
           busy={finalize.isPending}
         />
@@ -1056,6 +1180,70 @@ function ExtraAttachDialog({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OmissionDialog({
+  options,
+  current,
+  onClose,
+  onSave,
+}: {
+  options: OmissionSelection[];
+  current: OmissionSelection[];
+  onClose: () => void;
+  onSave: (selection: OmissionSelection[]) => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(current.map((item) => item.recipe_id)),
+  );
+  const toggle = (recipeId: string) => {
+    const next = new Set(selected);
+    if (next.has(recipeId)) next.delete(recipeId);
+    else next.add(recipeId);
+    setSelected(next);
+  };
+  const chosen = options.filter((option) => selected.has(option.recipe_id));
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remove recipe items</DialogTitle>
+          <DialogDescription>
+            Select ingredients or sides that should not be served or deducted for this line.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[55vh] overflow-auto space-y-2">
+          {options.length === 0 && (
+            <p className="text-sm text-muted-foreground">No removable recipe items found.</p>
+          )}
+          {options.map((option) => (
+            <button
+              key={option.recipe_id}
+              type="button"
+              onClick={() => toggle(option.recipe_id)}
+              className={`w-full flex justify-between gap-3 rounded border p-2 text-left ${
+                selected.has(option.recipe_id)
+                  ? "border-destructive bg-destructive/10"
+                  : "border-border"
+              }`}
+            >
+              <span className="font-medium">{option.name}</span>
+              <span className="text-muted-foreground">
+                {fmtQty(option.qty)} {option.unit ?? ""}
+              </span>
+            </button>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => onSave(chosen)}>Apply</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1535,12 +1723,13 @@ function PaymentDialog({
 }: {
   total: number;
   onClose: () => void;
-  onPay: (physicalOrderNo: string, p: { method: string; amount: number }[]) => void;
+  onPay: (physicalOrderNo: string, saleAt: string, p: { method: string; amount: number }[]) => void;
   busy: boolean;
 }) {
   const [method, setMethod] = useState("cash");
   const [amount, setAmount] = useState(total);
   const [physicalOrderNo, setPhysicalOrderNo] = useState("");
+  const [saleAt, setSaleAt] = useState(() => dateTimeLocalValue());
   const cleanedOrderNo = physicalOrderNo.trim();
   return (
     <Dialog open onOpenChange={onClose}>
@@ -1559,6 +1748,18 @@ function PaymentDialog({
               onChange={(e) => setPhysicalOrderNo(e.target.value)}
               placeholder="Receipt book number"
               autoFocus
+            />
+          </div>
+          <div>
+            <Label>
+              <CalendarClock className="h-3.5 w-3.5 inline mr-1" />
+              Sale date / time
+            </Label>
+            <Input
+              type="datetime-local"
+              value={saleAt}
+              max={dateTimeLocalValue()}
+              onChange={(e) => setSaleAt(e.target.value)}
             />
           </div>
           <div>
@@ -1594,8 +1795,12 @@ function PaymentDialog({
             Cancel
           </Button>
           <Button
-            onClick={() => onPay(cleanedOrderNo, [{ method, amount: Math.min(amount, total) }])}
-            disabled={busy || amount < total || cleanedOrderNo.length === 0}
+            onClick={() =>
+              onPay(cleanedOrderNo, dateTimeLocalToIso(saleAt), [
+                { method, amount: Math.min(amount, total) },
+              ])
+            }
+            disabled={busy || amount < total || cleanedOrderNo.length === 0 || saleAt.length === 0}
           >
             Confirm
           </Button>
@@ -1617,12 +1822,14 @@ function StaffMealDialog({
     reason: string;
     password: string;
     physicalOrderNo: string;
+    saleAt: string;
   }) => Promise<void> | void;
   busy: boolean;
 }) {
   const [reason, setReason] = useState("");
   const [password, setPassword] = useState("");
   const [physicalOrderNo, setPhysicalOrderNo] = useState("");
+  const [saleAt, setSaleAt] = useState(() => dateTimeLocalValue());
   const [verifying, setVerifying] = useState(false);
   const cleaned = reason.trim();
   const cleanedPassword = password.trim();
@@ -1644,6 +1851,18 @@ function StaffMealDialog({
               onChange={(e) => setPhysicalOrderNo(e.target.value)}
               placeholder="Receipt book number"
               autoFocus
+            />
+          </div>
+          <div>
+            <Label>
+              <CalendarClock className="h-3.5 w-3.5 inline mr-1" />
+              Sale date / time
+            </Label>
+            <Input
+              type="datetime-local"
+              value={saleAt}
+              max={dateTimeLocalValue()}
+              onChange={(e) => setSaleAt(e.target.value)}
             />
           </div>
           <div>
@@ -1683,7 +1902,8 @@ function StaffMealDialog({
               locked ||
               cleaned.length < 2 ||
               cleanedPassword.length < 4 ||
-              cleanedOrderNo.length === 0
+              cleanedOrderNo.length === 0 ||
+              saleAt.length === 0
             }
             onClick={async () => {
               setVerifying(true);
@@ -1692,6 +1912,7 @@ function StaffMealDialog({
                   reason: cleaned,
                   password: cleanedPassword,
                   physicalOrderNo: cleanedOrderNo,
+                  saleAt: dateTimeLocalToIso(saleAt),
                 });
               } catch (error: any) {
                 toast.error(error.message ?? "Could not approve staff meal");
@@ -1739,6 +1960,10 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
       y += 4;
       if (l.modifiers?.length) {
         doc.text("  " + l.modifiers.map((m: any) => m.name).join(", "), 4, y);
+        y += 4;
+      }
+      if (l.omissions?.length) {
+        doc.text("  No " + l.omissions.map((omission: any) => omission.name).join(", "), 4, y);
         y += 4;
       }
       if (l.takeaway && l.packaging?.length) {
@@ -1806,6 +2031,11 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
               {l.modifiers?.length > 0 && (
                 <div className="pl-2 text-[10px]">
                   {l.modifiers.map((m: any) => m.name).join(", ")}
+                </div>
+              )}
+              {l.omissions?.length > 0 && (
+                <div className="pl-2 text-[10px]">
+                  No {l.omissions.map((omission: any) => omission.name).join(", ")}
                 </div>
               )}
               {l.takeaway &&

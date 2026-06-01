@@ -169,6 +169,11 @@ function ReportsPage() {
       .map((orderModifier: any) => String(orderModifier.modifiers?.name ?? ""))
       .filter((name: string) => name.length > 0);
 
+  const omittedNames = (line: any): string[] =>
+    (line.order_item_omissions ?? [])
+      .map((omission: any) => String(omission.items?.name ?? ""))
+      .filter((name: string) => name.length > 0);
+
   const orderReference = (order: any) =>
     order.physical_order_no || order.id.slice(0, 8).toUpperCase();
 
@@ -641,6 +646,7 @@ function ReportsPage() {
           Profit: lineTotal,
           Cashier: staffDisplay(order.profiles),
           Modifiers: modifierNames(line).join(", "),
+          "Removed Items": omittedNames(line).join(", "),
           Takeaway: line.takeaway ? "Yes" : "No",
         });
         (line.order_item_packaging ?? []).forEach((pack: any) => {

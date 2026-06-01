@@ -12,6 +12,7 @@ export interface FinalizeOrderPayload {
   discount: number;
   note?: string | null;
   physical_order_no?: string | null;
+  sale_at?: string | null;
   staff_meal?: boolean;
   staff_meal_reason?: string | null;
   items: Array<{
@@ -20,6 +21,7 @@ export interface FinalizeOrderPayload {
     takeaway?: boolean;
     note?: string | null;
     modifiers: Array<{ modifier_id: string }>;
+    omissions?: Array<{ recipe_id?: string | null; item_id?: string | null }>;
     packaging?: OrderPackagingPayload[] | OrderPackagingPayload | null;
   }>;
   packaging_sales?: Array<{
