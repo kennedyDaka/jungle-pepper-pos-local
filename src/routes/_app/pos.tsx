@@ -23,7 +23,17 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Plus, Minus, X, Printer, Download, Package, UserCheck, Trash2 } from "lucide-react";
+import {
+  Plus,
+  Minus,
+  X,
+  Printer,
+  Download,
+  Package,
+  UserCheck,
+  Trash2,
+  History,
+} from "lucide-react";
 import { MWK, fmtQty } from "@/lib/format";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
 import { authService } from "@/services/authService";
@@ -34,6 +44,7 @@ import {
   type PackagingStockItemView,
 } from "@/services/packagingService";
 import { posService } from "@/services/posService";
+import { reportService } from "@/services/reportService";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import logo from "@/assets/jungle-pepper-logo.png";
@@ -63,13 +74,105 @@ type PackagingSelection = {
   item_id: string;
   unit_price: number;
   qty_per_item: number;
+  total_qty?: number;
 };
 
 const BOXES_CATEGORY = "__takeaway_boxes";
 const EXTRAS_CATEGORY = "__extras";
 
 function receiptPackagingQty(line: any, pack: PackagingSelection) {
+  if (pack.total_qty !== undefined) return Number(pack.total_qty);
   return Number(line.qty ?? 0) * Math.max(1, Number(pack.qty_per_item) || 1);
+}
+
+function isoDateDaysAgo(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+function orderReference(order: any) {
+  return order.physical_order_no || order.id.slice(0, 8).toUpperCase();
+}
+
+function orderSummary(order: any) {
+  return [
+    ...(order.order_items ?? []).map(
+      (line: any) => `${line.menu_items?.name ?? "Item"} x${fmtQty(line.qty)}`,
+    ),
+    ...(order.order_packaging ?? []).map(
+      (pack: any) =>
+        `${pack.packaging_options?.name ?? pack.items?.name ?? "Packaging"} x${fmtQty(pack.qty)}`,
+    ),
+  ].join(" | ");
+}
+
+function orderCashier(order: any) {
+  return order.profiles?.full_name || order.profiles?.username || "Staff";
+}
+
+function receiptFromOrder(order: any) {
+  const menuLines = (order.order_items ?? []).map((line: any) => {
+    const qty = Number(line.qty);
+    const packaging = (line.order_item_packaging ?? []).map((pack: any) => ({
+      option_id: pack.id,
+      name: pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
+      item_id: pack.item_id,
+      unit_price: Number(pack.unit_price),
+      qty_per_item: qty > 0 ? Number(pack.qty) / qty : Number(pack.qty),
+      total_qty: Number(pack.qty),
+    }));
+    const packagingTotal = packaging.reduce(
+      (sum: number, pack: PackagingSelection) =>
+        sum + Number(pack.unit_price) * receiptPackagingQty(line, pack),
+      0,
+    );
+
+    return {
+      key: line.id,
+      kind: "menu",
+      menu_item_id: line.menu_item_id,
+      name: line.menu_items?.name ?? "Item",
+      price: Number(line.unit_price),
+      qty,
+      takeaway: Boolean(line.takeaway),
+      note: line.note,
+      modifiers: (line.order_item_modifiers ?? []).map((modifier: any) => ({
+        id: modifier.modifier_id,
+        name: modifier.modifiers?.name ?? "Extra",
+        price_delta: Number(modifier.modifiers?.price_delta ?? 0),
+      })),
+      packaging,
+      total: qty * Number(line.unit_price) + packagingTotal,
+    };
+  });
+
+  const packagingLines = (order.order_packaging ?? []).map((pack: any) => ({
+    key: `packaging-${pack.id}`,
+    kind: "packaging",
+    packaging_option_id: pack.id,
+    item_id: pack.item_id,
+    name: pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
+    price: Number(pack.unit_price),
+    qty: Number(pack.qty),
+    takeaway: false,
+    modifiers: [],
+    packaging: [],
+    total: Number(pack.qty) * Number(pack.unit_price),
+  }));
+
+  return {
+    id: order.id,
+    lines: [...menuLines, ...packagingLines],
+    subtotal: Number(order.subtotal),
+    discount: Number(order.discount),
+    total: Number(order.total),
+    note: order.note,
+    saleType: order.sale_type ?? "regular",
+    physicalOrderNo: order.physical_order_no ?? null,
+    staffMealReason: order.staff_meal_reason ?? null,
+    at: new Date(order.created_at),
+  };
 }
 
 function isMenuLine(line: CartLine): line is CartLine & { menu_item_id: string } {
@@ -102,6 +205,10 @@ function PosPage() {
     extraName: string;
     candidateKeys: string[];
   } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyFrom, setHistoryFrom] = useState(() => isoDateDaysAgo(30));
+  const [historyTo, setHistoryTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [lastReceipt, setLastReceipt] = useState<any>(null);
 
   const cats = useQuery({
@@ -127,6 +234,16 @@ function PosPage() {
   const packagingItems = useQuery({
     queryKey: ["pos", "packaging-items"],
     queryFn: () => packagingService.listPackagingItems(),
+  });
+
+  const salesHistory = useQuery({
+    queryKey: ["pos", "sales-history", historyFrom, historyTo],
+    queryFn: () =>
+      reportService.listSales(
+        new Date(`${historyFrom}T00:00:00`).toISOString(),
+        new Date(`${historyTo}T23:59:59`).toISOString(),
+      ),
+    enabled: historyOpen,
   });
 
   const filtered = useMemo(() => {
@@ -368,6 +485,7 @@ function PosPage() {
       setStaffMealOpen(false);
       toast.success(isStaffMeal ? "Staff meal recorded" : "Order completed");
       qc.invalidateQueries({ queryKey: ["dash"] });
+      qc.invalidateQueries({ queryKey: ["pos", "sales-history"] });
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -379,15 +497,20 @@ function PosPage() {
           <LoadingState label="Loading live menu..." />
         )}
         {dataError && <ErrorState error={dataError} label="Could not load POS data" />}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Input
             placeholder="Search menu..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="min-w-48 flex-1"
           />
           <Button variant="secondary" onClick={() => setPackManagerOpen(true)}>
             <Package className="h-4 w-4 mr-1" />
             Takeaway boxes
+          </Button>
+          <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
+            <History className="h-4 w-4 mr-1" />
+            Sales history
           </Button>
         </div>
         <Tabs
@@ -717,6 +840,25 @@ function PosPage() {
         />
       )}
 
+      {historyOpen && (
+        <SalesHistoryDialog
+          orders={salesHistory.data ?? []}
+          loading={salesHistory.isLoading || salesHistory.isFetching}
+          error={salesHistory.error}
+          from={historyFrom}
+          to={historyTo}
+          search={historySearch}
+          onFromChange={setHistoryFrom}
+          onToChange={setHistoryTo}
+          onSearchChange={setHistorySearch}
+          onClose={() => setHistoryOpen(false)}
+          onReprint={(order) => {
+            setLastReceipt(receiptFromOrder(order));
+            setHistoryOpen(false);
+          }}
+        />
+      )}
+
       {extraAttachOpen && (
         <ExtraAttachDialog
           extraName={extraAttachOpen.extraName}
@@ -752,6 +894,130 @@ function PosPage() {
 
       {lastReceipt && <ReceiptDialog receipt={lastReceipt} onClose={() => setLastReceipt(null)} />}
     </div>
+  );
+}
+
+function SalesHistoryDialog({
+  orders,
+  loading,
+  error,
+  from,
+  to,
+  search,
+  onFromChange,
+  onToChange,
+  onSearchChange,
+  onClose,
+  onReprint,
+}: {
+  orders: any[];
+  loading: boolean;
+  error: unknown;
+  from: string;
+  to: string;
+  search: string;
+  onFromChange: (value: string) => void;
+  onToChange: (value: string) => void;
+  onSearchChange: (value: string) => void;
+  onClose: () => void;
+  onReprint: (order: any) => void;
+}) {
+  const filteredOrders = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return orders;
+    return orders.filter((order) =>
+      [
+        orderReference(order),
+        orderSummary(order),
+        orderCashier(order),
+        order.sale_type === "staff_meal" ? "staff meal" : "regular",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [orders, search]);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Sales history</DialogTitle>
+          <DialogDescription>Find a completed sale and reprint its receipt.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-[140px_140px_1fr] gap-2">
+            <div>
+              <Label>From</Label>
+              <Input
+                type="date"
+                value={from}
+                onChange={(event) => onFromChange(event.target.value)}
+              />
+            </div>
+            <div>
+              <Label>To</Label>
+              <Input type="date" value={to} onChange={(event) => onToChange(event.target.value)} />
+            </div>
+            <div>
+              <Label>Search</Label>
+              <Input
+                value={search}
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder="Order number, item, cashier..."
+              />
+            </div>
+          </div>
+
+          {loading && <LoadingState label="Loading sales history..." />}
+          {error ? <ErrorState error={error} label="Could not load sales history" /> : null}
+
+          <div className="max-h-[60vh] overflow-auto rounded border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-muted-foreground">
+                  <th className="p-2">Date</th>
+                  <th className="p-2">Order #</th>
+                  <th className="p-2">Items</th>
+                  <th className="p-2">Cashier</th>
+                  <th className="p-2 text-right">Total</th>
+                  <th className="p-2 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!loading && filteredOrders.length === 0 && (
+                  <tr>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={6}>
+                      No sales found for this range.
+                    </td>
+                  </tr>
+                )}
+                {filteredOrders.map((order) => (
+                  <tr key={order.id} className="border-t border-border align-top">
+                    <td className="p-2 whitespace-nowrap">
+                      {new Date(order.created_at).toLocaleString()}
+                    </td>
+                    <td className="p-2 font-medium">{orderReference(order)}</td>
+                    <td className="p-2 min-w-72">{orderSummary(order)}</td>
+                    <td className="p-2">{orderCashier(order)}</td>
+                    <td className="p-2 text-right font-medium">{MWK(order.total)}</td>
+                    <td className="p-2 text-right">
+                      <Button size="sm" variant="secondary" onClick={() => onReprint(order)}>
+                        <Printer className="h-4 w-4 mr-1" />
+                        Reprint
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
