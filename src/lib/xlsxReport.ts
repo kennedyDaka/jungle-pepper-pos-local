@@ -239,8 +239,12 @@ export function appendMatrixReportSheet(
   );
 }
 
-export async function writeReportWorkbook(workbook: ExcelJS.Workbook, filename: string) {
-  await attachLogo(workbook);
+export async function writeReportWorkbook(
+  workbook: ExcelJS.Workbook,
+  filename: string,
+  options: { logo?: boolean } = {},
+) {
+  if (options.logo !== false) await attachLogo(workbook);
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

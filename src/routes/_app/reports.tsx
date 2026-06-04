@@ -26,6 +26,11 @@ import { staffDisplay } from "@/lib/staffDisplay";
 import { VAT_RATE } from "@/lib/vat";
 import { exportRowsCsv, exportRowsPdf, printRows } from "@/lib/reportExport";
 import {
+  buildStockMatrixPreviewRows,
+  buildStockMatrixWorkbook,
+  stockMatrixFilename,
+} from "@/lib/stockMatrixReport";
+import {
   appendMatrixReportSheet,
   appendReportSheet,
   createReportWorkbook,
@@ -66,6 +71,11 @@ function ReportsPage() {
 
   const fromIso = new Date(from + "T00:00:00").toISOString();
   const toIso = new Date(to + "T23:59:59").toISOString();
+  const stockMatrixDate = to || today;
+  const stockMatrixFromIso = new Date(stockMatrixDate + "T00:00:00").toISOString();
+  const stockMatrixToIso = new Date(stockMatrixDate + "T23:59:59").toISOString();
+  const stockMatrixLedgerToDate = stockMatrixDate > today ? stockMatrixDate : today;
+  const stockMatrixLedgerToIso = new Date(stockMatrixLedgerToDate + "T23:59:59").toISOString();
 
   const branches = useQuery({
     queryKey: ["rep", "branches"],
@@ -85,6 +95,22 @@ function ReportsPage() {
   const stockMovements = useQuery({
     queryKey: ["rep", "stock-movements", from, to, branchId],
     queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
+  });
+
+  const stockMatrixSales = useQuery({
+    queryKey: ["rep", "stock-matrix-sales", stockMatrixDate, branchId],
+    queryFn: () => reportService.listSales(stockMatrixFromIso, stockMatrixToIso, branchId),
+  });
+
+  const stockMatrixMovements = useQuery({
+    queryKey: ["rep", "stock-matrix-movements", stockMatrixDate, branchId],
+    queryFn: () => reportService.listStockMovements(stockMatrixFromIso, stockMatrixToIso, branchId),
+  });
+
+  const stockMatrixLedgerMovements = useQuery({
+    queryKey: ["rep", "stock-matrix-ledger", stockMatrixDate, stockMatrixLedgerToDate, branchId],
+    queryFn: () =>
+      reportService.listStockMovements(stockMatrixFromIso, stockMatrixLedgerToIso, branchId),
   });
 
   const deductionAudit = useQuery({
@@ -111,6 +137,14 @@ function ReportsPage() {
     branchId === "all"
       ? "All branches"
       : (branches.data?.find((branch: any) => branch.id === branchId)?.name ?? "Selected branch");
+  const stockMatrixInput = {
+    date: stockMatrixDate,
+    branchLabel,
+    items: items.data ?? [],
+    movements: stockMatrixMovements.data ?? [],
+    ledgerMovements: stockMatrixLedgerMovements.data ?? [],
+    sales: stockMatrixSales.data ?? [],
+  };
 
   const itemAgg = new Map<string, { qty: number; revenue: number }>();
   const payAgg = new Map<string, number>();
@@ -968,6 +1002,11 @@ function ReportsPage() {
   };
 
   const reportCatalog = [
+    {
+      id: "stock-matrix",
+      title: "Stock Matrix",
+      rows: buildStockMatrixPreviewRows(stockMatrixInput),
+    },
     { id: "stock-ledger", title: "Stock Ledger", rows: stockMovementRows() },
     { id: "ingredient-lifecycle", title: "Ingredient Lifecycle", rows: ingredientLifecycleRows() },
     { id: "sales-detail", title: "Sales Item Detail", rows: salesItemDetailRows() },
@@ -1163,6 +1202,14 @@ function ReportsPage() {
       { title: "Inventory Exceptions", rangeLabel },
     );
     void writeReportWorkbook(wb, `inventory-${reportDateRange(from, to)}.xlsx`);
+  };
+
+  const exportStockMatrixXlsx = () => {
+    const wb = buildStockMatrixWorkbook({
+      ...stockMatrixInput,
+      generatedAt: new Date(),
+    });
+    void writeReportWorkbook(wb, stockMatrixFilename(stockMatrixDate), { logo: false });
   };
 
   const exportStockLedgerXlsx = () => {
@@ -1368,6 +1415,9 @@ function ReportsPage() {
     sales.error ||
     items.error ||
     stockMovements.error ||
+    stockMatrixSales.error ||
+    stockMatrixMovements.error ||
+    stockMatrixLedgerMovements.error ||
     deductionAudit.error ||
     production.error ||
     expenses.error;
@@ -1379,6 +1429,9 @@ function ReportsPage() {
         branches.isLoading ||
         items.isLoading ||
         stockMovements.isLoading ||
+        stockMatrixSales.isLoading ||
+        stockMatrixMovements.isLoading ||
+        stockMatrixLedgerMovements.isLoading ||
         deductionAudit.isLoading ||
         production.isLoading ||
         expenses.isLoading) && <LoadingState label="Loading live reports..." />}
@@ -1493,6 +1546,10 @@ function ReportsPage() {
           <Button onClick={exportInventoryXlsx} variant="secondary">
             <Download className="h-4 w-4 mr-1" />
             Inventory
+          </Button>
+          <Button onClick={exportStockMatrixXlsx} variant="secondary">
+            <Download className="h-4 w-4 mr-1" />
+            Stock Matrix
           </Button>
           <Button onClick={exportStockLedgerXlsx} variant="secondary">
             <Download className="h-4 w-4 mr-1" />
