@@ -559,7 +559,7 @@ function applyBaseSheetStyle(worksheet: ExcelJS.Worksheet, columns: number) {
         right: { style: "thin", color: { argb: "FFD9D9D9" } },
       };
       cell.alignment = { vertical: "middle", wrapText: colNumber === columns };
-      if (typeof cell.value === "number") cell.numFmt = "#,##0.###";
+      if (typeof cell.value === "number") cell.numFmt = "General";
     });
   });
 }

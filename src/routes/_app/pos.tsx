@@ -89,8 +89,80 @@ type PackagingSelection = {
   total_qty?: number;
 };
 
-const BOXES_CATEGORY = "__takeaway_boxes";
 const EXTRAS_CATEGORY = "__extras";
+
+const POS_CATEGORY_GROUPS = [
+  { id: "starters", label: "STARTERS" },
+  { id: "pastas", label: "PASTAS" },
+  { id: "pizza", label: "PIZZA" },
+  { id: "burgers", label: "BURGERS" },
+  { id: "chips", label: "CHIPS" },
+  { id: "pregos-bitoque", label: "PREGOS/ BITOQUE" },
+  { id: "frango", label: "FRANGO" },
+  { id: "camarao-marisco", label: "CAMARAO / MARISCO" },
+  { id: EXTRAS_CATEGORY, label: "EXTRAS" },
+  { id: "sweets-hot-drinks", label: "SWEETS HOT DRINKS" },
+  { id: "beers", label: "BEERS" },
+  { id: "soft-drinks", label: "SOFT DRINKS" },
+  { id: "juices-mocktails", label: "JUICES / MOCKTAILS" },
+  { id: "liquor", label: "LIQUOR" },
+];
+
+function normalizeCategoryText(value: string | null | undefined) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " AND ")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isJuiceOrMocktailItem(item: any) {
+  const category = normalizeCategoryText(item.categories?.name);
+  const name = normalizeCategoryText(item.name);
+  return (
+    category === "MOCKTAILS" ||
+    name.includes("JUICE") ||
+    name.includes("CHAPMAN") ||
+    name.includes("ROCKSHANDY") ||
+    name.includes("LIME CORDIAL") ||
+    name.includes("LEMONADE")
+  );
+}
+
+function isExtrasMenuItem(item: any) {
+  const category = normalizeCategoryText(item.categories?.name);
+  const name = normalizeCategoryText(item.name);
+  return category === "MEALS" || name.startsWith("EXTRA ");
+}
+
+function itemMatchesPosGroup(item: any, groupId: string) {
+  const category = normalizeCategoryText(item.categories?.name);
+
+  if (groupId !== EXTRAS_CATEGORY && isExtrasMenuItem(item)) return false;
+  if (groupId === "starters") return ["STARTERS", "SALADS"].includes(category);
+  if (groupId === "pastas") return category === "PASTAS";
+  if (groupId === "pizza") return category === "PIZZA";
+  if (groupId === "burgers") return category === "BURGERS";
+  if (groupId === "chips") return category === "CHIPS";
+  if (groupId === "pregos-bitoque") return category === "PREGOS AND BITOQUES";
+  if (groupId === "frango") return category === "FRANGO";
+  if (groupId === "camarao-marisco") return category === "SEAFOOD";
+  if (groupId === EXTRAS_CATEGORY) return isExtrasMenuItem(item);
+  if (groupId === "sweets-hot-drinks") return ["DESSERTS", "COFFEE AND TEA"].includes(category);
+  if (groupId === "beers") return category === "BEERS AND CIDERS";
+  if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
+  if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
+  if (groupId === "liquor") {
+    return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(
+      category,
+    );
+  }
+
+  return false;
+}
 
 function receiptPackagingQty(line: any, pack: PackagingSelection) {
   if (pack.total_qty !== undefined) return Number(pack.total_qty);
@@ -238,10 +310,6 @@ function PosPage() {
   const [omitOpen, setOmitOpen] = useState<{ lineKey: string } | null>(null);
   const [packOpen, setPackOpen] = useState<{ lineKey: string } | null>(null);
   const [packManagerOpen, setPackManagerOpen] = useState(false);
-  const [extraAttachOpen, setExtraAttachOpen] = useState<{
-    extraName: string;
-    candidateKeys: string[];
-  } | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const [historyFrom, setHistoryFrom] = useState(() => isoDateDaysAgo(30));
@@ -290,8 +358,8 @@ function PosPage() {
 
   const filtered = useMemo(() => {
     let list = items.data ?? [];
-    if (activeCat && activeCat !== BOXES_CATEGORY && activeCat !== EXTRAS_CATEGORY) {
-      list = list.filter((i: any) => i.category_id === activeCat);
+    if (activeCat) {
+      list = list.filter((item: any) => itemMatchesPosGroup(item, activeCat));
     }
     if (search.trim())
       list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
@@ -385,6 +453,9 @@ function PosPage() {
     }
 
     const itemMods = (mods.data ?? []).filter((m: any) => m.menu_item_id === mi.id);
+    const crustMods = itemMods.filter(
+      (modifier: any) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust",
+    );
     const key = crypto.randomUUID();
     setCart((c) => [
       ...c,
@@ -401,7 +472,7 @@ function PosPage() {
         packaging: [],
       },
     ]);
-    if (itemMods.length) setModOpen({ menuId: mi.id, lineKey: key, removeOnCancel: true });
+    if (crustMods.length) setModOpen({ menuId: mi.id, lineKey: key, removeOnCancel: true });
   };
 
   const addPackagingSale = (option: PackagingOptionView) => {
@@ -453,7 +524,7 @@ function PosPage() {
   };
 
   const addExtraByName = (extraName: string) => {
-    const candidateKeys = cart
+    const candidates = cart
       .filter(isMenuLine)
       .filter((line) =>
         (mods.data ?? []).some(
@@ -462,20 +533,16 @@ function PosPage() {
             modifier.name === extraName &&
             !line.modifiers.some((selected) => selected.id === modifier.id),
         ),
-      )
-      .map((line) => line.key);
+      );
 
-    if (candidateKeys.length === 0) {
+    if (candidates.length === 0) {
       toast.info("Add a dish that supports this extra first.");
       return;
     }
 
-    if (candidateKeys.length === 1) {
-      attachExtraToLine(candidateKeys[0], extraName);
-      return;
-    }
-
-    setExtraAttachOpen({ extraName, candidateKeys });
+    const latestCandidate = candidates[candidates.length - 1];
+    attachExtraToLine(latestCandidate.key, extraName);
+    toast.success(`${extraName} added to ${latestCandidate.name}`);
   };
 
   const lineTotal = (l: CartLine) =>
@@ -595,36 +662,20 @@ function PosPage() {
           onValueChange={(v) => setActiveCat(v === "all" ? null : v)}
         >
           <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value={BOXES_CATEGORY}>Takeaway Boxes</TabsTrigger>
-            <TabsTrigger value={EXTRAS_CATEGORY}>Extras</TabsTrigger>
-            {cats.data?.map((c: any) => (
-              <TabsTrigger key={c.id} value={c.id}>
-                {c.name}
+            <TabsTrigger value="all">ALL</TabsTrigger>
+            {POS_CATEGORY_GROUPS.map((category) => (
+              <TabsTrigger key={category.id} value={category.id}>
+                {category.label}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 overflow-auto pb-2">
-          {activeCat === BOXES_CATEGORY
-            ? packagingCards.map((option) => (
-                <button
-                  key={option.id}
-                  onClick={() => addPackagingSale(option)}
-                  disabled={menuOptionsLoading}
-                  className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
-                >
-                  <div className="font-medium text-sm leading-tight">{option.name}</div>
-                  <div className="text-primary font-semibold text-sm mt-1">{MWK(option.price)}</div>
-                  <div className="text-[11px] text-muted-foreground mt-1">
-                    {option.items?.name ?? "Packaging stock"}
-                  </div>
-                </button>
-              ))
-            : activeCat === EXTRAS_CATEGORY
-              ? extraCards.map((extra) => (
+          {activeCat === EXTRAS_CATEGORY
+            ? [
+                ...extraCards.map((extra) => (
                   <button
-                    key={extra.name}
+                    key={`modifier-${extra.name}`}
                     onClick={() => addExtraByName(extra.name)}
                     disabled={menuOptionsLoading}
                     className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
@@ -634,10 +685,10 @@ function PosPage() {
                       {extra.price_delta > 0 ? `+${MWK(extra.price_delta)}` : MWK(0)}
                     </div>
                   </button>
-                ))
-              : filtered.map((mi: any) => (
+                )),
+                ...filtered.map((mi: any) => (
                   <button
-                    key={mi.id}
+                    key={`menu-extra-${mi.id}`}
                     onClick={() => addItem(mi)}
                     disabled={menuOptionsLoading}
                     className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
@@ -645,7 +696,33 @@ function PosPage() {
                     <div className="font-medium text-sm leading-tight">{mi.name}</div>
                     <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
                   </button>
-                ))}
+                )),
+                ...packagingCards.map((option) => (
+                  <button
+                    key={`packaging-${option.id}`}
+                    onClick={() => addPackagingSale(option)}
+                    disabled={menuOptionsLoading}
+                    className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <div className="font-medium text-sm leading-tight">{option.name}</div>
+                    <div className="text-primary font-semibold text-sm mt-1">
+                      {MWK(option.price)}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-1">Takeaway box</div>
+                  </button>
+                )),
+              ]
+            : filtered.map((mi: any) => (
+                <button
+                  key={mi.id}
+                  onClick={() => addItem(mi)}
+                  disabled={menuOptionsLoading}
+                  className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                >
+                  <div className="font-medium text-sm leading-tight">{mi.name}</div>
+                  <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
+                </button>
+              ))}
         </div>
       </div>
 
@@ -794,20 +871,17 @@ function PosPage() {
                   )}
                 </div>
               )}
-              {isMenuLine(l) &&
-                (mods.data ?? []).some(
-                  (modifier: any) => modifier.menu_item_id === l.menu_item_id,
-                ) && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2 h-7 w-full text-xs"
-                    onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}
-                  >
-                    Edit options / toppings
-                  </Button>
-                )}
+              {isMenuLine(l) && requiresCrust(l) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2 h-7 w-full text-xs"
+                  onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}
+                >
+                  Change crust
+                </Button>
+              )}
               {isMenuLine(l) && recipeOptionsForLine(l).length > 0 && (
                 <Button
                   type="button"
@@ -981,18 +1055,6 @@ function PosPage() {
         />
       )}
 
-      {extraAttachOpen && (
-        <ExtraAttachDialog
-          extraName={extraAttachOpen.extraName}
-          lines={cart.filter((line) => extraAttachOpen.candidateKeys.includes(line.key))}
-          onClose={() => setExtraAttachOpen(null)}
-          onSelect={(lineKey) => {
-            attachExtraToLine(lineKey, extraAttachOpen.extraName);
-            setExtraAttachOpen(null);
-          }}
-        />
-      )}
-
       {payOpen && (
         <PaymentDialog
           total={total}
@@ -1139,47 +1201,6 @@ function SalesHistoryDialog({
         </div>
         <DialogFooter>
           <Button onClick={onClose}>Done</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ExtraAttachDialog({
-  extraName,
-  lines,
-  onClose,
-  onSelect,
-}: {
-  extraName: string;
-  lines: CartLine[];
-  onClose: () => void;
-  onSelect: (lineKey: string) => void;
-}) {
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add {extraName}</DialogTitle>
-          <DialogDescription>Choose the dish this extra belongs to.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2">
-          {lines.filter(isMenuLine).map((line) => (
-            <button
-              key={line.key}
-              type="button"
-              onClick={() => onSelect(line.key)}
-              className="w-full rounded border border-border p-3 text-left hover:border-primary hover:bg-secondary"
-            >
-              <div className="font-medium">{line.name}</div>
-              <div className="text-xs text-muted-foreground">Qty {fmtQty(line.qty)}</div>
-            </button>
-          ))}
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1633,39 +1654,22 @@ function ModifierDialog({
   onSave: (s: any[]) => void;
 }) {
   const crustMods = mods.filter((m) => m.name === "Thin Crust" || m.name === "Thick Crust");
-  const extraMods = mods.filter((m) => m.name !== "Thin Crust" && m.name !== "Thick Crust");
   const [crust, setCrust] = useState<string | null>(
     current.find((modifier) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust")
       ?.id ?? null,
   );
-  const [sel, setSel] = useState<Set<string>>(
-    () =>
-      new Set(
-        current
-          .filter((modifier) => modifier.name !== "Thin Crust" && modifier.name !== "Thick Crust")
-          .map((modifier) => modifier.id),
-      ),
-  );
-  const toggle = (id: string) => {
-    const n = new Set(sel);
-    if (n.has(id)) n.delete(id);
-    else n.add(id);
-    setSel(n);
-  };
   const requiresCrust = crustMods.length > 0;
   const canSave = !requiresCrust || !!crust;
   return (
     <Dialog open onOpenChange={onCancel}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{requiresCrust ? "Choose crust & extras" : "Extras / options"}</DialogTitle>
-          <DialogDescription>
-            Choose required pizza base options and any paid extra toppings.
-          </DialogDescription>
+          <DialogTitle>Choose pizza base</DialogTitle>
+          <DialogDescription>Choose thick or thin dough base.</DialogDescription>
         </DialogHeader>
         {requiresCrust && (
           <div>
-            <div className="text-xs uppercase text-muted-foreground mb-1">Crust (required)</div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">Base (required)</div>
             <div className="grid grid-cols-2 gap-2">
               {crustMods.map((m) => (
                 <button
@@ -1679,23 +1683,6 @@ function ModifierDialog({
             </div>
           </div>
         )}
-        {extraMods.length > 0 && (
-          <div className="space-y-2">
-            {requiresCrust && <div className="text-xs uppercase text-muted-foreground">Extras</div>}
-            {extraMods.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => toggle(m.id)}
-                className={`w-full flex justify-between p-2 rounded border ${sel.has(m.id) ? "border-primary bg-primary/10" : "border-border"}`}
-              >
-                <span>{m.name}</span>
-                <span className="text-muted-foreground">
-                  {Number(m.price_delta) > 0 ? "+" + MWK(m.price_delta) : "-"}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel}>
             Cancel
@@ -1703,7 +1690,7 @@ function ModifierDialog({
           <Button
             disabled={!canSave}
             onClick={() => {
-              const chosen = mods.filter((m) => sel.has(m.id) || m.id === crust);
+              const chosen = mods.filter((m) => m.id === crust);
               onSave(chosen);
             }}
           >
