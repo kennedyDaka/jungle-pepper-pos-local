@@ -1,7 +1,15 @@
 export type Role = "admin" | "cashier" | "storekeeper";
 export type CategoryKind = "menu" | "inventory";
 export type StockType = "raw" | "production" | "consumable" | "beverage";
-export type PaymentMethod = "cash" | "airtel_money" | "mpamba" | "bank_card";
+export type PaymentMethod =
+  | "cash"
+  | "airtel_money"
+  | "mpamba"
+  | "bank_card"
+  | "national_bank"
+  | "standard_bank"
+  | "capital_bank"
+  | "eco_bank";
 export type StockMovementType =
   | "purchase_in"
   | "adjustment"

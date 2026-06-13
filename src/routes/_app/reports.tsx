@@ -13,7 +13,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { MWK, fmtDate, fmtQty } from "@/lib/format";
+import { MWK, fmtDate, fmtQty, paymentMethodLabel } from "@/lib/format";
 import {
   fmtServingQty,
   fullServingsPerContainer,
@@ -382,7 +382,7 @@ function ReportsPage() {
       Date: expense.expense_date,
       Category: expense.expense_categories?.name ?? "",
       Amount: Number(expense.amount),
-      Method: expense.payment_method,
+      Method: paymentMethodLabel(expense.payment_method),
       Supplier: expense.suppliers?.name ?? "",
       Description: expense.description ?? "",
       "Stock Item Lines": expense.expense_stock_lines?.length ?? 0,
@@ -399,7 +399,7 @@ function ReportsPage() {
           Date: expense.expense_date,
           Category: expense.expense_categories?.name ?? "",
           Supplier: expense.suppliers?.name ?? "",
-          Method: expense.payment_method,
+          Method: paymentMethodLabel(expense.payment_method),
           Description: expense.description ?? "",
           Item: "",
           "Purchase Count": "",
@@ -423,7 +423,7 @@ function ReportsPage() {
           Date: expense.expense_date,
           Category: expense.expense_categories?.name ?? "",
           Supplier: expense.suppliers?.name ?? "",
-          Method: expense.payment_method,
+          Method: paymentMethodLabel(expense.payment_method),
           Description: expense.description ?? "",
           Item: line.items?.name ?? "",
           "Purchase Count": line.qty_count ?? "",
@@ -525,7 +525,7 @@ function ReportsPage() {
         });
         row.push(
           (order.payments ?? [])
-            .map((payment: any) => `${payment.method}: ${payment.amount}`)
+            .map((payment: any) => `${paymentMethodLabel(payment.method)}: ${payment.amount}`)
             .join(" | "),
           moneyValue(order.total),
           takeawayLines,
@@ -656,7 +656,7 @@ function ReportsPage() {
         "VAT 17.5%": Number(order.vat_amount ?? 0),
         "Net Sales": Number(order.total),
         "Payment Method": (order.payments ?? [])
-          .map((payment: any) => `${payment.method}: ${MWK(payment.amount)}`)
+          .map((payment: any) => `${paymentMethodLabel(payment.method)}: ${MWK(payment.amount)}`)
           .join(" | "),
       };
     });
@@ -1081,7 +1081,7 @@ function ReportsPage() {
     const paymentRows: ReportRow[] = [];
     sales.data?.forEach((order: any) => {
       const payMethods = (order.payments ?? [])
-        .map((payment: any) => `${payment.method}:${payment.amount}`)
+        .map((payment: any) => `${paymentMethodLabel(payment.method)}:${payment.amount}`)
         .join(" | ");
       orderRows.push({
         Date: new Date(order.created_at).toLocaleString(),
@@ -1099,7 +1099,7 @@ function ReportsPage() {
         paymentRows.push({
           Date: new Date(order.created_at).toLocaleString(),
           OrderID: order.id,
-          Method: payment.method,
+          Method: paymentMethodLabel(payment.method),
           Amount: Number(payment.amount),
         }),
       );

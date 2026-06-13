@@ -15,7 +15,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { MWK, fmtQty } from "@/lib/format";
+import { MWK, fmtQty, paymentMethodLabel } from "@/lib/format";
 import {
   appendMatrixReportSheet,
   appendReportSheet,
@@ -413,6 +413,10 @@ function ExpensesPage() {
                 <SelectItem value="cash">Cash</SelectItem>
                 <SelectItem value="mpamba">Mpamba</SelectItem>
                 <SelectItem value="airtel_money">Airtel Money</SelectItem>
+                <SelectItem value="national_bank">National Bank</SelectItem>
+                <SelectItem value="standard_bank">Standard Bank</SelectItem>
+                <SelectItem value="capital_bank">Capital Bank</SelectItem>
+                <SelectItem value="eco_bank">Eco Bank</SelectItem>
                 <SelectItem value="bank_card">Bank Card</SelectItem>
               </SelectContent>
             </Select>
@@ -620,7 +624,7 @@ function ExpensesPage() {
                     <td className="p-1.5">{e.expense_categories?.name}</td>
                     <td className="p-1.5">{e.suppliers?.name ?? "-"}</td>
                     <td className="p-1.5 capitalize text-xs">
-                      {e.payment_method.replace("_", " ")}
+                      {paymentMethodLabel(e.payment_method)}
                     </td>
                     <td className="p-1.5 text-muted-foreground">{detail}</td>
                     <td className="p-1.5 text-muted-foreground">{e.description}</td>

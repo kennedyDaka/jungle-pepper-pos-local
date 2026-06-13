@@ -16,3 +16,21 @@ export const fmtDate = (d: string | Date) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  airtel_money: "Airtel Money",
+  mpamba: "Mpamba",
+  bank_card: "Bank Card",
+  national_bank: "National Bank",
+  standard_bank: "Standard Bank",
+  capital_bank: "Capital Bank",
+  eco_bank: "Eco Bank",
+};
+
+export function paymentMethodLabel(method: string): string {
+  return (
+    PAYMENT_METHOD_LABELS[method] ??
+    method.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}

@@ -36,7 +36,7 @@ import {
   Ban,
   CalendarClock,
 } from "lucide-react";
-import { MWK, fmtQty } from "@/lib/format";
+import { MWK, fmtQty, paymentMethodLabel } from "@/lib/format";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
 import { authService } from "@/services/authService";
 import { menuService } from "@/services/menuService";
@@ -1759,6 +1759,10 @@ function PaymentDialog({
                 <SelectItem value="cash">Cash</SelectItem>
                 <SelectItem value="airtel_money">Airtel Money</SelectItem>
                 <SelectItem value="mpamba">Mpamba</SelectItem>
+                <SelectItem value="national_bank">National Bank</SelectItem>
+                <SelectItem value="standard_bank">Standard Bank</SelectItem>
+                <SelectItem value="capital_bank">Capital Bank</SelectItem>
+                <SelectItem value="eco_bank">Eco Bank</SelectItem>
                 <SelectItem value="bank_card">Bank Card</SelectItem>
               </SelectContent>
             </Select>

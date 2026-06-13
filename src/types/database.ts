@@ -1476,7 +1476,15 @@ export type Database = {
       app_role: "admin" | "cashier" | "storekeeper";
       category_kind: "menu" | "inventory";
       order_status: "paid" | "void";
-      payment_method: "cash" | "airtel_money" | "mpamba" | "bank_card";
+      payment_method:
+        | "cash"
+        | "airtel_money"
+        | "mpamba"
+        | "bank_card"
+        | "national_bank"
+        | "standard_bank"
+        | "capital_bank"
+        | "eco_bank";
       receipt_channel: "screen" | "print" | "pdf" | "email";
       stock_movement_type:
         | "purchase_in"
@@ -1617,7 +1625,16 @@ export const Constants = {
       app_role: ["admin", "cashier", "storekeeper"],
       category_kind: ["menu", "inventory"],
       order_status: ["paid", "void"],
-      payment_method: ["cash", "airtel_money", "mpamba", "bank_card"],
+      payment_method: [
+        "cash",
+        "airtel_money",
+        "mpamba",
+        "bank_card",
+        "national_bank",
+        "standard_bank",
+        "capital_bank",
+        "eco_bank",
+      ],
       receipt_channel: ["screen", "print", "pdf", "email"],
       stock_movement_type: [
         "purchase_in",
