@@ -101,7 +101,8 @@ const POS_CATEGORY_GROUPS = [
   { id: "frango", label: "FRANGO" },
   { id: "camarao-marisco", label: "CAMARAO / MARISCO" },
   { id: EXTRAS_CATEGORY, label: "EXTRAS" },
-  { id: "sweets-hot-drinks", label: "SWEETS HOT DRINKS" },
+  { id: "sweets", label: "SWEETS" },
+  { id: "hot-drinks", label: "HOT DRINKS" },
   { id: "beers", label: "BEERS" },
   { id: "soft-drinks", label: "SOFT DRINKS" },
   { id: "juices-mocktails", label: "JUICES / MOCKTAILS" },
@@ -151,7 +152,8 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   if (groupId === "frango") return category === "FRANGO";
   if (groupId === "camarao-marisco") return category === "SEAFOOD";
   if (groupId === EXTRAS_CATEGORY) return isExtrasMenuItem(item);
-  if (groupId === "sweets-hot-drinks") return ["DESSERTS", "COFFEE AND TEA"].includes(category);
+  if (groupId === "sweets") return category === "DESSERTS";
+  if (groupId === "hot-drinks") return category === "COFFEE AND TEA";
   if (groupId === "beers") return category === "BEERS AND CIDERS";
   if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
   if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
