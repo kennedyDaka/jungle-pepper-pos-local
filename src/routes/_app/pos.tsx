@@ -90,23 +90,26 @@ type PackagingSelection = {
 };
 
 const EXTRAS_CATEGORY = "__extras";
+const PACKAGING_CATEGORY = "__packaging";
+const PRICE_OVERRIDES_KEY = "pos_price_overrides";
 
 const POS_CATEGORY_GROUPS = [
-  { id: "starters", label: "STARTERS" },
-  { id: "pastas", label: "PASTAS" },
-  { id: "pizza", label: "PIZZA" },
-  { id: "burgers", label: "BURGERS" },
-  { id: "chips", label: "CHIPS" },
-  { id: "pregos-bitoque", label: "PREGOS/ BITOQUE" },
-  { id: "frango", label: "FRANGO" },
-  { id: "camarao-marisco", label: "CAMARAO / MARISCO" },
-  { id: EXTRAS_CATEGORY, label: "EXTRAS" },
-  { id: "sweets", label: "SWEETS" },
-  { id: "hot-drinks", label: "HOT DRINKS" },
-  { id: "beers", label: "BEERS" },
-  { id: "soft-drinks", label: "SOFT DRINKS" },
-  { id: "juices-mocktails", label: "JUICES / MOCKTAILS" },
-  { id: "liquor", label: "LIQUOR" },
+  { id: "starters",          label: "STARTERS" },
+  { id: "pastas",            label: "PASTAS" },
+  { id: "pizza",             label: "PIZZA" },
+  { id: "burgers",           label: "BURGERS" },
+  { id: "chips",             label: "CHIPS" },
+  { id: "pregos-bitoque",    label: "PREGOS/ BITOQUE" },
+  { id: "frango",            label: "FRANGO" },
+  { id: "camarao-marisco",   label: "CAMARAO / MARISCO" },
+  { id: EXTRAS_CATEGORY,     label: "EXTRAS" },
+  { id: "sweets",            label: "SWEETS" },
+  { id: "hot-drinks",        label: "HOT DRINKS" },
+  { id: "beers",             label: "BEERS" },
+  { id: "soft-drinks",       label: "SOFT DRINKS" },
+  { id: "juices-mocktails",  label: "JUICES / MOCKTAILS" },
+  { id: "liquor",            label: "LIQUOR" },
+  { id: PACKAGING_CATEGORY,  label: "PACKAGING" },
 ];
 
 function normalizeCategoryText(value: string | null | undefined) {
@@ -133,16 +136,9 @@ function isJuiceOrMocktailItem(item: any) {
   );
 }
 
-function isExtrasMenuItem(item: any) {
-  const category = normalizeCategoryText(item.categories?.name);
-  const name = normalizeCategoryText(item.name);
-  return category === "MEALS" || name.startsWith("EXTRA ");
-}
-
 function itemMatchesPosGroup(item: any, groupId: string) {
   const category = normalizeCategoryText(item.categories?.name);
 
-  if (groupId !== EXTRAS_CATEGORY && isExtrasMenuItem(item)) return false;
   if (groupId === "starters") return ["STARTERS", "SALADS"].includes(category);
   if (groupId === "pastas") return category === "PASTAS";
   if (groupId === "pizza") return category === "PIZZA";
@@ -151,7 +147,7 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   if (groupId === "pregos-bitoque") return category === "PREGOS AND BITOQUES";
   if (groupId === "frango") return category === "FRANGO";
   if (groupId === "camarao-marisco") return category === "SEAFOOD";
-  if (groupId === EXTRAS_CATEGORY) return isExtrasMenuItem(item);
+  if (groupId === EXTRAS_CATEGORY) return ["DAIRY", "MEATS", "VEGGIE", "SAUCES"].includes(category);
   if (groupId === "sweets") return category === "DESSERTS";
   if (groupId === "hot-drinks") return category === "COFFEE AND TEA";
   if (groupId === "beers") return category === "BEERS AND CIDERS";
@@ -162,6 +158,7 @@ function itemMatchesPosGroup(item: any, groupId: string) {
       category,
     );
   }
+  if (groupId === PACKAGING_CATEGORY) return false;
 
   return false;
 }
@@ -207,6 +204,22 @@ function dateTimeLocalValue(date = new Date()) {
 function dateTimeLocalToIso(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function getPriceOverrides(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(PRICE_OVERRIDES_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function setPriceOverride(itemId: string, price: number) {
+  try {
+    const overrides = getPriceOverrides();
+    overrides[itemId] = price;
+    localStorage.setItem(PRICE_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch {}
 }
 
 function orderCashier(order: any) {
@@ -368,24 +381,6 @@ function PosPage() {
     return list;
   }, [items.data, activeCat, search]);
 
-  const extraCards = useMemo(() => {
-    const options = new Map<string, { name: string; price_delta: number }>();
-    (mods.data ?? [])
-      .filter((modifier: any) => modifier.name !== "Thin Crust" && modifier.name !== "Thick Crust")
-      .forEach((modifier: any) => {
-        if (!options.has(modifier.name)) {
-          options.set(modifier.name, {
-            name: modifier.name,
-            price_delta: Number(modifier.price_delta),
-          });
-        }
-      });
-    const list = Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name));
-    if (!search.trim()) return list;
-    const needle = search.toLowerCase();
-    return list.filter((option) => option.name.toLowerCase().includes(needle));
-  }, [mods.data, search]);
-
   const packagingCards = useMemo(() => {
     const list = packaging.data ?? [];
     if (!search.trim()) return list;
@@ -459,6 +454,8 @@ function PosPage() {
       (modifier: any) => modifier.name === "Thin Crust" || modifier.name === "Thick Crust",
     );
     const key = crypto.randomUUID();
+    const overrides = getPriceOverrides();
+    const savedPrice = mi.id ? overrides[mi.id] : undefined;
     setCart((c) => [
       ...c,
       {
@@ -466,7 +463,7 @@ function PosPage() {
         kind: "menu",
         menu_item_id: mi.id,
         name: mi.name,
-        price: Number(mi.price),
+        price: savedPrice ?? Number(mi.price),
         qty: 1,
         takeaway: false,
         modifiers: [],
@@ -495,56 +492,6 @@ function PosPage() {
         packaging: [],
       },
     ]);
-  };
-
-  const attachExtraToLine = (lineKey: string, extraName: string) => {
-    const line = cart.find((row) => row.key === lineKey);
-    if (!line || !isMenuLine(line)) return;
-    const modifier = (mods.data ?? []).find(
-      (item: any) => item.menu_item_id === line.menu_item_id && item.name === extraName,
-    );
-    if (!modifier) return;
-    setCart((rows) =>
-      rows.map((row) =>
-        row.key === lineKey
-          ? {
-              ...row,
-              modifiers: row.modifiers.some((selected) => selected.id === modifier.id)
-                ? row.modifiers
-                : [
-                    ...row.modifiers,
-                    {
-                      id: modifier.id,
-                      name: modifier.name,
-                      price_delta: Number(modifier.price_delta),
-                    },
-                  ],
-            }
-          : row,
-      ),
-    );
-  };
-
-  const addExtraByName = (extraName: string) => {
-    const candidates = cart
-      .filter(isMenuLine)
-      .filter((line) =>
-        (mods.data ?? []).some(
-          (modifier: any) =>
-            modifier.menu_item_id === line.menu_item_id &&
-            modifier.name === extraName &&
-            !line.modifiers.some((selected) => selected.id === modifier.id),
-        ),
-      );
-
-    if (candidates.length === 0) {
-      toast.info("Add a dish that supports this extra first.");
-      return;
-    }
-
-    const latestCandidate = candidates[candidates.length - 1];
-    attachExtraToLine(latestCandidate.key, extraName);
-    toast.success(`${extraName} added to ${latestCandidate.name}`);
   };
 
   const lineTotal = (l: CartLine) =>
@@ -673,47 +620,49 @@ function PosPage() {
           </TabsList>
         </Tabs>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 overflow-auto pb-2">
-          {activeCat === EXTRAS_CATEGORY
-            ? [
-                ...extraCards.map((extra) => (
-                  <button
-                    key={`modifier-${extra.name}`}
-                    onClick={() => addExtraByName(extra.name)}
-                    disabled={menuOptionsLoading}
-                    className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
-                  >
-                    <div className="font-medium text-sm leading-tight">{extra.name}</div>
-                    <div className="text-primary font-semibold text-sm mt-1">
-                      {extra.price_delta > 0 ? `+${MWK(extra.price_delta)}` : MWK(0)}
-                    </div>
-                  </button>
-                )),
-                ...filtered.map((mi: any) => (
-                  <button
-                    key={`menu-extra-${mi.id}`}
-                    onClick={() => addItem(mi)}
-                    disabled={menuOptionsLoading}
-                    className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
-                  >
-                    <div className="font-medium text-sm leading-tight">{mi.name}</div>
-                    <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
-                  </button>
-                )),
-                ...packagingCards.map((option) => (
-                  <button
-                    key={`packaging-${option.id}`}
-                    onClick={() => addPackagingSale(option)}
-                    disabled={menuOptionsLoading}
-                    className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
-                  >
-                    <div className="font-medium text-sm leading-tight">{option.name}</div>
-                    <div className="text-primary font-semibold text-sm mt-1">
-                      {MWK(option.price)}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground mt-1">Takeaway box</div>
-                  </button>
-                )),
-              ]
+          {activeCat === PACKAGING_CATEGORY
+            ? packagingCards.map((option) => (
+                <button
+                  key={`packaging-${option.id}`}
+                  onClick={() => addPackagingSale(option)}
+                  disabled={menuOptionsLoading}
+                  className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                >
+                  <div className="font-medium text-sm leading-tight">{option.name}</div>
+                  <div className="text-primary font-semibold text-sm mt-1">
+                    {MWK(option.price)}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-1">Takeaway box</div>
+                </button>
+              ))
+            : activeCat === EXTRAS_CATEGORY
+            ? (() => {
+                const sectionOrder = ["DAIRY", "MEATS", "VEGGIE", "SAUCES"];
+                const groups: Record<string, any[]> = {};
+                for (const item of filtered) {
+                  const cat = normalizeCategoryText(item.categories?.name);
+                  if (!groups[cat]) groups[cat] = [];
+                  groups[cat].push(item);
+                }
+                return sectionOrder.flatMap((section) => {
+                  const items = groups[section];
+                  if (!items || items.length === 0) return [];
+                  return [
+                    <div key={`hdr-${section}`} className="col-span-full font-bold text-xs text-muted-foreground uppercase tracking-wider mt-3 first:mt-0">{section}</div>,
+                    ...items.map((mi: any) => (
+                      <button
+                        key={mi.id}
+                        onClick={() => addItem(mi)}
+                        disabled={menuOptionsLoading}
+                        className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                      >
+                        <div className="font-medium text-sm leading-tight">{mi.name}</div>
+                        <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
+                      </button>
+                    )),
+                  ];
+                });
+              })()
             : filtered.map((mi: any) => (
                 <button
                   key={mi.id}
@@ -795,51 +744,75 @@ function PosPage() {
                     type="number"
                     min={0}
                     value={l.price}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const newPrice = Math.max(0, Number(event.target.value) || 0);
                       setCart((rows) =>
                         rows.map((row) =>
                           row.key === l.key
-                            ? { ...row, price: Math.max(0, Number(event.target.value) || 0) }
+                            ? { ...row, price: newPrice }
                             : row,
                         ),
-                      )
-                    }
+                      );
+                      if (l.item_id) setPriceOverride(l.item_id, newPrice);
+                    }}
                     className="h-8 text-right"
                   />
                 </div>
               ) : (
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <Label htmlFor={`takeaway-${l.key}`} className="text-xs">
-                    Takeaway
-                  </Label>
-                  <Switch
-                    id={`takeaway-${l.key}`}
-                    checked={l.takeaway}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setCart((c) =>
-                          c.map((x) => (x.key === l.key ? { ...x, takeaway: true } : x)),
+                <>
+                  <div className="mt-2">
+                    <Label className="text-xs">Price each</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={l.price}
+                      onChange={(event) => {
+                        const newPrice = Math.max(0, Number(event.target.value) || 0);
+                        setCart((rows) =>
+                          rows.map((row) =>
+                            row.key === l.key
+                              ? { ...row, price: newPrice }
+                              : row,
+                          ),
                         );
-                        setPackOpen({ lineKey: l.key });
-                        return;
-                      }
-                      setCart((c) =>
-                        c.map((x) =>
-                          x.key === l.key
-                            ? {
-                                ...x,
-                                takeaway: false,
-                                packaging: [],
-                                omissions: x.omissions.filter(
-                                  (omission) => !omission.takeaway_only,
-                                ),
-                              }
-                            : x,
-                        ),
-                      );
-                    }}
-                  />
-                </div>
+                        if (isMenuLine(l) && l.menu_item_id) setPriceOverride(l.menu_item_id, newPrice);
+                      }}
+                      className="h-8 text-right"
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <Label htmlFor={`takeaway-${l.key}`} className="text-xs">
+                      Takeaway
+                    </Label>
+                    <Switch
+                      id={`takeaway-${l.key}`}
+                      checked={l.takeaway}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setCart((c) =>
+                            c.map((x) => (x.key === l.key ? { ...x, takeaway: true } : x)),
+                          );
+                          setPackOpen({ lineKey: l.key });
+                          return;
+                        }
+                        setCart((c) =>
+                          c.map((x) =>
+                            x.key === l.key
+                              ? {
+                                  ...x,
+                                  takeaway: false,
+                                  packaging: [],
+                                  omissions: x.omissions.filter(
+                                    (omission) => !omission.takeaway_only,
+                                  ),
+                                }
+                              : x,
+                          ),
+                        );
+                      }}
+                    />
+                  </div>
+                </>
               )}
               {isMenuLine(l) && l.takeaway && (
                 <div className="mt-2 rounded border border-dashed border-border p-2 text-xs">
