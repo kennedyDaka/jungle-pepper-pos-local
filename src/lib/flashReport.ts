@@ -33,37 +33,33 @@ function applyBorder(row: ExcelJS.Row, colCount: number) {
   }
 }
 
-function setColWidths(worksheet: ExcelJS.Worksheet, widths: number[]) {
-  widths.forEach((w, i) => {
-    worksheet.getColumn(i + 1).width = w;
-  });
-}
-
 export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Jungle Pepper POS";
   wb.title = "Jungle Pepper — Daily Flash Report";
 
-  // ─── SHEET 1: Cash & Bank Flow ───
-  const ws1 = wb.addWorksheet("Cash & Bank Flow", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-  setColWidths(ws1, [32, 22, 22, 22]);
+  const ws = wb.addWorksheet("Flash Report");
+  ws.getColumn(1).width = 36;
+  ws.getColumn(2).width = 22;
+  ws.getColumn(3).width = 22;
+  ws.getColumn(4).width = 22;
+  ws.getColumn(5).width = 20;
+  ws.getColumn(6).width = 22;
+  ws.getColumn(7).width = 16;
 
-  // Title block
-  ws1.addRow(["JUNGLE PEPPER — DAILY FLASH REPORT"]).font = TITLE_FONT;
-  ws1.addRow([]);
-  ws1.addRow([`Date: ${input.reportDate}`]).font = SUBTITLE_FONT;
-  ws1.addRow([`Prepared By: ${input.preparedBy}`]).font = SUBTITLE_FONT;
-  ws1.addRow([]);
+  // ─── Title block ───
+  ws.addRow(["JUNGLE PEPPER — DAILY FLASH REPORT"]).getCell(1).font = TITLE_FONT;
+  ws.addRow([]);
+  ws.addRow([`Date: ${input.reportDate}`]).getCell(1).font = SUBTITLE_FONT;
+  ws.addRow([`Prepared By: ${input.preparedBy}`]).getCell(1).font = SUBTITLE_FONT;
+  ws.addRow([]);
 
-  // Section 1 header
-  const s1Title = ws1.addRow(["1. CASH & BANK FLOW SUMMARY"]);
-  s1Title.font = { bold: true, size: 12, underline: "single" };
-  ws1.addRow([]);
+  // ─── Section 1: CASH & BANK FLOW SUMMARY ───
+  const s1Title = ws.addRow(["1. CASH & BANK FLOW SUMMARY"]);
+  s1Title.getCell(1).font = { bold: true, size: 12, underline: "single" };
+  ws.addRow([]);
 
-  // Table header
-  const headerRow = ws1.addRow([
+  const headerRow = ws.addRow([
     "Payment Method / Account",
     "Expected Deposits (POS)",
     "Statement (Deposited)",
@@ -77,7 +73,6 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   });
   headerRow.height = 22;
 
-  // Data rows — start at Excel row 9 so formulas reference C7:E12 etc.
   const paymentMethods = [
     "NB (NATIONAL BANK)",
     "STANDARD BANK",
@@ -87,24 +82,21 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     "Physical Cash (Till)",
   ];
 
-  const dataStartRow = ws1.rowCount + 1; // row 9
-  paymentMethods.forEach((method, i) => {
-    const r = ws1.addRow([method, 0, 0, null]);
+  const bankDataStartRow = ws.rowCount + 1;
+  paymentMethods.forEach((method) => {
+    const r = ws.addRow([method, 0, 0, null]);
     applyBorder(r, 4);
     r.getCell(2).numFmt = "#,##0";
     r.getCell(3).numFmt = "#,##0";
-    // Delayed Deposits = Deposited - Expected
-    r.getCell(4).value = { formula: `=D${r.number}-C${r.number}` };
+    r.getCell(4).value = { formula: `=C${r.number}-D${r.number}` };
     r.getCell(4).numFmt = "#,##0";
   });
 
-  // Totals row
-  const totalsRowNum = ws1.rowCount + 1;
-  const totalsRow = ws1.addRow([
+  const totalsRow = ws.addRow([
     "TOTAL REVENUE",
-    { formula: `=SUM(C${dataStartRow}:C${dataStartRow + 5})` },
-    { formula: `=SUM(D${dataStartRow}:D${dataStartRow + 5})` },
-    { formula: `=SUM(E${dataStartRow}:E${dataStartRow + 5})` },
+    { formula: `=SUM(B${bankDataStartRow}:B${bankDataStartRow + 5})` },
+    { formula: `=SUM(C${bankDataStartRow}:C${bankDataStartRow + 5})` },
+    { formula: `=SUM(D${bankDataStartRow}:D${bankDataStartRow + 5})` },
   ]);
   totalsRow.eachCell((cell) => {
     cell.font = TOTALS_FONT;
@@ -112,22 +104,17 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     cell.border = BORDER_THIN;
     cell.numFmt = "#,##0";
   });
-  applyBorder(totalsRow, 4);
 
-  // ─── SHEET 2: High-Value Physical Stock Count ───
-  const ws2 = wb.addWorksheet("Stock Count", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
-  setColWidths(ws2, [36, 18, 14, 18, 20, 20, 14]);
+  // ─── Blank separator ───
+  ws.addRow([]);
+  ws.addRow([]);
 
-  // Title
-  ws2.addRow(["HIGH-VALUE PHYSICAL STOCK COUNT"]).font = TITLE_FONT;
-  ws2.addRow([`Date: ${input.reportDate}`]).font = SUBTITLE_FONT;
-  ws2.addRow([`Prepared By: ${input.preparedBy}`]).font = SUBTITLE_FONT;
-  ws2.addRow([]);
+  // ─── Section 2: HIGH-VALUE PHYSICAL STOCK COUNT ───
+  const s2Title = ws.addRow(["2. HIGH-VALUE PHYSICAL STOCK COUNT"]);
+  s2Title.getCell(1).font = { bold: true, size: 12, underline: "single" };
+  ws.addRow([]);
 
-  // Table header
-  const stockHeader = ws2.addRow([
+  const stockHeader = ws.addRow([
     "Key Item",
     "Morning Opening Stock",
     "Purchases",
@@ -144,7 +131,6 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   });
   stockHeader.height = 30;
 
-  // Stock count items — [sectionHeader, items[]]
   const sections: [string, string[]][] = [
     ["CHICKEN", [
       "FRANGO HALF (600g)",
@@ -277,23 +263,22 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   ];
 
   sections.forEach(([sectionName, items]) => {
-    // Section header row
-    const sectionRow = ws2.addRow([sectionName]);
+    const sectionRow = ws.addRow([sectionName]);
     sectionRow.getCell(1).font = SECTION_FONT;
     sectionRow.height = 20;
 
-    // Item rows
     items.forEach((item) => {
-      const r = ws2.addRow([item, null, null, null, null, null, null]);
+      const r = ws.addRow([item, null, null, null, null, null, null]);
       applyBorder(r, 7);
-      // Expected Closing Stock = Opening + Purchases - Sales (cols B+C-D = E)
       const rowNum = r.number;
-      r.getCell(5).value = { formula: `=IF(AND(B${rowNum}="",C${rowNum}="",D${rowNum}=""),"",B${rowNum}+C${rowNum}-D${rowNum})` };
+      r.getCell(5).value = {
+        formula: `=IF(AND(B${rowNum}="",C${rowNum}="",D${rowNum}=""),"",B${rowNum}+C${rowNum}-D${rowNum})`,
+      };
       r.getCell(5).numFmt = "#,##0.00";
-      // Variance = Actual - Expected (col F - E)
-      r.getCell(7).value = { formula: `=IF(OR(F${rowNum}="",E${rowNum}=""),"",F${rowNum}-E${rowNum})` };
+      r.getCell(7).value = {
+        formula: `=IF(OR(F${rowNum}="",E${rowNum}=""),"",F${rowNum}-E${rowNum})`,
+      };
       r.getCell(7).numFmt = "#,##0.00";
-      // Number format for numeric columns
       [2, 3, 4, 6].forEach((c) => {
         r.getCell(c).numFmt = "#,##0.00";
       });
