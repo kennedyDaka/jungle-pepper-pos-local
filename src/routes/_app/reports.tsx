@@ -1405,7 +1405,7 @@ function ReportsPage() {
       reportDate: from,
       preparedBy: "Kennedy Daka",
     });
-    void writeReportWorkbook(wb, `flash-report-${from}.xlsx`);
+    void writeReportWorkbook(wb, `flash-report-${from}.xlsx`, { logo: false });
   };
 
   const exportCsv = (filename: string, rows: (string | number)[][]) => {

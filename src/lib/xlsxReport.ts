@@ -253,5 +253,5 @@ export async function writeReportWorkbook(
   link.href = URL.createObjectURL(blob);
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(link.href);
+  setTimeout(() => URL.revokeObjectURL(link.href), 100);
 }
