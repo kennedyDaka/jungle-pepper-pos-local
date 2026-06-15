@@ -38,6 +38,7 @@ import {
   type ReportMatrix,
   type ReportRow,
 } from "@/lib/xlsxReport";
+import { buildFlashReport, writeFlashReport } from "@/lib/flashReport";
 import { reportService } from "@/services/reportService";
 import { Download, FileText, Printer, Search } from "lucide-react";
 
@@ -1399,6 +1400,14 @@ function ReportsPage() {
     void writeReportWorkbook(wb, `expenses-${reportDateRange(from, to)}.xlsx`);
   };
 
+  const exportFlashXlsx = () => {
+    const wb = buildFlashReport({
+      reportDate: from,
+      preparedBy: "Kennedy Daka",
+    });
+    void writeFlashReport(wb, from);
+  };
+
   const exportCsv = (filename: string, rows: (string | number)[][]) => {
     const csv = rows
       .map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
@@ -1566,6 +1575,10 @@ function ReportsPage() {
           <Button onClick={exportExpensesXlsx} variant="secondary">
             <Download className="h-4 w-4 mr-1" />
             Expenses
+          </Button>
+          <Button onClick={exportFlashXlsx} variant="secondary">
+            <Download className="h-4 w-4 mr-1" />
+            Flash Report
           </Button>
         </div>
       </Card>
