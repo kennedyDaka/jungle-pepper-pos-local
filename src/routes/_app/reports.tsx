@@ -38,7 +38,7 @@ import {
   type ReportMatrix,
   type ReportRow,
 } from "@/lib/xlsxReport";
-import { buildFlashReport, writeFlashReport } from "@/lib/flashReport";
+import { buildFlashReport } from "@/lib/flashReport";
 import { reportService } from "@/services/reportService";
 import { Download, FileText, Printer, Search } from "lucide-react";
 
@@ -1405,7 +1405,7 @@ function ReportsPage() {
       reportDate: from,
       preparedBy: "Kennedy Daka",
     });
-    void writeFlashReport(wb, from);
+    void writeReportWorkbook(wb, `flash-report-${from}.xlsx`);
   };
 
   const exportCsv = (filename: string, rows: (string | number)[][]) => {
