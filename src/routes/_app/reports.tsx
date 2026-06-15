@@ -1401,9 +1401,15 @@ function ReportsPage() {
   };
 
   const exportFlashXlsx = () => {
+    const paymentTotals = Object.fromEntries(payAgg);
     const wb = buildFlashReport({
       reportDate: from,
       preparedBy: "Kennedy Daka",
+      paymentTotals,
+      items: items.data ?? [],
+      movements: stockMatrixMovements.data ?? [],
+      ledgerMovements: stockMatrixLedgerMovements.data ?? [],
+      sales: stockMatrixSales.data ?? [],
     });
     void writeReportWorkbook(wb, `flash-report-${from}.xlsx`, { logo: false });
   };

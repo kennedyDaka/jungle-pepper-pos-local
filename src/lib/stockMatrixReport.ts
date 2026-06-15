@@ -3,7 +3,7 @@ import { fmtQty } from "@/lib/format";
 import { fmtServingQty, servingLabel, servingQty, wholeServingQty } from "@/lib/beverage";
 import type { ReportRow } from "@/lib/xlsxReport";
 
-type MatrixItem = {
+export type MatrixItem = {
   id: string;
   name: string;
   qty_on_hand?: number | string | null;
@@ -13,7 +13,7 @@ type MatrixItem = {
   units?: { code?: string | null } | null;
 };
 
-type MatrixMovement = {
+export type MatrixMovement = {
   item_id?: string | null;
   type?: string | null;
   qty: number;
@@ -37,7 +37,7 @@ type MatrixMovement = {
   } | null;
 };
 
-type MatrixOrder = {
+export type MatrixOrder = {
   id: string;
   created_at: string;
   physical_order_no?: string | null;
@@ -66,7 +66,7 @@ export type StockMatrixInput = {
   sales: MatrixOrder[];
 };
 
-type StockSummary = {
+export type StockSummary = {
   item?: MatrixItem;
   opening: number;
   purchase: number;
@@ -301,7 +301,7 @@ const DRINK_ROWS: DrinkRowDef[] = [
   { kind: "stock", label: "SOBO ORANGE", aliases: ["SOBO ORANGE BOTTLE/CAN"] },
 ];
 
-function normalizeName(value: string) {
+export function normalizeName(value: string) {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -322,13 +322,13 @@ function dateTitle(date: string) {
   return `DATE ${label.toUpperCase()}`;
 }
 
-function itemIndex(items: MatrixItem[]) {
+export function itemIndex(items: MatrixItem[]) {
   const exact = new Map<string, MatrixItem>();
   items.forEach((item) => exact.set(normalizeName(item.name), item));
   return exact;
 }
 
-function resolveItem(
+export function resolveItem(
   items: MatrixItem[],
   exact: Map<string, MatrixItem>,
   label: string,
@@ -392,7 +392,7 @@ function stockDetails(movements: MatrixMovement[]) {
   );
 }
 
-function menuSalesSummary(row: Extract<MatrixRowDef, { kind: "menu" }>, orders: MatrixOrder[]) {
+export function menuSalesSummary(row: Extract<MatrixRowDef, { kind: "menu" }>, orders: MatrixOrder[]) {
   const aliases = new Set(row.menuAliases.map(normalizeName));
   let qty = 0;
   const details: string[] = [];
@@ -414,7 +414,7 @@ function numeric(value: unknown) {
   return Number(value) || 0;
 }
 
-function summarizeStock(
+export function summarizeStock(
   item: MatrixItem | undefined,
   periodMovements: MatrixMovement[],
   ledgerMovements: MatrixMovement[],
@@ -462,11 +462,11 @@ function summarizeStock(
   };
 }
 
-function asNumberOrBlank(value: number) {
+export function asNumberOrBlank(value: number) {
   return Math.abs(value) <= 0.000001 ? "" : Number(value.toFixed(3));
 }
 
-function metricCell(value: number) {
+export function metricCell(value: number) {
   return Math.abs(value) <= 0.000001 ? "" : Number(value.toFixed(3));
 }
 
