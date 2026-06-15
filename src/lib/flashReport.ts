@@ -4,7 +4,6 @@ import {
   itemIndex,
   resolveItem,
   summarizeStock,
-  metricCell,
   type MatrixItem,
   type MatrixMovement,
   type MatrixOrder,
@@ -45,6 +44,7 @@ export type FlashReportInput = {
 type FlashStockItem = {
   label: string;
   aliases: string[];
+  isMenu?: true;
 };
 
 const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
@@ -111,13 +111,13 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     { label: "FIREWOOD (Tonnes)", aliases: ["FIREWOOD"] },
   ]],
   ["HOT DRINKS", [
-    { label: "CAPUCCINO", aliases: [] },
-    { label: "LATTE (GALAO)", aliases: [] },
-    { label: "HOT CHOCOLATE", aliases: [] },
-    { label: "SUBMARINE", aliases: [] },
-    { label: "CHOCACHINO", aliases: [] },
-    { label: "MILKSHAKES", aliases: [] },
-    { label: "DECAFF", aliases: [] },
+    { label: "CAPUCCINO", aliases: [], isMenu: true },
+    { label: "LATTE (GALAO)", aliases: [], isMenu: true },
+    { label: "HOT CHOCOLATE", aliases: [], isMenu: true },
+    { label: "SUBMARINE", aliases: [], isMenu: true },
+    { label: "CHOCACHINO", aliases: [], isMenu: true },
+    { label: "MILKSHAKES", aliases: [], isMenu: true },
+    { label: "DECAFF", aliases: [], isMenu: true },
   ]],
   ["SOFT DRINKS", [
     { label: "WATER", aliases: ["WATER BOTTLE"] },
@@ -180,6 +180,10 @@ const PAYMENT_METHOD_MAP: [string, string][] = [
   ["Airtel Money", "airtel_money"],
   ["Physical Cash (Till)", "cash"],
 ];
+
+function stockCell(value: number) {
+  return Math.abs(value) <= 0.000001 ? null : Number(value.toFixed(3));
+}
 
 function countMenuSales(label: string, sales: MatrixOrder[]) {
   const normalized = normalizeName(label);
@@ -301,21 +305,24 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     sectionRow.getCell(1).font = SECTION_FONT;
     sectionRow.height = 20;
 
-    stockItems.forEach(({ label, aliases }) => {
-      const item = resolveItem(input.items, exact, label, aliases);
+    stockItems.forEach(({ label, aliases, isMenu }) => {
       let opening: ExcelJS.CellValue = null;
       let purchases: ExcelJS.CellValue = null;
       let usage: ExcelJS.CellValue = null;
 
-      if (item) {
-        const summary = summarizeStock(item, input.movements, input.ledgerMovements);
-        opening = metricCell(summary.opening);
-        purchases = metricCell(summary.purchase);
-        usage = metricCell(summary.usage);
-      } else {
+      if (isMenu) {
         const menuQty = countMenuSales(label, input.sales);
-        if (menuQty > 0) {
-          usage = menuQty;
+        if (menuQty > 0) usage = menuQty;
+      } else {
+        const item = resolveItem(input.items, exact, label, aliases);
+        if (item) {
+          const summary = summarizeStock(item, input.movements, input.ledgerMovements);
+          opening = stockCell(summary.opening);
+          purchases = stockCell(summary.purchase);
+          usage = stockCell(summary.usage);
+        } else {
+          const menuQty = countMenuSales(label, input.sales);
+          if (menuQty > 0) usage = menuQty;
         }
       }
 
@@ -325,15 +332,17 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
         r.getCell(c).border = BORDER_THIN;
       }
 
-      const rowNum = r.number;
-      r.getCell(5).value = {
-        formula: `=IF(AND(B${rowNum}="",C${rowNum}="",D${rowNum}=""),"",B${rowNum}+C${rowNum}-D${rowNum})`,
-      };
-      r.getCell(5).numFmt = "#,##0.00";
-      r.getCell(7).value = {
-        formula: `=IF(OR(F${rowNum}="",E${rowNum}=""),"",F${rowNum}-E${rowNum})`,
-      };
-      r.getCell(7).numFmt = "#,##0.00";
+      if (!isMenu) {
+        const rowNum = r.number;
+        r.getCell(5).value = {
+          formula: `=IF(AND(B${rowNum}="",C${rowNum}="",D${rowNum}=""),"",IF(B${rowNum}="","",B${rowNum})+N(C${rowNum})-N(D${rowNum}))`,
+        };
+        r.getCell(5).numFmt = "#,##0.00";
+        r.getCell(7).value = {
+          formula: `=IF(OR(F${rowNum}="",E${rowNum}=""),"",N(F${rowNum})-N(E${rowNum}))`,
+        };
+        r.getCell(7).numFmt = "#,##0.00";
+      }
 
       [2, 3, 4, 6].forEach((c) => {
         r.getCell(c).numFmt = "#,##0.00";
