@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Dialog,
+  DialogTrigger,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -538,7 +539,7 @@ function DrinksFolder({ onAdd, itemsLoading }: { onAdd: (id: string) => void; it
   const count = EXTRA_MENU.reduce((s, c) => s + c.items.length, 0);
   return (
     <Dialog>
-      <Dialog.Content asChild>
+      <DialogTrigger asChild>
         <button type="button" className="group flex w-full items-center gap-4 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:border-primary/60 hover:bg-primary/5 active:scale-[0.997]">
           <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
             <Wine className="h-6 w-6" />
@@ -549,7 +550,7 @@ function DrinksFolder({ onAdd, itemsLoading }: { onAdd: (id: string) => void; it
           </div>
           <span className="rounded-full border border-border bg-secondary/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground">Open</span>
         </button>
-      </Dialog.Content>
+      </DialogTrigger>
       <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Wine className="h-5 w-5 text-primary" /> Drinks & Liquor</DialogTitle>
