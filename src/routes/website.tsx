@@ -355,12 +355,14 @@ function WebsitePage() {
                     <span className="text-primary">{MWK(subtotal)}</span>
                   </div>
                   <div>
-                    <Label>Your name (optional)</Label>
+                    <Label>Your name <span className="text-destructive">*</span></Label>
                     <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+                    {!name.trim() && <p className="text-xs text-destructive mt-0.5">Name is required</p>}
                   </div>
                   <div>
-                    <Label>Phone (optional)</Label>
+                    <Label>Phone <span className="text-destructive">*</span></Label>
                     <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0999 000 000" />
+                    {!phone.trim() && <p className="text-xs text-destructive mt-0.5">Phone is required</p>}
                   </div>
                   <div>
                     <Label>Note</Label>
@@ -371,6 +373,8 @@ function WebsitePage() {
                     disabled={
                       cart.length === 0 ||
                       !branchId ||
+                      !name.trim() ||
+                      !phone.trim() ||
                       (orderType === "dine-in" && !selectedTableId) ||
                       submit.isPending
                     }

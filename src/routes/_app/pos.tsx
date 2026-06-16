@@ -236,21 +236,34 @@ function PendingOrdersDialog({
   onClose: () => void;
   onSelectOrder: (order: any) => void;
 }) {
+  const qc = useQueryClient();
   const branchMemberships = useQuery({
     queryKey: ["auth", "branch-memberships"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: membershipData, error: membershipError } = await supabase
         .from("branch_memberships")
         .select("branch_id, branches!inner(id, name)")
         .eq("active", true)
         .maybeSingle();
-      if (error) throw error;
-      return data as { branch_id: string; branches: { id: string; name: string } } | null;
+      if (membershipError) throw membershipError;
+      if (membershipData) return membershipData;
+      const { data: branchData, error: branchError } = await supabase
+        .from("branches")
+        .select("id, name")
+        .eq("active", true)
+        .order("name")
+        .limit(1)
+        .maybeSingle();
+      if (branchError) throw branchError;
+      if (!branchData) return null;
+      return { branch_id: branchData.id, branches: { id: branchData.id, name: branchData.name } };
     },
   });
 
   const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
   const [printOrder, setPrintOrder] = useState<any>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; reason: string } | null>(null);
+  const [pendingPayOrder, setPendingPayOrder] = useState<any>(null);
 
   const branchId = branchMemberships.data?.branch_id ?? null;
 
@@ -279,17 +292,35 @@ function PendingOrdersDialog({
   }, [pendingOrders.data]);
 
   const processPayment = useMutation({
-    mutationFn: async (order: any) => {
-      const total = Number(order.total);
-      return orderService.processPayment(
-        order.id,
-        [{ method: "cash", amount: total }],
-        { physicalOrderNo: order.physical_order_no ?? order.id.slice(0, 8).toUpperCase() },
-      );
+    mutationFn: async ({
+      order,
+      physicalOrderNo,
+      saleAt,
+      payments,
+    }: {
+      order: any;
+      physicalOrderNo: string;
+      saleAt: string;
+      payments: { method: string; amount: number }[];
+    }) => {
+      return orderService.processPayment(order.id, payments, { physicalOrderNo, saleAt });
     },
-    onSuccess: (_, order) => {
+    onSuccess: (_, { order }) => {
       toast.success(`Order ${order.physical_order_no || order.id.slice(0, 8).toUpperCase()} paid`);
       onSelectOrder(order);
+      setPendingPayOrder(null);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const cancelOrder = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      return orderService.updateOrderStatus(id, "cancelled", reason || undefined);
+    },
+    onSuccess: () => {
+      toast.success("Order cancelled");
+      qc.invalidateQueries({ queryKey: ["pos", "pending-orders"] });
+      setCancelTarget(null);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -357,11 +388,20 @@ function PendingOrdersDialog({
                         </Button>
                         <Button
                           size="sm"
+                          variant="destructive"
                           className="h-8"
-                          onClick={() => processPayment.mutate(order)}
+                          onClick={() => setCancelTarget({ id: order.id, reason: "" })}
+                          disabled={cancelOrder.isPending || order.status === "cancelled" || order.status === "paid"}
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          onClick={() => setPendingPayOrder(order)}
                           disabled={processPayment.isPending}
                         >
-                          {processPayment.isPending ? "..." : "Pay"}
+                          Pay
                         </Button>
                       </div>
                     </div>
@@ -376,11 +416,53 @@ function PendingOrdersDialog({
         </DialogContent>
       </Dialog>
 
+      {pendingPayOrder && (
+        <PaymentDialog
+          total={Number(pendingPayOrder.total)}
+          onClose={() => setPendingPayOrder(null)}
+          onPay={(physicalOrderNo, saleAt, payments) =>
+            processPayment.mutate({ order: pendingPayOrder, physicalOrderNo, saleAt, payments })
+          }
+          busy={processPayment.isPending}
+        />
+      )}
+
       {printOrder && (
         <KitchenOrderPrintDialog
           order={printOrder}
           onClose={() => setPrintOrder(null)}
         />
+      )}
+
+      {cancelTarget && (
+        <Dialog open onOpenChange={() => setCancelTarget(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Cancel order</DialogTitle>
+              <DialogDescription>
+                Enter a reason for cancelling this order.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Label>Reason</Label>
+              <Input
+                value={cancelTarget.reason}
+                onChange={(e) => setCancelTarget({ ...cancelTarget, reason: e.target.value })}
+                placeholder="e.g. Customer cancelled..."
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={() => setCancelTarget(null)}>Back</Button>
+              <Button
+                variant="destructive"
+                disabled={cancelOrder.isPending || !cancelTarget.reason.trim()}
+                onClick={() => cancelOrder.mutate(cancelTarget)}
+              >
+                {cancelOrder.isPending ? "Cancelling..." : "Cancel order"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
@@ -542,6 +624,31 @@ function PosPage() {
   const [historyTo, setHistoryTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [lastReceipt, setLastReceipt] = useState<any>(null);
   const [pendingOpen, setPendingOpen] = useState(false);
+
+  const branch = useQuery({
+    queryKey: ["auth", "branch-memberships"],
+    queryFn: async () => {
+      const { data: membershipData, error: membershipError } = await supabase
+        .from("branch_memberships")
+        .select("branch_id, branches!inner(id, name)")
+        .eq("active", true)
+        .maybeSingle();
+      if (membershipError) throw membershipError;
+      if (membershipData) return membershipData;
+      const { data: branchData, error: branchError } = await supabase
+        .from("branches")
+        .select("id, name")
+        .eq("active", true)
+        .order("name")
+        .limit(1)
+        .maybeSingle();
+      if (branchError) throw branchError;
+      if (!branchData) return null;
+      return { branch_id: branchData.id, branches: { id: branchData.id, name: branchData.name } };
+    },
+  });
+
+  const branchId = branch.data?.branch_id ?? null;
 
   const cats = useQuery({
     queryKey: ["pos", "cats"],
@@ -718,23 +825,20 @@ function PosPage() {
   );
   const hasMissingCrust = cart.some((line) => requiresCrust(line) && !hasSelectedCrust(line));
 
-  const finalize = useMutation({
+  const processPay = useMutation({
     mutationFn: async (request: {
       payments: { method: string; amount: number }[];
       physicalOrderNo: string;
       saleAt: string;
       staffMealReason?: string;
     }) => {
+      if (!branchId) throw new Error("No branch assigned");
       const isStaffMeal = Boolean(request.staffMealReason);
       const menuLines = cart.filter(isMenuLine);
       const packagingLines = cart.filter(isPackagingSaleLine);
-      const payload = {
+      const waiterPayload = {
         discount: isStaffMeal ? subtotal : discount,
         note: note || null,
-        physical_order_no: request.physicalOrderNo.trim(),
-        sale_at: request.saleAt,
-        staff_meal: isStaffMeal,
-        staff_meal_reason: request.staffMealReason ?? null,
         items: menuLines.map((l) => ({
           menu_item_id: l.menu_item_id,
           qty: l.qty,
@@ -758,9 +862,13 @@ function PosPage() {
           qty: line.qty,
           unit_price: Number(line.price),
         })),
-        payments: request.payments,
       };
-      return posService.finalizeOrder(payload);
+      const orderId = await orderService.createWaiterOrder(waiterPayload, branchId);
+      return orderService.processPayment(orderId, request.payments, {
+        physicalOrderNo: request.physicalOrderNo.trim(),
+        saleAt: request.saleAt,
+        discount: isStaffMeal ? subtotal : discount,
+      });
     },
     onSuccess: async (orderId, request) => {
       const isStaffMeal = Boolean(request.staffMealReason);
@@ -1124,7 +1232,7 @@ function PosPage() {
           <div className="grid grid-cols-2 gap-2">
             <Button
               className="w-full"
-              disabled={cart.length === 0 || hasMissingPackaging || hasMissingCrust}
+              disabled={branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust}
               onClick={() => setPayOpen(true)}
             >
               Pay {MWK(total)}
@@ -1132,7 +1240,7 @@ function PosPage() {
             <Button
               className="w-full"
               variant="secondary"
-              disabled={cart.length === 0 || hasMissingPackaging || hasMissingCrust}
+              disabled={branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust}
               onClick={() => setStaffMealOpen(true)}
             >
               <UserCheck className="h-4 w-4 mr-1" />
@@ -1251,9 +1359,9 @@ function PosPage() {
           total={total}
           onClose={() => setPayOpen(false)}
           onPay={(physicalOrderNo, saleAt, pmts) =>
-            finalize.mutate({ physicalOrderNo, saleAt, payments: pmts })
+            processPay.mutate({ physicalOrderNo, saleAt, payments: pmts })
           }
-          busy={finalize.isPending}
+          busy={processPay.isPending}
         />
       )}
 
@@ -1263,9 +1371,9 @@ function PosPage() {
           onClose={() => setStaffMealOpen(false)}
           onApprove={async ({ reason, password, physicalOrderNo, saleAt }) => {
             await authService.verifyCurrentCredential(password);
-            finalize.mutate({ payments: [], physicalOrderNo, saleAt, staffMealReason: reason });
+            processPay.mutate({ payments: [], physicalOrderNo, saleAt, staffMealReason: reason });
           }}
-          busy={finalize.isPending}
+          busy={processPay.isPending}
         />
       )}
 
