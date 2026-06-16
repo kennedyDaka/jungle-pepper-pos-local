@@ -29,7 +29,7 @@ import { orderService } from "@/services/orderService";
 import { supabase } from "@/services/repositories/supabaseClient";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_app/waiter")({
+export const Route = createFileRoute("/_app/pos-waiter")({
   component: WaiterPage,
 });
 
