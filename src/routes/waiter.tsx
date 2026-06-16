@@ -356,7 +356,7 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
             onClick={() => setCrustDialog({ itemKey: "test", name: "", dbName: "", price: 0 })}
             style={{ display: "none" }}
           />
-          <DrinksFolder onAdd={addExtraItem} itemsLoading={items.isLoading} />
+          <DrinksFolder onAdd={addExtraItem} itemsLoading={items.isLoading} livePrice={livePrice} />
           {Array.from({ length: TOTAL_PAGES }).map((_, page) => (
             <MenuPage key={page} page={page} onAdd={addItem} livePrice={livePrice} />
           ))}
@@ -548,7 +548,7 @@ function MobileCart({
   );
 }
 
-function DrinksFolder({ onAdd, itemsLoading }: { onAdd: (id: string) => void; itemsLoading: boolean }) {
+function DrinksFolder({ onAdd, itemsLoading, livePrice }: { onAdd: (id: string) => void; itemsLoading: boolean; livePrice: (dbName: string) => number | undefined }) {
   const count = EXTRA_MENU.reduce((s, c) => s + c.items.length, 0);
   return (
     <Dialog>
@@ -578,7 +578,7 @@ function DrinksFolder({ onAdd, itemsLoading }: { onAdd: (id: string) => void; it
                     disabled={itemsLoading}
                     className="flex flex-col items-start gap-0.5 rounded-md border border-border/60 bg-secondary/30 p-2 text-left transition hover:border-primary/60 hover:bg-primary/10 active:scale-[0.98]">
                     <span className="line-clamp-2 text-xs font-medium leading-tight">{it.name}</span>
-                    <span className="text-[11px] font-semibold tabular-nums text-primary">{formatMK(it.price)}</span>
+                    <span className="text-[11px] font-semibold tabular-nums text-primary">{formatMK(livePrice(it.dbName) ?? it.price)}</span>
                   </button>
                 ))}
               </div>
