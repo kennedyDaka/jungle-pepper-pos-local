@@ -203,13 +203,18 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
   const [discount, setDiscount] = useState(0);
   const [note, setNote] = useState("");
   const [orderNote, setOrderNote] = useState("");
-  const [crustDialog, setCrustDialog] = useState<{ itemKey: string; name: string; dbName: string; price: number } | null>(null);
+  const [crustDialog, setCrustDialog] = useState<{ itemKey: string; name: string; dbName: string; price: number; menuItemId: string } | null>(null);
   const [shapeDialog, setShapeDialog] = useState<{ itemKey: string; name: string; sauce: string; price: number } | null>(null);
   const [submitResult, setSubmitResult] = useState<any>(null);
 
   const items = useQuery({
     queryKey: ["waiter", "items"],
     queryFn: () => menuService.listMenuItems({ activeOnly: true }),
+  });
+
+  const mods = useQuery({
+    queryKey: ["waiter", "mods"],
+    queryFn: () => menuService.listModifiers(),
   });
 
   const itemsByName = useMemo(() => {
@@ -236,7 +241,8 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
   const addItem = (item: { name: string; dbName: string; price: number; kind?: string }) => {
     const resolvedPrice = livePrice(item.dbName) ?? item.price;
     if (item.kind === "pizza") {
-      setCrustDialog({ itemKey: crypto.randomUUID(), name: item.name, dbName: item.dbName, price: resolvedPrice });
+      const dbItem = itemsByName[item.dbName.toLowerCase()];
+      setCrustDialog({ itemKey: crypto.randomUUID(), name: item.name, dbName: item.dbName, price: resolvedPrice, menuItemId: dbItem?.id ?? "" });
       return;
     }
     if (item.kind === "pasta") {
@@ -279,7 +285,7 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
         menu_item_id: l.menuItemId,
         qty: l.qty,
         note: l.note ?? null,
-        takeaway: service === "takeaway",
+        takeaway: false,
         modifiers: l.modifiers.map((m) => ({ modifier_id: m.id })),
       }));
       return orderService.createWaiterOrder(
@@ -300,7 +306,14 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
 
   const handlePizzaCrust = (crustId: string, crustName: string, priceDelta: number) => {
     if (!crustDialog) return;
-    addToCart(crustDialog.dbName, crustDialog.name + ` (${crustName})`, crustDialog.price, [{ id: crustId, name: crustName, price_delta: priceDelta }]);
+    const dbItem = itemsByName[crustDialog.dbName.toLowerCase()];
+    const menuItemId = dbItem?.id ?? crustDialog.menuItemId;
+    const allMods = mods.data ?? [];
+    const crustMod = allMods.find(
+      (m: any) => m.menu_item_id === menuItemId && m.name === crustName,
+    );
+    const realId = crustMod?.id ?? crustId;
+    addToCart(crustDialog.dbName, crustDialog.name + ` (${crustName})`, crustDialog.price, [{ id: realId, name: crustName, price_delta: priceDelta }]);
     setCrustDialog(null);
   };
 
