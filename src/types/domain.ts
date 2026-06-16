@@ -1,4 +1,6 @@
 export type Role = "admin" | "cashier" | "storekeeper";
+export type OrderStatus = "paid" | "void" | "pending" | "preparing" | "ready" | "served" | "cancelled";
+export type OrderSource = "pos" | "waiter" | "website";
 export type CategoryKind = "menu" | "inventory";
 export type StockType = "raw" | "production" | "consumable" | "beverage";
 export type PaymentMethod =
@@ -86,6 +88,15 @@ export interface InventoryItemView extends InventoryItem {
   suppliers?: Pick<Supplier, "name"> | null;
 }
 
+export interface Table {
+  id: string;
+  branch_id?: string | null;
+  label: string;
+  capacity: number;
+  active: boolean;
+  sort_order: number;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -125,7 +136,7 @@ export interface Order {
   id: string;
   branch_id?: string | null;
   created_at: string;
-  cashier_id: string;
+  cashier_id?: string | null;
   subtotal: number;
   discount: number;
   total: number;
@@ -136,8 +147,15 @@ export interface Order {
   vat_amount?: number;
   staff_meal_reason?: string | null;
   staff_meal_approved_by?: string | null;
-  status: "paid" | "void";
+  status: OrderStatus;
   note?: string | null;
+  table_id?: string | null;
+  source?: OrderSource;
+  prepared_by?: string | null;
+  served_at?: string | null;
+  cancelled_by?: string | null;
+  cancelled_at?: string | null;
+  cancelled_reason?: string | null;
 }
 
 export interface OrderItem {
@@ -166,6 +184,7 @@ export interface Payment {
 export interface OrderView extends Order {
   branches?: { name: string } | null;
   profiles?: Pick<UserProfile, "username" | "full_name"> | null;
+  tables?: Pick<Table, "label"> | null;
   payments?: Payment[];
   order_items?: Array<
     OrderItem & {

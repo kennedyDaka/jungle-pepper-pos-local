@@ -9,10 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WebsiteRouteImport } from './routes/website'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppWaiterRouteImport } from './routes/_app/waiter'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppRecipesRouteImport } from './routes/_app/recipes'
 import { Route as AppProductionRouteImport } from './routes/_app/production'
@@ -22,7 +24,13 @@ import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
 import { Route as AppExpensesRouteImport } from './routes/_app/expenses'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
+import { Route as AppAdminTablesRouteImport } from './routes/_app/admin.tables'
 
+const WebsiteRoute = WebsiteRouteImport.update({
+  id: '/website',
+  path: '/website',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -41,6 +49,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppWaiterRoute = AppWaiterRouteImport.update({
+  id: '/waiter',
+  path: '/waiter',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
@@ -87,11 +100,17 @@ const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminTablesRoute = AppAdminTablesRouteImport.update({
+  id: '/admin/tables',
+  path: '/admin/tables',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/website': typeof WebsiteRoute
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/inventory': typeof AppInventoryRoute
@@ -100,12 +119,15 @@ export interface FileRoutesByFullPath {
   '/production': typeof AppProductionRoute
   '/recipes': typeof AppRecipesRoute
   '/reports': typeof AppReportsRoute
+  '/waiter': typeof AppWaiterRoute
+  '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/website': typeof WebsiteRoute
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/inventory': typeof AppInventoryRoute
@@ -114,6 +136,8 @@ export interface FileRoutesByTo {
   '/production': typeof AppProductionRoute
   '/recipes': typeof AppRecipesRoute
   '/reports': typeof AppReportsRoute
+  '/waiter': typeof AppWaiterRoute
+  '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
 }
 export interface FileRoutesById {
@@ -122,6 +146,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/website': typeof WebsiteRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/expenses': typeof AppExpensesRoute
   '/_app/inventory': typeof AppInventoryRoute
@@ -130,6 +155,8 @@ export interface FileRoutesById {
   '/_app/production': typeof AppProductionRoute
   '/_app/recipes': typeof AppRecipesRoute
   '/_app/reports': typeof AppReportsRoute
+  '/_app/waiter': typeof AppWaiterRoute
+  '/_app/admin/tables': typeof AppAdminTablesRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
 }
 export interface FileRouteTypes {
@@ -138,6 +165,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/setup'
+    | '/website'
     | '/dashboard'
     | '/expenses'
     | '/inventory'
@@ -146,12 +174,15 @@ export interface FileRouteTypes {
     | '/production'
     | '/recipes'
     | '/reports'
+    | '/waiter'
+    | '/admin/tables'
     | '/admin/users'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/setup'
+    | '/website'
     | '/dashboard'
     | '/expenses'
     | '/inventory'
@@ -160,6 +191,8 @@ export interface FileRouteTypes {
     | '/production'
     | '/recipes'
     | '/reports'
+    | '/waiter'
+    | '/admin/tables'
     | '/admin/users'
   id:
     | '__root__'
@@ -167,6 +200,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/setup'
+    | '/website'
     | '/_app/dashboard'
     | '/_app/expenses'
     | '/_app/inventory'
@@ -175,6 +209,8 @@ export interface FileRouteTypes {
     | '/_app/production'
     | '/_app/recipes'
     | '/_app/reports'
+    | '/_app/waiter'
+    | '/_app/admin/tables'
     | '/_app/admin/users'
   fileRoutesById: FileRoutesById
 }
@@ -183,10 +219,18 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   SetupRoute: typeof SetupRoute
+  WebsiteRoute: typeof WebsiteRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/website': {
+      id: '/website'
+      path: '/website'
+      fullPath: '/website'
+      preLoaderRoute: typeof WebsiteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/setup': {
       id: '/setup'
       path: '/setup'
@@ -214,6 +258,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/waiter': {
+      id: '/_app/waiter'
+      path: '/waiter'
+      fullPath: '/waiter'
+      preLoaderRoute: typeof AppWaiterRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/reports': {
       id: '/_app/reports'
@@ -278,6 +329,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminUsersRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/tables': {
+      id: '/_app/admin/tables'
+      path: '/admin/tables'
+      fullPath: '/admin/tables'
+      preLoaderRoute: typeof AppAdminTablesRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -290,6 +348,8 @@ interface AppRouteChildren {
   AppProductionRoute: typeof AppProductionRoute
   AppRecipesRoute: typeof AppRecipesRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppWaiterRoute: typeof AppWaiterRoute
+  AppAdminTablesRoute: typeof AppAdminTablesRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
 }
 
@@ -302,6 +362,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppProductionRoute: AppProductionRoute,
   AppRecipesRoute: AppRecipesRoute,
   AppReportsRoute: AppReportsRoute,
+  AppWaiterRoute: AppWaiterRoute,
+  AppAdminTablesRoute: AppAdminTablesRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
 }
 
@@ -312,6 +374,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   SetupRoute: SetupRoute,
+  WebsiteRoute: WebsiteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

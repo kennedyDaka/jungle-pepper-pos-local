@@ -45,6 +45,7 @@ type FlashStockItem = {
   label: string;
   aliases: string[];
   isMenu?: true;
+  menuAliases?: string[];
 };
 
 const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
@@ -120,55 +121,55 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     { label: "DECAFF", aliases: [], isMenu: true },
   ]],
   ["SOFT DRINKS", [
-    { label: "WATER", aliases: ["WATER BOTTLE"] },
-    { label: "COKE", aliases: ["COKE BOTTLE/CAN"] },
-    { label: "FANTA ORANGE", aliases: ["FANTA ORANGE BOTTLE/CAN"] },
-    { label: "FANTA PINEAPPLE", aliases: ["FANTA PINEAPPLE BOTTLE/CAN"] },
-    { label: "FANTA PASSION", aliases: ["FANTA PASSION BOTTLE/CAN"] },
-    { label: "SPRITE", aliases: ["SPRITE BOTTLE/CAN"] },
-    { label: "CHERRY PLUM", aliases: ["CHERRY PLUM BOTTLE/CAN"] },
-    { label: "COCOPINA", aliases: ["COCOPINA BOTTLE/CAN"] },
-    { label: "GINGER SOBO", aliases: ["GINGER SOBO BOTTLE/CAN"] },
-    { label: "GINGER ALE CAN", aliases: ["GINGER ALE BOTTLE/CAN"] },
+    { label: "WATER", aliases: ["WATER BOTTLE"], menuAliases: [] },
+    { label: "COKE", aliases: ["COKE BOTTLE/CAN"], menuAliases: [] },
+    { label: "FANTA ORANGE", aliases: ["FANTA ORANGE BOTTLE/CAN"], menuAliases: [] },
+    { label: "FANTA PINEAPPLE", aliases: ["FANTA PINEAPPLE BOTTLE/CAN"], menuAliases: [] },
+    { label: "FANTA PASSION", aliases: ["FANTA PASSION BOTTLE/CAN"], menuAliases: [] },
+    { label: "SPRITE", aliases: ["SPRITE BOTTLE/CAN"], menuAliases: [] },
+    { label: "CHERRY PLUM", aliases: ["CHERRY PLUM BOTTLE/CAN"], menuAliases: [] },
+    { label: "COCOPINA", aliases: ["COCOPINA BOTTLE/CAN"], menuAliases: [] },
+    { label: "GINGER SOBO", aliases: ["GINGER SOBO BOTTLE/CAN"], menuAliases: [] },
+    { label: "GINGER ALE CAN", aliases: ["GINGER ALE BOTTLE/CAN"], menuAliases: ["GINGER ALE"] },
   ]],
   ["BEERS", [
-    { label: "CHILL", aliases: ["CHILL BEER"] },
-    { label: "GREEN", aliases: ["GREEN BEER"] },
-    { label: "CASTEL", aliases: ["CASTEL BEER"] },
-    { label: "SPECIAL", aliases: ["SPECIAL BEER"] },
-    { label: "KUCHE KUCHE", aliases: ["KUCHE KUCHE BEER"] },
-    { label: "SAPITWA", aliases: ["SAPITWA BEER"] },
-    { label: "POMME BREEZE (CIDER)", aliases: ["POME BREEZE CIDER"] },
+    { label: "CHILL", aliases: ["CHILL BEER"], menuAliases: [] },
+    { label: "GREEN", aliases: ["GREEN BEER"], menuAliases: [] },
+    { label: "CASTEL", aliases: ["CASTEL BEER"], menuAliases: [] },
+    { label: "SPECIAL", aliases: ["SPECIAL BEER"], menuAliases: [] },
+    { label: "KUCHE KUCHE", aliases: ["KUCHE KUCHE BEER"], menuAliases: [] },
+    { label: "SAPITWA", aliases: ["SAPITWA BEER"], menuAliases: [] },
+    { label: "POMME BREEZE (CIDER)", aliases: ["POME BREEZE CIDER"], menuAliases: ["POME BREEZE"] },
   ]],
   ["WINES - GLASS", [
-    { label: "WINE RED DRY (DRODSTY)", aliases: ["DROSTDY WINE BOTTLE", "DRODSTY WINE BOTTLE"] },
-    { label: "WINE RED DRY (OVERMEER)", aliases: ["OVERMEER WINE BOTTLE"] },
-    { label: "WINE RED SWEET", aliases: ["RED SWEET WINE BOTTLE"] },
-    { label: "WINE WHITE DRY", aliases: ["WHITE WINE BOTTLE"] },
+    { label: "WINE RED DRY (DRODSTY)", aliases: ["DROSTDY WINE BOTTLE", "DRODSTY WINE BOTTLE"], menuAliases: ["RED DRY (DROSTDY)"] },
+    { label: "WINE RED DRY (OVERMEER)", aliases: ["OVERMEER WINE BOTTLE"], menuAliases: ["RED DRY (OVERMEER)"] },
+    { label: "WINE RED SWEET", aliases: ["RED SWEET WINE BOTTLE"], menuAliases: ["RED SWEET"] },
+    { label: "WINE WHITE DRY", aliases: ["WHITE WINE BOTTLE"], menuAliases: ["WHITE WINE GLASS"] },
   ]],
   ["LIQUORS + MORE", []],
   ["BRANDY", [
-    { label: "CAPE STARS", aliases: ["CAPE STARS BRANDY BOTTLE"] },
-    { label: "PREMIER", aliases: ["PREMIER BRANDY BOTTLE"] },
-    { label: "KLIPDRIFT", aliases: ["KLIPDRIFT BRANDY BOTTLE"] },
-    { label: "KWV 3 YRS", aliases: ["KWV 3 YEARS BRANDY BOTTLE"] },
-    { label: "KWV 5 YRS", aliases: ["KWV 5 YEARS BRANDY BOTTLE"] },
+    { label: "CAPE STARS", aliases: ["CAPE STARS BRANDY BOTTLE"], menuAliases: ["CAPE STARS BRANDY"] },
+    { label: "PREMIER", aliases: ["PREMIER BRANDY BOTTLE"], menuAliases: ["PREMIER BRANDY"] },
+    { label: "KLIPDRIFT", aliases: ["KLIPDRIFT BRANDY BOTTLE"], menuAliases: [] },
+    { label: "KWV 3 YRS", aliases: ["KWV 3 YEARS BRANDY BOTTLE"], menuAliases: [] },
+    { label: "KWV 5 YRS", aliases: ["KWV 5 YEARS BRANDY BOTTLE"], menuAliases: [] },
   ]],
   ["GIN", [
-    { label: "CAPE STARS", aliases: ["CAPE STARS GIN BOTTLE"] },
-    { label: "MALAWI GIN", aliases: ["MALAWI GIN BOTTLE"] },
+    { label: "CAPE STARS", aliases: ["CAPE STARS GIN BOTTLE"], menuAliases: ["CAPE STARS GIN"] },
+    { label: "MALAWI GIN", aliases: ["MALAWI GIN BOTTLE"], menuAliases: [] },
   ]],
   ["WHISKEY", [
-    { label: "CAPE STARS", aliases: ["CAPE STARS WHISKEY BOTTLE"] },
-    { label: "J & B", aliases: ["J&B WHISKEY BOTTLE"] },
-    { label: "JAMESON", aliases: ["JAMESON BOTTLE"] },
-    { label: "JACK DANIELS", aliases: ["JACK DANIELS BOTTLE"] },
+    { label: "CAPE STARS", aliases: ["CAPE STARS WHISKEY BOTTLE"], menuAliases: ["CAPE STARS WHISKEY"] },
+    { label: "J & B", aliases: ["J&B WHISKEY BOTTLE"], menuAliases: [] },
+    { label: "JAMESON", aliases: ["JAMESON BOTTLE"], menuAliases: [] },
+    { label: "JACK DANIELS", aliases: ["JACK DANIELS BOTTLE"], menuAliases: [] },
   ]],
   ["VODKA", [
     { label: "CAPE STARS", aliases: ["CAPE STARS VODKA BOTTLE"] },
-    { label: "MALAWI VODKA", aliases: ["MALAWI VODKA BOTTLE"] },
-    { label: "ABSOLUT", aliases: ["ABSOLUT VODKA BOTTLE"] },
-    { label: "SMIRNOFF", aliases: ["SMIRNOFF VODKA BOTTLE"] },
+    { label: "MALAWI VODKA", aliases: ["MALAWI VODKA BOTTLE"], menuAliases: [] },
+    { label: "ABSOLUT", aliases: ["ABSOLUT VODKA BOTTLE"], menuAliases: ["ABSOLUTE"] },
+    { label: "SMIRNOFF", aliases: ["SMIRNOFF VODKA BOTTLE"], menuAliases: [] },
   ]],
 ];
 
@@ -305,47 +306,71 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     sectionRow.getCell(1).font = SECTION_FONT;
     sectionRow.height = 20;
 
-    stockItems.forEach(({ label, aliases, isMenu }) => {
-      let opening: ExcelJS.CellValue = null;
-      let purchases: ExcelJS.CellValue = null;
-      let usage: ExcelJS.CellValue = null;
+    stockItems.forEach(({ label, aliases, isMenu, menuAliases }) => {
+      let rawOpening = 0;
+      let rawPurchases = 0;
+      let rawUsage = 0;
+      let rawClosing = 0;
+      let hasStock = false;
 
       if (isMenu) {
-        const menuQty = countMenuSales(label, input.sales);
-        if (menuQty > 0) usage = menuQty;
+        rawUsage = countMenuSales(label, input.sales);
+      } else if (menuAliases !== undefined) {
+        const item = resolveItem(input.items, exact, label, aliases);
+        if (item) {
+          const summary = summarizeStock(item, input.movements, input.ledgerMovements);
+          rawOpening = summary.opening;
+          rawPurchases = summary.purchase;
+          rawClosing = summary.closing;
+          hasStock = true;
+        }
+        const allCandidates = [label, ...aliases, ...menuAliases].filter(Boolean);
+        for (const candidate of allCandidates) {
+          const qty = countMenuSales(candidate, input.sales);
+          if (qty > 0) {
+            rawUsage = qty;
+            break;
+          }
+        }
+        if (rawUsage === 0 && item) {
+          const summary = summarizeStock(item, input.movements, input.ledgerMovements);
+          rawUsage = summary.usage;
+        }
       } else {
         const item = resolveItem(input.items, exact, label, aliases);
         if (item) {
           const summary = summarizeStock(item, input.movements, input.ledgerMovements);
-          opening = stockCell(summary.opening);
-          purchases = stockCell(summary.purchase);
-          usage = stockCell(summary.usage);
-        } else {
-          const menuQty = countMenuSales(label, input.sales);
-          if (menuQty > 0) usage = menuQty;
+          rawOpening = summary.opening;
+          rawPurchases = summary.purchase;
+          rawUsage = summary.usage;
+          rawClosing = summary.closing;
+          hasStock = true;
         }
       }
 
-      const r = ws.addRow([label, opening, purchases, usage, null, null, null]);
+      const rawExpected = hasStock ? rawOpening + rawPurchases - rawUsage : 0;
+      const rawVariance = hasStock ? rawClosing - rawExpected : 0;
+
+      const r = ws.addRow([
+        label,
+        stockCell(rawOpening),
+        stockCell(rawPurchases),
+        stockCell(rawUsage),
+        isMenu ? null : stockCell(rawExpected),
+        isMenu ? null : stockCell(rawClosing),
+        isMenu ? null : stockCell(rawVariance),
+      ]);
 
       for (let c = 1; c <= 7; c++) {
         r.getCell(c).border = BORDER_THIN;
       }
 
-      if (!isMenu) {
-        const rowNum = r.number;
-        r.getCell(5).value = {
-          formula: `=IF(AND(B${rowNum}="",C${rowNum}="",D${rowNum}=""),"",IF(B${rowNum}="","",B${rowNum})+N(C${rowNum})-N(D${rowNum}))`,
-        };
-        r.getCell(5).numFmt = "#,##0.00";
-        r.getCell(7).value = {
-          formula: `=IF(OR(F${rowNum}="",E${rowNum}=""),"",N(F${rowNum})-N(E${rowNum}))`,
-        };
-        r.getCell(7).numFmt = "#,##0.00";
-      }
+      const FMT_INT = "#,##0";
+      const FMT_DEC = "#,##0.###";
 
-      [2, 3, 4, 6].forEach((c) => {
-        r.getCell(c).numFmt = "#,##0.00";
+      [2, 3, 4, 5, 6, 7].forEach((c) => {
+        const val = r.getCell(c).value;
+        r.getCell(c).numFmt = typeof val === "number" && val % 1 !== 0 ? FMT_DEC : FMT_INT;
       });
     });
   });

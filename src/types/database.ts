@@ -693,19 +693,26 @@ export type Database = {
       orders: {
         Row: {
           branch_id: string | null;
-          cashier_id: string;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          cancelled_reason: string | null;
+          cashier_id: string | null;
           created_at: string;
           customer_id: string | null;
           discount: number;
           id: string;
-          note: string | null;
           net_amount: number;
+          note: string | null;
           physical_order_no: string | null;
+          prepared_by: string | null;
           sale_type: string;
+          served_at: string | null;
+          source: string;
           staff_meal_approved_by: string | null;
           staff_meal_reason: string | null;
           status: Database["public"]["Enums"]["order_status"];
           subtotal: number;
+          table_id: string | null;
           total: number;
           updated_at: string;
           vat_amount: number;
@@ -715,19 +722,26 @@ export type Database = {
         };
         Insert: {
           branch_id?: string | null;
-          cashier_id?: string;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancelled_reason?: string | null;
+          cashier_id?: string | null;
           created_at?: string;
           customer_id?: string | null;
           discount?: number;
           id?: string;
-          note?: string | null;
           net_amount?: number;
+          note?: string | null;
           physical_order_no?: string | null;
+          prepared_by?: string | null;
           sale_type?: string;
+          served_at?: string | null;
+          source?: string;
           staff_meal_approved_by?: string | null;
           staff_meal_reason?: string | null;
           status?: Database["public"]["Enums"]["order_status"];
           subtotal: number;
+          table_id?: string | null;
           total: number;
           updated_at?: string;
           vat_amount?: number;
@@ -737,19 +751,26 @@ export type Database = {
         };
         Update: {
           branch_id?: string | null;
-          cashier_id?: string;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancelled_reason?: string | null;
+          cashier_id?: string | null;
           created_at?: string;
           customer_id?: string | null;
           discount?: number;
           id?: string;
-          note?: string | null;
           net_amount?: number;
+          note?: string | null;
           physical_order_no?: string | null;
+          prepared_by?: string | null;
           sale_type?: string;
+          served_at?: string | null;
+          source?: string;
           staff_meal_approved_by?: string | null;
           staff_meal_reason?: string | null;
           status?: Database["public"]["Enums"]["order_status"];
           subtotal?: number;
+          table_id?: string | null;
           total?: number;
           updated_at?: string;
           vat_amount?: number;
@@ -777,6 +798,27 @@ export type Database = {
             columns: ["customer_id"];
             isOneToOne: false;
             referencedRelation: "customers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_prepared_by_fkey";
+            columns: ["prepared_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_cancelled_by_fkey";
+            columns: ["cancelled_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "orders_table_id_fkey";
+            columns: ["table_id"];
+            isOneToOne: false;
+            referencedRelation: "tables";
             referencedColumns: ["id"];
           },
           {
@@ -1308,6 +1350,47 @@ export type Database = {
         };
         Relationships: [];
       };
+      tables: {
+        Row: {
+          active: boolean;
+          branch_id: string | null;
+          capacity: number;
+          created_at: string;
+          id: string;
+          label: string;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          active?: boolean;
+          branch_id?: string | null;
+          capacity?: number;
+          created_at?: string;
+          id?: string;
+          label: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          active?: boolean;
+          branch_id?: string | null;
+          capacity?: number;
+          created_at?: string;
+          id?: string;
+          label?: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tables_branch_id_fkey";
+            columns: ["branch_id"];
+            isOneToOne: false;
+            referencedRelation: "branches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       units: {
         Row: {
           code: string;
@@ -1471,11 +1554,92 @@ export type Database = {
         Args: { _branch_id?: string; _customer_id?: string; _payload: Json };
         Returns: string;
       };
+      create_waiter_order: {
+        Args: {
+          _branch_id: string;
+          _customer_id?: string;
+          _payload: Json;
+          _table_id?: string;
+        };
+        Returns: string;
+      };
+      create_website_order: {
+        Args: {
+          _branch_id: string;
+          _customer_id?: string;
+          _customer_name?: string;
+          _customer_phone?: string;
+          _payload: Json;
+          _table_id?: string;
+        };
+        Returns: string;
+      };
+      update_order_status: {
+        Args: { _new_status: Database["public"]["Enums"]["order_status"]; _note?: string; _order_id: string };
+        Returns: undefined;
+      };
+      process_payment: {
+        Args: {
+          _discount?: number;
+          _order_id: string;
+          _payments: Json;
+          _physical_order_no?: string;
+          _sale_at?: string;
+        };
+        Returns: string;
+      };
+      get_active_tables: {
+        Args: { _branch_id: string };
+        Returns: {
+          active: boolean;
+          branch_id: string | null;
+          capacity: number;
+          created_at: string;
+          id: string;
+          label: string;
+          sort_order: number;
+          updated_at: string;
+        }[];
+      };
+      get_kitchen_orders: {
+        Args: { _branch_id: string };
+        Returns: {
+          order_id: string;
+          table_label: string | null;
+          status: Database["public"]["Enums"]["order_status"];
+          created_at: string;
+          items: Json;
+        }[];
+      };
+      get_pending_orders: {
+        Args: { _branch_id: string };
+        Returns: {
+          id: string;
+          branch_id: string;
+          customer_id: string | null;
+          subtotal: number;
+          discount: number;
+          total: number;
+          vat_rate: number;
+          net_amount: number;
+          vat_amount: number;
+          sale_type: string;
+          status: string;
+          note: string | null;
+          physical_order_no: string | null;
+          table_id: string | null;
+          source: string;
+          created_at: string;
+          updated_at: string;
+          table_label: string | null;
+          cashier_name: string | null;
+        }[];
+      };
     };
     Enums: {
       app_role: "admin" | "cashier" | "storekeeper";
       category_kind: "menu" | "inventory";
-      order_status: "paid" | "void";
+      order_status: "paid" | "void" | "pending" | "preparing" | "ready" | "served" | "cancelled";
       payment_method:
         | "cash"
         | "airtel_money"
@@ -1624,7 +1788,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "cashier", "storekeeper"],
       category_kind: ["menu", "inventory"],
-      order_status: ["paid", "void"],
+      order_status: ["paid", "void", "pending", "preparing", "ready", "served", "cancelled"],
       payment_method: [
         "cash",
         "airtel_money",

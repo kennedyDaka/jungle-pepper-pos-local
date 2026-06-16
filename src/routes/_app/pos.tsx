@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/DataState";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
   History,
   Ban,
   CalendarClock,
+  ClipboardList,
 } from "lucide-react";
 import { MWK, fmtQty, paymentMethodLabel } from "@/lib/format";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
@@ -46,7 +47,9 @@ import {
   type PackagingStockItemView,
 } from "@/services/packagingService";
 import { posService } from "@/services/posService";
+import { orderService } from "@/services/orderService";
 import { reportService } from "@/services/reportService";
+import { supabase } from "@/services/repositories/supabaseClient";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import logo from "@/assets/jungle-pepper-logo.png";
@@ -226,6 +229,214 @@ function orderCashier(order: any) {
   return order.profiles?.full_name || order.profiles?.username || "Staff";
 }
 
+function PendingOrdersDialog({
+  onClose,
+  onSelectOrder,
+}: {
+  onClose: () => void;
+  onSelectOrder: (order: any) => void;
+}) {
+  const branchMemberships = useQuery({
+    queryKey: ["auth", "branch-memberships"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("branch_memberships")
+        .select("branch_id, branches!inner(id, name)")
+        .eq("active", true)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { branch_id: string; branches: { id: string; name: string } } | null;
+    },
+  });
+
+  const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
+  const [printOrder, setPrintOrder] = useState<any>(null);
+
+  const branchId = branchMemberships.data?.branch_id ?? null;
+
+  const pendingOrders = useQuery({
+    queryKey: ["pos", "pending-orders", branchId],
+    queryFn: () => orderService.getPendingOrders(branchId!),
+    enabled: !!branchId,
+    refetchInterval: 15_000,
+  });
+
+  const prevOrdersRef = useRef<any[]>([]);
+
+  const orders = useMemo(() => (pendingOrders.data ?? []), [pendingOrders.data]);
+
+  useEffect(() => {
+    if (!pendingOrders.data) return;
+    const prev = prevOrdersRef.current;
+    const curr = pendingOrders.data;
+    for (const order of curr) {
+      if (order.source === "website" && !prev.some((p: any) => p.id === order.id)) {
+        const tableLabel = order.table_label ?? "Takeaway";
+        toast.info(`New website order: ${tableLabel}`, { duration: 8_000 });
+      }
+    }
+    prevOrdersRef.current = curr;
+  }, [pendingOrders.data]);
+
+  const processPayment = useMutation({
+    mutationFn: async (order: any) => {
+      const total = Number(order.total);
+      return orderService.processPayment(
+        order.id,
+        [{ method: "cash", amount: total }],
+        { physicalOrderNo: order.physical_order_no ?? order.id.slice(0, 8).toUpperCase() },
+      );
+    },
+    onSuccess: (_, order) => {
+      toast.success(`Order ${order.physical_order_no || order.id.slice(0, 8).toUpperCase()} paid`);
+      onSelectOrder(order);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  return (
+    <>
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Pending orders</DialogTitle>
+            <DialogDescription>
+              Orders from waiters and website that need payment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto space-y-2">
+            {pendingOrders.isLoading && <LoadingState label="Loading pending orders..." />}
+            {pendingOrders.error && <ErrorState error={pendingOrders.error} label="Could not load orders" />}
+            {orders.length === 0 && !pendingOrders.isLoading && (
+              <p className="text-sm text-muted-foreground p-4 text-center">No pending orders.</p>
+            )}
+            {orders.map((order: any) => {
+              const tableLabel = order.tables?.label ?? order.table_label ?? "Takeaway";
+              const cashier = order.cashier_name ?? order.profiles?.full_name ?? order.profiles?.username ?? "Waiter";
+              const total = Number(order.total);
+              const isWebsite = order.source === "website";
+              return (
+                <div key={order.id} className={`border rounded-lg p-3 ${isWebsite ? "border-yellow-400 bg-yellow-50/30 dark:bg-yellow-950/10" : "border-border"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm">{tableLabel}</span>
+                        {isWebsite && (
+                          <span className="text-[10px] bg-yellow-200 text-yellow-800 px-1.5 py-0.5 rounded uppercase font-bold">Web</span>
+                        )}
+                        <span className="text-xs bg-secondary px-2 py-0.5 rounded-full uppercase">
+                          {order.status}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(order.created_at).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {(order.order_items ?? []).map((line: any) => (
+                          <div key={line.id} className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">x{line.qty}</span>
+                            <span>{line.menu_items?.name ?? "Item"}</span>
+                            {(line.order_item_modifiers ?? []).length > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                ({line.order_item_modifiers.map((m: any) => m.modifiers?.name).join(", ")})
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {order.note && (
+                        <p className="text-xs text-muted-foreground mt-1 italic">{order.note}</p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-bold text-primary">{MWK(total)}</div>
+                      <div className="text-[10px] text-muted-foreground">{cashier}</div>
+                      <div className="flex gap-1 mt-2">
+                        <Button size="sm" variant="outline" className="h-8" onClick={() => setPrintOrder(order)}>
+                          <Printer className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          onClick={() => processPayment.mutate(order)}
+                          disabled={processPayment.isPending}
+                        >
+                          {processPayment.isPending ? "..." : "Pay"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {printOrder && (
+        <KitchenOrderPrintDialog
+          order={printOrder}
+          onClose={() => setPrintOrder(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function KitchenOrderPrintDialog({ order, onClose }: { order: any; onClose: () => void }) {
+  const tableLabel = order.tables?.label ?? order.table_label ?? "Takeaway";
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Kitchen Order</DialogTitle>
+          <DialogDescription>Show this to the kitchen staff.</DialogDescription>
+        </DialogHeader>
+        <div className="bg-white text-black p-4 rounded text-xs font-mono" id="kitchen-receipt">
+          <div className="text-center mb-2">
+            <div className="font-bold text-sm">JUNGLE PEPPER</div>
+            <div>Kidney Crescent, Blantyre</div>
+            <div className="mt-1 font-bold text-base">{tableLabel}</div>
+            <div className="mt-1">Order: {order.physical_order_no || order.id.slice(0, 8).toUpperCase()}</div>
+            <div>{new Date(order.created_at).toLocaleString()}</div>
+            {order.source === "website" && <div className="text-yellow-600 font-bold mt-1">WEBSITE ORDER</div>}
+          </div>
+          <hr className="my-1 border-black" />
+          {(order.order_items ?? []).map((line: any) => (
+            <div key={line.id} className="mb-1">
+              <div className="flex justify-between font-bold">
+                <span>{line.qty}x {line.menu_items?.name ?? "Item"}</span>
+              </div>
+              {(line.order_item_modifiers ?? []).length > 0 && (
+                <div className="pl-2">{line.order_item_modifiers.map((m: any) => m.modifiers?.name).join(", ")}</div>
+              )}
+              {line.takeaway && <div className="pl-2 text-blue-600">TAKEAWAY</div>}
+              {line.note && <div className="pl-2 text-orange-600">Note: {line.note}</div>}
+            </div>
+          ))}
+          {order.note && (
+            <>
+              <hr className="my-1 border-black" />
+              <div className="italic">{order.note}</div>
+            </>
+          )}
+          <hr className="my-1 border-black" />
+          <div className="text-center font-bold">Obrigado!</div>
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => window.print()}>
+            <Printer className="h-4 w-4 mr-1" /> Print
+          </Button>
+          <Button onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function receiptFromOrder(order: any) {
   const menuLines = (order.order_items ?? []).map((line: any) => {
     const qty = Number(line.qty);
@@ -330,6 +541,7 @@ function PosPage() {
   const [historyFrom, setHistoryFrom] = useState(() => isoDateDaysAgo(30));
   const [historyTo, setHistoryTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   const cats = useQuery({
     queryKey: ["pos", "cats"],
@@ -600,6 +812,10 @@ function PosPage() {
           <Button variant="secondary" onClick={() => setPackManagerOpen(true)}>
             <Package className="h-4 w-4 mr-1" />
             Takeaway boxes
+          </Button>
+          <Button variant="secondary" onClick={() => setPendingOpen(true)}>
+            <ClipboardList className="h-4 w-4 mr-1" />
+            Pending orders
           </Button>
           <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
             <History className="h-4 w-4 mr-1" />
@@ -1050,6 +1266,16 @@ function PosPage() {
             finalize.mutate({ payments: [], physicalOrderNo, saleAt, staffMealReason: reason });
           }}
           busy={finalize.isPending}
+        />
+      )}
+
+      {pendingOpen && (
+        <PendingOrdersDialog
+          onClose={() => setPendingOpen(false)}
+          onSelectOrder={(order) => {
+            setPendingOpen(false);
+            setLastReceipt(receiptFromOrder(order));
+          }}
         />
       )}
 

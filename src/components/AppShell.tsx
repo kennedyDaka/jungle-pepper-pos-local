@@ -10,6 +10,7 @@ const IDLE_SLEEP_MS = 60 * 1000;
 const NAV: { to: string; label: string; roles: Role[] }[] = [
   { to: "/", label: "Dashboard", roles: ["admin", "storekeeper", "cashier"] },
   { to: "/pos", label: "POS", roles: ["admin", "cashier"] },
+  { to: "/waiter", label: "Waiter", roles: ["admin", "cashier"] },
   { to: "/inventory", label: "Inventory", roles: ["admin", "storekeeper"] },
   { to: "/production", label: "Production", roles: ["admin", "storekeeper"] },
   { to: "/expenses", label: "Expenses", roles: ["admin", "storekeeper"] },
@@ -17,6 +18,7 @@ const NAV: { to: string; label: string; roles: Role[] }[] = [
   { to: "/menu", label: "Menu", roles: ["admin"] },
   { to: "/reports", label: "Reports", roles: ["admin", "storekeeper"] },
   { to: "/admin/users", label: "Users", roles: ["admin"] },
+  { to: "/admin/tables", label: "Tables", roles: ["admin"] },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

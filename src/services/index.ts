@@ -3,6 +3,7 @@ export { dashboardService } from "./dashboardService";
 export { expenseService } from "./expenseService";
 export { inventoryService } from "./inventoryService";
 export { menuService } from "./menuService";
+export { orderService } from "./orderService";
 export { posService } from "./posService";
 export { productsService } from "./productsService";
 export { productionService } from "./productionService";

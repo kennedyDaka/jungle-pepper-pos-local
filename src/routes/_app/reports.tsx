@@ -1401,9 +1401,15 @@ function ReportsPage() {
   };
 
   const exportFlashXlsx = () => {
-    const paymentTotals = Object.fromEntries(payAgg);
+    const flashPayAgg = new Map<string, number>();
+    (stockMatrixSales.data ?? []).forEach((order: any) => {
+      order.payments?.forEach((payment: any) =>
+        flashPayAgg.set(payment.method, (flashPayAgg.get(payment.method) ?? 0) + Number(payment.amount)),
+      );
+    });
+    const paymentTotals = Object.fromEntries(flashPayAgg);
     const wb = buildFlashReport({
-      reportDate: from,
+      reportDate: stockMatrixDate,
       preparedBy: "Kennedy Daka",
       paymentTotals,
       items: items.data ?? [],
@@ -1411,7 +1417,7 @@ function ReportsPage() {
       ledgerMovements: stockMatrixLedgerMovements.data ?? [],
       sales: stockMatrixSales.data ?? [],
     });
-    void writeReportWorkbook(wb, `flash-report-${from}.xlsx`, { logo: false });
+    void writeReportWorkbook(wb, `flash-report-${stockMatrixDate}.xlsx`, { logo: false });
   };
 
   const exportCsv = (filename: string, rows: (string | number)[][]) => {
