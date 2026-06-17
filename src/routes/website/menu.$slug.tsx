@@ -2,8 +2,7 @@ import { createFileRoute, notFound } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useWebsiteCart } from "@/lib/website-cart";
 import { menuService, slugify } from "@/services/menuService";
-import { PizzaCrustDialog } from "@/components/website/PizzaCrustDialog";
-import { PastaShapeDialog } from "@/components/website/PastaShapeDialog";
+import { BaseModifierDialog } from "@/components/website/BaseModifierDialog";
 import { useState, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -35,8 +34,7 @@ function MenuItemPage() {
     queryFn: () => menuService.listModifiers(),
   });
   const { add } = useWebsiteCart();
-  const [pizzaDialog, setPizzaDialog] = useState<{ item: any; modifiers: any[] } | null>(null);
-  const [pastaDialog, setPastaDialog] = useState<{ item: any; modifiers: any[] } | null>(null);
+  const [modifierDialog, setModifierDialog] = useState<{ item: any; modifiers: any[]; kind: string } | null>(null);
 
   const filterMods = useCallback((mods: any[]) => {
     if (item.kind === "pizza") return mods.filter((m: any) => /^(thin|thick)\s*crust$/i.test(m.name));
@@ -48,8 +46,7 @@ function MenuItemPage() {
 
   const handleAdd = () => {
     if ((item.kind === "pizza" || item.kind === "pasta") && itemModifiers.length > 0) {
-      const setDialog = item.kind === "pizza" ? setPizzaDialog : setPastaDialog;
-      setDialog({ item, modifiers: itemModifiers });
+      setModifierDialog({ item, modifiers: itemModifiers, kind: item.kind });
       return;
     }
     add({
@@ -90,41 +87,18 @@ function MenuItemPage() {
         </div>
       </div>
 
-      <PizzaCrustDialog
-        open={pizzaDialog !== null}
-        modifiers={pizzaDialog?.modifiers?.map((m: any) => ({ modifier_id: m.id, name: m.name, price_delta: Number(m.price_delta) })) ?? []}
+      <BaseModifierDialog
+        open={modifierDialog !== null}
+        title={modifierDialog?.kind === "pizza" ? "Choose pizza base" : "Choose pasta shape"}
+        description={modifierDialog?.kind === "pizza" ? "Thick or thin dough base." : `Select the pasta type for ${modifierDialog?.item?.name ?? ""}.`}
+        modifiers={modifierDialog?.modifiers?.map((m: any) => ({ modifier_id: m.id, name: m.name, price_delta: Number(m.price_delta) })) ?? []}
         onSelect={(mod) => {
-          const d = pizzaDialog!;
-          add({
-            id: d.item.id,
-            slug: d.item.slug,
-            name: d.item.name + ` (${mod.name})`,
-            price_mwk: d.item.price,
-            kind: d.item.kind,
-            modifiers: [mod],
-          }, 1);
-          setPizzaDialog(null);
+          const d = modifierDialog!;
+          const label = d.kind === "pizza" ? `${d.item.name} (${mod.name})` : `${mod.name} ${d.item.name}`;
+          add({ id: d.item.id, slug: d.item.slug, name: label, price_mwk: d.item.price, kind: d.item.kind, modifiers: [mod] }, 1);
+          setModifierDialog(null);
         }}
-        onClose={() => setPizzaDialog(null)}
-      />
-
-      <PastaShapeDialog
-        open={pastaDialog !== null}
-        modifiers={pastaDialog?.modifiers?.map((m: any) => ({ modifier_id: m.id, name: m.name, price_delta: Number(m.price_delta) })) ?? []}
-        itemName={pastaDialog?.item?.name ?? ""}
-        onSelect={(mod) => {
-          const d = pastaDialog!;
-          add({
-            id: d.item.id,
-            slug: d.item.slug,
-            name: mod.name + " " + d.item.name,
-            price_mwk: d.item.price,
-            kind: d.item.kind,
-            modifiers: [mod],
-          }, 1);
-          setPastaDialog(null);
-        }}
-        onClose={() => setPastaDialog(null)}
+        onClose={() => setModifierDialog(null)}
       />
     </div>
   );

@@ -1,11 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { CartItemModifier } from "@/lib/website-cart";
 
-export function PizzaCrustDialog({
-  open, onClose, modifiers, onSelect,
+export function BaseModifierDialog({
+  open, onClose, title, description, modifiers, onSelect,
 }: {
   open: boolean;
   onClose: () => void;
+  title: string;
+  description: string;
   modifiers: CartItemModifier[];
   onSelect: (m: CartItemModifier) => void;
 }) {
@@ -13,8 +15,8 @@ export function PizzaCrustDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Choose pizza base</DialogTitle>
-          <DialogDescription>Thick or thin dough base.</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-4">
           {modifiers.map((m) => (
