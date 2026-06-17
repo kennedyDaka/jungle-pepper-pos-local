@@ -15,6 +15,12 @@ import { Route as SetupRouteImport } from './routes/setup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WebsiteIndexRouteImport } from './routes/website/index'
+import { Route as WebsiteReservationsRouteImport } from './routes/website/reservations'
+import { Route as WebsiteMenuRouteImport } from './routes/website/menu'
+import { Route as WebsiteContactRouteImport } from './routes/website/contact'
+import { Route as WebsiteAboutRouteImport } from './routes/website/about'
+import { Route as AppReservationsRouteImport } from './routes/_app/reservations'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
 import { Route as AppRecipesRouteImport } from './routes/_app/recipes'
 import { Route as AppProductionRouteImport } from './routes/_app/production'
@@ -24,6 +30,7 @@ import { Route as AppMenuRouteImport } from './routes/_app/menu'
 import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
 import { Route as AppExpensesRouteImport } from './routes/_app/expenses'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as WebsiteMenuSlugRouteImport } from './routes/website/menu.$slug'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
 import { Route as AppAdminTablesRouteImport } from './routes/_app/admin.tables'
 
@@ -55,6 +62,36 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const WebsiteIndexRoute = WebsiteIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteReservationsRoute = WebsiteReservationsRouteImport.update({
+  id: '/reservations',
+  path: '/reservations',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteMenuRoute = WebsiteMenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteContactRoute = WebsiteContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteAboutRoute = WebsiteAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const AppReservationsRoute = AppReservationsRouteImport.update({
+  id: '/reservations',
+  path: '/reservations',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
@@ -101,6 +138,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const WebsiteMenuSlugRoute = WebsiteMenuSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => WebsiteMenuRoute,
+} as any)
 const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   id: '/admin/users',
   path: '/admin/users',
@@ -117,7 +159,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/waiter': typeof WaiterRoute
-  '/website': typeof WebsiteRoute
+  '/website': typeof WebsiteRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/inventory': typeof AppInventoryRoute
@@ -127,15 +169,21 @@ export interface FileRoutesByFullPath {
   '/production': typeof AppProductionRoute
   '/recipes': typeof AppRecipesRoute
   '/reports': typeof AppReportsRoute
+  '/reservations': typeof AppReservationsRoute
+  '/website/about': typeof WebsiteAboutRoute
+  '/website/contact': typeof WebsiteContactRoute
+  '/website/menu': typeof WebsiteMenuRouteWithChildren
+  '/website/reservations': typeof WebsiteReservationsRoute
+  '/website/': typeof WebsiteIndexRoute
   '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
+  '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/waiter': typeof WaiterRoute
-  '/website': typeof WebsiteRoute
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/inventory': typeof AppInventoryRoute
@@ -145,8 +193,15 @@ export interface FileRoutesByTo {
   '/production': typeof AppProductionRoute
   '/recipes': typeof AppRecipesRoute
   '/reports': typeof AppReportsRoute
+  '/reservations': typeof AppReservationsRoute
+  '/website/about': typeof WebsiteAboutRoute
+  '/website/contact': typeof WebsiteContactRoute
+  '/website/menu': typeof WebsiteMenuRouteWithChildren
+  '/website/reservations': typeof WebsiteReservationsRoute
+  '/website': typeof WebsiteIndexRoute
   '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
+  '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -155,7 +210,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
   '/waiter': typeof WaiterRoute
-  '/website': typeof WebsiteRoute
+  '/website': typeof WebsiteRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/expenses': typeof AppExpensesRoute
   '/_app/inventory': typeof AppInventoryRoute
@@ -165,8 +220,15 @@ export interface FileRoutesById {
   '/_app/production': typeof AppProductionRoute
   '/_app/recipes': typeof AppRecipesRoute
   '/_app/reports': typeof AppReportsRoute
+  '/_app/reservations': typeof AppReservationsRoute
+  '/website/about': typeof WebsiteAboutRoute
+  '/website/contact': typeof WebsiteContactRoute
+  '/website/menu': typeof WebsiteMenuRouteWithChildren
+  '/website/reservations': typeof WebsiteReservationsRoute
+  '/website/': typeof WebsiteIndexRoute
   '/_app/admin/tables': typeof AppAdminTablesRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
+  '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -185,15 +247,21 @@ export interface FileRouteTypes {
     | '/production'
     | '/recipes'
     | '/reports'
+    | '/reservations'
+    | '/website/about'
+    | '/website/contact'
+    | '/website/menu'
+    | '/website/reservations'
+    | '/website/'
     | '/admin/tables'
     | '/admin/users'
+    | '/website/menu/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/setup'
     | '/waiter'
-    | '/website'
     | '/dashboard'
     | '/expenses'
     | '/inventory'
@@ -203,8 +271,15 @@ export interface FileRouteTypes {
     | '/production'
     | '/recipes'
     | '/reports'
+    | '/reservations'
+    | '/website/about'
+    | '/website/contact'
+    | '/website/menu'
+    | '/website/reservations'
+    | '/website'
     | '/admin/tables'
     | '/admin/users'
+    | '/website/menu/$slug'
   id:
     | '__root__'
     | '/'
@@ -222,8 +297,15 @@ export interface FileRouteTypes {
     | '/_app/production'
     | '/_app/recipes'
     | '/_app/reports'
+    | '/_app/reservations'
+    | '/website/about'
+    | '/website/contact'
+    | '/website/menu'
+    | '/website/reservations'
+    | '/website/'
     | '/_app/admin/tables'
     | '/_app/admin/users'
+    | '/website/menu/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -232,7 +314,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SetupRoute: typeof SetupRoute
   WaiterRoute: typeof WaiterRoute
-  WebsiteRoute: typeof WebsiteRoute
+  WebsiteRoute: typeof WebsiteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -278,6 +360,48 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/website/': {
+      id: '/website/'
+      path: '/'
+      fullPath: '/website/'
+      preLoaderRoute: typeof WebsiteIndexRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/reservations': {
+      id: '/website/reservations'
+      path: '/reservations'
+      fullPath: '/website/reservations'
+      preLoaderRoute: typeof WebsiteReservationsRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/menu': {
+      id: '/website/menu'
+      path: '/menu'
+      fullPath: '/website/menu'
+      preLoaderRoute: typeof WebsiteMenuRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/contact': {
+      id: '/website/contact'
+      path: '/contact'
+      fullPath: '/website/contact'
+      preLoaderRoute: typeof WebsiteContactRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/about': {
+      id: '/website/about'
+      path: '/about'
+      fullPath: '/website/about'
+      preLoaderRoute: typeof WebsiteAboutRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/_app/reservations': {
+      id: '/_app/reservations'
+      path: '/reservations'
+      fullPath: '/reservations'
+      preLoaderRoute: typeof AppReservationsRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/reports': {
       id: '/_app/reports'
@@ -342,6 +466,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/website/menu/$slug': {
+      id: '/website/menu/$slug'
+      path: '/$slug'
+      fullPath: '/website/menu/$slug'
+      preLoaderRoute: typeof WebsiteMenuSlugRouteImport
+      parentRoute: typeof WebsiteMenuRoute
+    }
     '/_app/admin/users': {
       id: '/_app/admin/users'
       path: '/admin/users'
@@ -369,6 +500,7 @@ interface AppRouteChildren {
   AppProductionRoute: typeof AppProductionRoute
   AppRecipesRoute: typeof AppRecipesRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppReservationsRoute: typeof AppReservationsRoute
   AppAdminTablesRoute: typeof AppAdminTablesRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
 }
@@ -383,11 +515,43 @@ const AppRouteChildren: AppRouteChildren = {
   AppProductionRoute: AppProductionRoute,
   AppRecipesRoute: AppRecipesRoute,
   AppReportsRoute: AppReportsRoute,
+  AppReservationsRoute: AppReservationsRoute,
   AppAdminTablesRoute: AppAdminTablesRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
+interface WebsiteMenuRouteChildren {
+  WebsiteMenuSlugRoute: typeof WebsiteMenuSlugRoute
+}
+
+const WebsiteMenuRouteChildren: WebsiteMenuRouteChildren = {
+  WebsiteMenuSlugRoute: WebsiteMenuSlugRoute,
+}
+
+const WebsiteMenuRouteWithChildren = WebsiteMenuRoute._addFileChildren(
+  WebsiteMenuRouteChildren,
+)
+
+interface WebsiteRouteChildren {
+  WebsiteAboutRoute: typeof WebsiteAboutRoute
+  WebsiteContactRoute: typeof WebsiteContactRoute
+  WebsiteMenuRoute: typeof WebsiteMenuRouteWithChildren
+  WebsiteReservationsRoute: typeof WebsiteReservationsRoute
+  WebsiteIndexRoute: typeof WebsiteIndexRoute
+}
+
+const WebsiteRouteChildren: WebsiteRouteChildren = {
+  WebsiteAboutRoute: WebsiteAboutRoute,
+  WebsiteContactRoute: WebsiteContactRoute,
+  WebsiteMenuRoute: WebsiteMenuRouteWithChildren,
+  WebsiteReservationsRoute: WebsiteReservationsRoute,
+  WebsiteIndexRoute: WebsiteIndexRoute,
+}
+
+const WebsiteRouteWithChildren =
+  WebsiteRoute._addFileChildren(WebsiteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -395,7 +559,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SetupRoute: SetupRoute,
   WaiterRoute: WaiterRoute,
-  WebsiteRoute: WebsiteRoute,
+  WebsiteRoute: WebsiteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

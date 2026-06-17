@@ -16,6 +16,7 @@ const NAV: { to: string; label: string; roles: Role[] }[] = [
   { to: "/expenses", label: "Expenses", roles: ["admin", "storekeeper"] },
   { to: "/recipes", label: "Recipes", roles: ["admin"] },
   { to: "/menu", label: "Menu", roles: ["admin"] },
+  { to: "/reservations", label: "Reservations", roles: ["admin", "cashier"] },
   { to: "/reports", label: "Reports", roles: ["admin", "storekeeper"] },
   { to: "/admin/users", label: "Users", roles: ["admin"] },
   { to: "/admin/tables", label: "Tables", roles: ["admin"] },

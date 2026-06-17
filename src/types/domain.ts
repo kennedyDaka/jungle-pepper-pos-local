@@ -100,11 +100,32 @@ export interface Table {
 export interface MenuItem {
   id: string;
   name: string;
+  slug: string;
   category_id: string;
   price: number;
   description?: string | null;
   active: boolean;
   sort_order: number;
+  kind: "normal" | "pizza" | "pasta";
+  featured: boolean;
+  spicy: boolean;
+  vegetarian: boolean;
+  image_url: string | null;
+  category_name?: string | null;
+}
+
+export interface Reservation {
+  id: string;
+  customer_name: string;
+  phone: string;
+  email: string | null;
+  reservation_date: string;
+  reservation_time: string;
+  guests: number;
+  occasion: string | null;
+  notes: string | null;
+  status: "pending" | "confirmed" | "cancelled";
+  created_at: string;
 }
 
 export interface MenuItemView extends MenuItem {

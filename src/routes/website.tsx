@@ -1,39 +1,117 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
-import { Card } from "@/components/ui/card";
-import { LoadingState } from "@/components/DataState";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Minus, X, ShoppingCart, Printer } from "lucide-react";
-import { MWK } from "@/lib/format";
-import { menuService } from "@/services/menuService";
-import { orderService } from "@/services/orderService";
+import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/services/repositories/supabaseClient";
-import { toast } from "sonner";
-import logo from "@/assets/jungle-pepper-logo.png";
+import { WebsiteCartProvider } from "@/lib/website-cart";
+import { CartButton, CartDrawer, OrderBar } from "@/components/website/CartDrawer";
+import { IMAGES } from "@/lib/website-images";
+import { useState } from "react";
+import { Menu, X } from "lucide-react";
 
 export const Route = createFileRoute("/website")({
-  component: WebsitePage,
+  component: WebsiteLayout,
 });
+
+function WebsiteLayout() {
+  const { data: branch } = useQuery({
+    queryKey: ["website-branch"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("branches")
+        .select("id, name")
+        .eq("active", true)
+        .order("name")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id: string; name: string } | null;
+    },
+  });
+
+  const branchId = branch?.id ?? null;
+
+  return (
+    <WebsiteCartProvider>
+      <div className="website-layout min-h-screen">
+        <SiteHeader />
+        <main className="min-h-[60vh] pb-24">
+          <Outlet />
+        </main>
+        <SiteFooter />
+        <OrderBar />
+        <CartDrawer branchId={branchId} />
+      </div>
+    </WebsiteCartProvider>
+  );
+}
+
+function SiteHeader() {
+  const [open, setOpen] = useState(false);
+  return (
+    <header className="sticky top-0 z-40 border-b border-[color:var(--border)] bg-[color:var(--brand-paper)]/95 backdrop-blur">
+      <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2.5 sm:px-4">
+        <Link to="/website" className="flex min-w-0 items-center gap-2">
+          <img src={IMAGES.logo} alt="Jungle Pepper" className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" />
+          <span className="font-display text-lg leading-none tracking-wide text-[color:var(--brand-red)] sm:text-2xl">JUNGLE PEPPER</span>
+        </Link>
+        <nav className="hidden md:flex items-center justify-end gap-5 text-sm font-semibold uppercase tracking-wider">
+          <Link to="/website" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Home</Link>
+          <Link to="/website/menu" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Menu</Link>
+          <Link to="/website/reservations" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Reserve</Link>
+          <Link to="/website/about" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>About</Link>
+          <Link to="/website/contact" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Contact</Link>
+        </nav>
+        <div className="flex items-center gap-1.5 justify-self-end">
+          <CartButton />
+          <button onClick={() => setOpen((v) => !v)} aria-label="Menu" className="grid h-9 w-9 place-items-center rounded-full md:hidden hover:bg-black/5">
+            {open ? <X size={18} /> : <Menu size={18} />}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <nav className="md:hidden border-t border-[color:var(--border)] bg-[color:var(--brand-paper)]">
+          <div className="mx-auto grid max-w-6xl gap-1 px-3 py-2 text-sm font-semibold uppercase tracking-wider">
+            {[["/website","Home"],["/website/menu","Menu"],["/website/reservations","Reserve"],["/website/about","About"],["/website/contact","Contact"]].map(([to,label]) => (
+              <Link key={to} to={to} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 hover:bg-[color:var(--brand-yellow)]/30" activeProps={{ className: "text-[color:var(--brand-red)] bg-[color:var(--brand-yellow)]/40" }}>{label}</Link>
+            ))}
+          </div>
+        </nav>
+      )}
+    </header>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer className="mt-12 bg-[color:var(--brand-ink)] text-[color:var(--brand-paper)]">
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:grid-cols-3">
+        <div>
+          <div className="flex items-center gap-3">
+            <img src={IMAGES.logo} alt="" className="h-12 w-12" />
+            <span className="font-display text-xl">JUNGLE PEPPER</span>
+          </div>
+          <p className="mt-3 text-sm opacity-80">Malawi's own pizza & authentic Portuguese cuisine.</p>
+        </div>
+        <div className="text-sm">
+          <h4 className="font-display text-base text-[color:var(--brand-yellow)]">Visit</h4>
+          <p className="mt-2 opacity-90">Kidney Crescent Road,<br/>Opposite O. Jussabs, Next to OMG.<br/>Blantyre, Malawi.</p>
+          <p className="mt-3 opacity-90">Wed – Sun · 11:30 – 21:00<br/>Mon & Tue · Closed</p>
+        </div>
+        <div className="text-sm">
+          <h4 className="font-display text-base text-[color:var(--brand-yellow)]">Contact</h4>
+          <p className="mt-2"><a href="tel:+265999826229" className="hover:underline">0999 826 229</a></p>
+          <p><a href="tel:+265888826229" className="hover:underline">0888 826 229</a></p>
+        </div>
+      </div>
+      <div className="border-t border-white/10 py-5">
+        <a href="https://operonsystems.com" target="_blank" rel="noreferrer" className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1 px-4 text-center opacity-80 transition hover:opacity-100">
+          <span className="text-[10px] uppercase tracking-[0.25em] opacity-70">Powered by</span>
+          <img src={IMAGES.operon} alt="Operon Systems" className="h-10 w-auto brightness-0 invert" />
+        </a>
+        <p className="mt-4 text-center text-[11px] opacity-60">© {new Date().getFullYear()} Jungle Pepper. All rights reserved.</p>
+      </div>
+    </footer>
+  );
+}
 
 type CartLine = {
   key: string;

@@ -9,6 +9,7 @@ export { productsService } from "./productsService";
 export { productionService } from "./productionService";
 export { recipeService } from "./recipeService";
 export { reportService } from "./reportService";
+export { reservationService } from "./reservationService";
 export { salesService } from "./salesService";
 export { suppliersService } from "./suppliersService";
 export { usersService } from "./usersService";

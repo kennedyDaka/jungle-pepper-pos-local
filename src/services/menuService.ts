@@ -1,7 +1,22 @@
 import { supabase } from "@/services/repositories/supabaseClient";
 import { raiseIfError } from "@/services/repositories/supabaseErrors";
-import type { Category, MenuItemView, Modifier } from "@/types/domain";
+import type { Category, MenuItem, MenuItemView, Modifier } from "@/types/domain";
 import type { Database } from "@/types/database";
+
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function deriveKind(categoryName: string | null): MenuItem["kind"] {
+  const name = categoryName?.toLowerCase() ?? "";
+  if (name === "pizza") return "pizza";
+  if (name === "pastas") return "pasta";
+  return "normal";
+}
 
 type MenuRowWithRelations = Database["public"]["Tables"]["menu_items"]["Row"] & {
   categories?: Pick<Category, "name"> | null;
@@ -17,6 +32,26 @@ function toMenuItem(row: MenuRowWithRelations): MenuItemView {
     active: row.active,
     sort_order: row.sort_order,
     categories: row.categories ? { name: row.categories.name } : undefined,
+  };
+}
+
+function toWebsiteMenuItem(row: MenuRowWithRelations): MenuItem {
+  const catName = row.categories?.name ?? null;
+  return {
+    id: row.id,
+    name: row.name,
+    slug: slugify(row.name),
+    category_id: row.category_id,
+    price: Number(row.price),
+    description: row.description,
+    active: row.active,
+    sort_order: row.sort_order,
+    kind: deriveKind(catName),
+    featured: false,
+    spicy: false,
+    vegetarian: false,
+    image_url: null,
+    category_name: catName,
   };
 }
 
@@ -74,6 +109,31 @@ export const menuService = {
           }
         : undefined,
     }));
+  },
+
+  async listWebsiteMenuItems() {
+    let query = supabase
+      .from("menu_items")
+      .select("*, categories!inner(name)")
+      .eq("categories.kind", "menu")
+      .eq("active", true)
+      .order("sort_order");
+
+    const { data, error } = await query;
+    raiseIfError(error, "Could not load menu items");
+    return ((data ?? []) as MenuRowWithRelations[]).map(toWebsiteMenuItem);
+  },
+
+  async getWebsiteMenuItemById(id: string) {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select("*, categories(name)")
+      .eq("id", id)
+      .eq("active", true)
+      .maybeSingle();
+
+    raiseIfError(error, "Could not load menu item");
+    return data ? toWebsiteMenuItem(data as MenuRowWithRelations) : null;
   },
 
   async deleteMenuItem(id: string) {

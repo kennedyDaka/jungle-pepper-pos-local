@@ -120,3 +120,63 @@
     font-size: 11px;
   }
 }
+
+/* ============================================================
+   Website customer portal — light theme overrides
+   Scoped to .website-layout so POS dark theme is unaffected.
+   ============================================================ */
+.website-layout {
+  --background: oklch(0.98 0.015 85);
+  --foreground: oklch(0.22 0.02 60);
+  --card: oklch(0.995 0.008 85);
+  --card-foreground: oklch(0.22 0.02 60);
+  --popover: oklch(0.995 0.008 85);
+  --popover-foreground: oklch(0.22 0.02 60);
+  --primary: oklch(0.55 0.21 27);
+  --primary-foreground: oklch(0.985 0.01 85);
+  --secondary: oklch(0.88 0.04 80);
+  --secondary-foreground: oklch(0.22 0.02 60);
+  --muted: oklch(0.94 0.02 85);
+  --muted-foreground: oklch(0.45 0.03 60);
+  --accent: oklch(0.88 0.18 95);
+  --accent-foreground: oklch(0.22 0.02 60);
+  --destructive: oklch(0.55 0.22 27);
+  --destructive-foreground: oklch(0.985 0.01 85);
+  --border: oklch(0.88 0.03 75);
+  --input: oklch(0.88 0.03 75);
+  --ring: oklch(0.55 0.21 27);
+  --brand-red: oklch(0.55 0.21 27);
+  --brand-red-deep: oklch(0.44 0.18 27);
+  --brand-yellow: oklch(0.92 0.19 100);
+  --brand-green: oklch(0.65 0.18 145);
+  --brand-paper: oklch(0.97 0.025 85);
+  --brand-ink: oklch(0.20 0.02 60);
+  --brand-muted: oklch(0.45 0.03 60);
+  --gradient-hero: linear-gradient(135deg, oklch(0.30 0.04 40) 0%, oklch(0.22 0.02 60) 100%);
+  --shadow-warm: 0 20px 50px -20px oklch(0.55 0.21 27 / 0.35);
+  --shadow-card: 0 8px 30px -12px oklch(0.30 0.04 40 / 0.25);
+  --font-display: "Anton", "Bebas Neue", Impact, system-ui, sans-serif;
+  --font-script: "Caveat", "Brush Script MT", cursive;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+
+  background-color: var(--brand-paper);
+  color: var(--brand-ink);
+  font-family: var(--font-body);
+}
+
+.website-layout .font-display { font-family: var(--font-display); }
+.website-layout .font-script { font-family: var(--font-script); }
+
+.website-layout .menu-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px dashed color-mix(in oklab, var(--brand-ink) 18%, transparent);
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.website-layout .menu-line:hover {
+  background-color: color-mix(in oklab, var(--brand-yellow) 35%, transparent);
+  transform: translateX(4px);
+}
