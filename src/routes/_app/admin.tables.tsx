@@ -41,13 +41,23 @@ function AdminTablesPage() {
   const branchMemberships = useQuery({
     queryKey: ["auth", "branch-memberships"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: membershipData, error: membershipError } = await supabase
         .from("branch_memberships")
         .select("branch_id, branches!inner(id, name)")
         .eq("active", true)
         .maybeSingle();
-      if (error) throw error;
-      return data as { branch_id: string; branches: { id: string; name: string } } | null;
+      if (membershipError) throw membershipError;
+      if (membershipData) return membershipData as { branch_id: string; branches: { id: string; name: string } };
+      const { data: branchData, error: branchError } = await supabase
+        .from("branches")
+        .select("id, name")
+        .eq("active", true)
+        .order("name")
+        .limit(1)
+        .maybeSingle();
+      if (branchError) throw branchError;
+      if (!branchData) return null;
+      return { branch_id: branchData.id, branches: { id: branchData.id, name: branchData.name } };
     },
   });
 

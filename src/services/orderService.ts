@@ -9,6 +9,7 @@ export type WaiterOrderItem = {
   takeaway?: boolean;
   note?: string | null;
   modifiers: Array<{ modifier_id: string }>;
+  unit_price?: number | null;
   omissions?: Array<{ recipe_id?: string | null; item_id?: string | null }>;
   packaging?: Array<{ option_id: string; unit_price: number; qty_per_item?: number }> | null;
 };
@@ -32,6 +33,26 @@ export type PaymentInput = {
 };
 
 export const orderService = {
+  async createPosOrder(
+    payload: WaiterOrderPayload,
+    branchId: string,
+    payments: PaymentInput[],
+    options?: { physicalOrderNo?: string; saleAt?: string; saleType?: string; staffMealReason?: string },
+  ) {
+    const { data, error } = await supabase.rpc("create_pos_order", {
+      _payload: payload as unknown as Json,
+      _branch_id: branchId,
+      _payments: payments as unknown as Json,
+      _physical_order_no: options?.physicalOrderNo ?? undefined,
+      _sale_at: options?.saleAt ?? undefined,
+      _sale_type: options?.saleType ?? "regular",
+      _staff_meal_reason: options?.staffMealReason ?? undefined,
+    });
+    raiseIfError(error, "Could not create POS order");
+    if (!data) throw new Error("Supabase did not return an order id");
+    return data;
+  },
+
   async createWaiterOrder(payload: WaiterOrderPayload, branchId: string, tableId?: string, customerId?: string) {
     const { data, error } = await supabase.rpc("create_waiter_order", {
       _payload: payload as unknown as Json,
@@ -74,7 +95,7 @@ export const orderService = {
   async processPayment(
     orderId: string,
     payments: PaymentInput[],
-    options?: { physicalOrderNo?: string; saleAt?: string; discount?: number },
+    options?: { physicalOrderNo?: string; saleAt?: string; discount?: number; saleType?: string; staffMealReason?: string },
   ) {
     const { data, error } = await supabase.rpc("process_payment", {
       _order_id: orderId,
@@ -82,6 +103,8 @@ export const orderService = {
       _physical_order_no: options?.physicalOrderNo ?? undefined,
       _sale_at: options?.saleAt ?? undefined,
       _discount: options?.discount ?? undefined,
+      _sale_type: options?.saleType ?? undefined,
+      _staff_meal_reason: options?.staffMealReason ?? undefined,
     });
     raiseIfError(error, "Could not process payment");
     if (!data) throw new Error("Supabase did not return an order id");
@@ -118,6 +141,8 @@ export const orderService = {
       ...order,
       tables: order.table_label ? { label: order.table_label } : null,
       profiles: order.cashier_name ? { full_name: order.cashier_name, username: null } : null,
+      customer_name: order.customer_name,
+      customer_phone: order.customer_phone,
       order_items: (items ?? []).filter((i: any) => i.order_id === order.id),
     }));
   },

@@ -375,6 +375,11 @@ function PendingOrdersDialog({
                           </div>
                         ))}
                       </div>
+                      {order.customer_name && (
+                        <p className="text-xs text-foreground mt-1">
+                          {order.customer_name}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
+                        </p>
+                      )}
                       {order.note && (
                         <p className="text-xs text-muted-foreground mt-1 italic">{order.note}</p>
                       )}
@@ -836,7 +841,7 @@ function PosPage() {
       const isStaffMeal = Boolean(request.staffMealReason);
       const menuLines = cart.filter(isMenuLine);
       const packagingLines = cart.filter(isPackagingSaleLine);
-      const waiterPayload = {
+      const posPayload = {
         discount: isStaffMeal ? subtotal : discount,
         note: note || null,
         items: menuLines.map((l) => ({
@@ -844,6 +849,7 @@ function PosPage() {
           qty: l.qty,
           takeaway: l.takeaway,
           note: l.note ?? null,
+          unit_price: l.price,
           modifiers: l.modifiers.map((m) => ({ modifier_id: m.id })),
           omissions: l.omissions.map((omission) => ({
             recipe_id: omission.recipe_id,
@@ -863,11 +869,11 @@ function PosPage() {
           unit_price: Number(line.price),
         })),
       };
-      const orderId = await orderService.createWaiterOrder(waiterPayload, branchId);
-      return orderService.processPayment(orderId, request.payments, {
+      return orderService.createPosOrder(posPayload, branchId, request.payments, {
         physicalOrderNo: request.physicalOrderNo.trim(),
         saleAt: request.saleAt,
-        discount: isStaffMeal ? subtotal : discount,
+        saleType: isStaffMeal ? "staff_meal" : "regular",
+        staffMealReason: request.staffMealReason,
       });
     },
     onSuccess: async (orderId, request) => {

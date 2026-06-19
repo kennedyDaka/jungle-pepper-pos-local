@@ -1554,6 +1554,18 @@ export type Database = {
         Args: { _branch_id?: string; _customer_id?: string; _payload: Json };
         Returns: string;
       };
+      create_pos_order: {
+        Args: {
+          _branch_id: string;
+          _payload: Json;
+          _payments: Json;
+          _physical_order_no?: string;
+          _sale_at?: string;
+          _sale_type?: string;
+          _staff_meal_reason?: string;
+        };
+        Returns: string;
+      };
       create_waiter_order: {
         Args: {
           _branch_id: string;
@@ -1585,6 +1597,8 @@ export type Database = {
           _payments: Json;
           _physical_order_no?: string;
           _sale_at?: string;
+          _sale_type?: string;
+          _staff_meal_reason?: string;
         };
         Returns: string;
       };

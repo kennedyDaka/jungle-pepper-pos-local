@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { servingQty, wholeServingQty, isMeasuredBeverage } from "@/lib/beverage";
 import {
   normalizeName,
   itemIndex,
@@ -57,7 +58,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
   ]],
   ["RUMP", [
     { label: "RUMP SLICED BULK (1Kg)", aliases: ["RUMP SLICED (1KG)", "SLICED (1KG)"] },
-    { label: "PREGOS/BITOQUES (120g)", aliases: ["PREGOS/BITOQUES (80G)", "PREGOS/BITOQUES (120G)"] },
+    { label: "PREGOS/BITOQUES (120g)", aliases: ["PREGOS/BITOQUES (80G)", "PREGOS/BITOQUES (120G)", "SLICED 120G"] },
   ]],
   ["MINCE", [
     { label: "MINCE BULK (1Kg)", aliases: ["MINCE BULK (1KG)", "BULK (1KG)"] },
@@ -142,10 +143,10 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     { label: "POMME BREEZE (CIDER)", aliases: ["POME BREEZE CIDER"], menuAliases: ["POME BREEZE"] },
   ]],
   ["WINES - GLASS", [
-    { label: "WINE RED DRY (DRODSTY)", aliases: ["DROSTDY WINE BOTTLE", "DRODSTY WINE BOTTLE"], menuAliases: ["RED DRY (DROSTDY)"] },
-    { label: "WINE RED DRY (OVERMEER)", aliases: ["OVERMEER WINE BOTTLE"], menuAliases: ["RED DRY (OVERMEER)"] },
+    { label: "WINE RED DRY (DRODSTY)", aliases: ["DROSTDY WINE BOTTLE", "DRODSTY WINE BOTTLE", "RED DRY DROSTDY"], menuAliases: ["RED DRY (DROSTDY)"] },
+    { label: "WINE RED DRY (OVERMEER)", aliases: ["OVERMEER WINE BOTTLE", "RED DRY OVERMEER WINE"], menuAliases: ["RED DRY (OVERMEER)"] },
     { label: "WINE RED SWEET", aliases: ["RED SWEET WINE BOTTLE"], menuAliases: ["RED SWEET"] },
-    { label: "WINE WHITE DRY", aliases: ["WHITE WINE BOTTLE"], menuAliases: ["WHITE WINE GLASS"] },
+    { label: "WINE WHITE DRY", aliases: ["WHITE WINE BOTTLE", "WHITE WINE DRY"], menuAliases: ["WHITE WINE GLASS"] },
   ]],
   ["LIQUORS + MORE", []],
   ["BRANDY", [
@@ -312,11 +313,12 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       let rawUsage = 0;
       let rawClosing = 0;
       let hasStock = false;
+      let item: MatrixItem | undefined;
 
       if (isMenu) {
         rawUsage = countMenuSales(label, input.sales);
       } else if (menuAliases !== undefined) {
-        const item = resolveItem(input.items, exact, label, aliases);
+        item = resolveItem(input.items, exact, label, aliases);
         if (item) {
           const summary = summarizeStock(item, input.movements, input.ledgerMovements);
           rawOpening = summary.opening;
@@ -335,9 +337,17 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
         if (rawUsage === 0 && item) {
           const summary = summarizeStock(item, input.movements, input.ledgerMovements);
           rawUsage = summary.usage;
+          if (isMeasuredBeverage(item)) {
+            rawUsage = wholeServingQty(servingQty(rawUsage, item) ?? 0);
+          }
+        }
+        if (item && isMeasuredBeverage(item)) {
+          rawOpening = wholeServingQty(servingQty(rawOpening, item) ?? 0);
+          rawPurchases = wholeServingQty(servingQty(rawPurchases, item) ?? 0);
+          rawClosing = wholeServingQty(servingQty(rawClosing, item) ?? 0);
         }
       } else {
-        const item = resolveItem(input.items, exact, label, aliases);
+        item = resolveItem(input.items, exact, label, aliases);
         if (item) {
           const summary = summarizeStock(item, input.movements, input.ledgerMovements);
           rawOpening = summary.opening;
@@ -345,6 +355,12 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
           rawUsage = summary.usage;
           rawClosing = summary.closing;
           hasStock = true;
+        }
+        if (item && isMeasuredBeverage(item)) {
+          rawOpening = wholeServingQty(servingQty(rawOpening, item) ?? 0);
+          rawPurchases = wholeServingQty(servingQty(rawPurchases, item) ?? 0);
+          rawUsage = wholeServingQty(servingQty(rawUsage, item) ?? 0);
+          rawClosing = wholeServingQty(servingQty(rawClosing, item) ?? 0);
         }
       }
 

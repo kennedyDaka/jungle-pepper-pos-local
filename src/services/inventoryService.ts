@@ -202,6 +202,27 @@ export const inventoryService = {
     return data;
   },
 
+  async applyStockMovementWithDate(input: {
+    itemId: string;
+    type: StockMovementType;
+    qty: number;
+    unitCost: number;
+    note?: string;
+    createdAt: string;
+  }) {
+    const { data, error } = await supabase.rpc("apply_stock_movement_with_date", {
+      _item_id: input.itemId,
+      _type: input.type,
+      _qty: input.qty,
+      _unit_cost: input.unitCost,
+      _note: input.note || undefined,
+      _created_at: input.createdAt,
+    });
+
+    raiseIfError(error, "Could not apply stock movement with date");
+    return data;
+  },
+
   async listStockMovements(itemId: string) {
     const { data, error } = await supabase
       .from("stock_movement_details")

@@ -621,6 +621,7 @@ function MovementDialog({
   const [qty, setQty] = useState<number>(0);
   const [cost, setCost] = useState<number>(Number(item.avg_cost) || 0);
   const [note, setNote] = useState("");
+  const [createdAt, setCreatedAt] = useState<string>(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     if (qty === 0 || (forceNegative && qty < 0) || (!forceNegative && !allowNegative && qty < 0)) {
@@ -633,12 +634,13 @@ function MovementDialog({
     }
     setBusy(true);
     try {
-      await inventoryService.applyStockMovement({
+      await inventoryService.applyStockMovementWithDate({
         itemId: item.id,
         type: type as any,
         qty: forceNegative ? -Math.abs(qty) : qty,
         unitCost: cost,
         note: note || "",
+        createdAt: createdAt,
       });
       toast.success("Saved");
       onDone();
@@ -679,6 +681,14 @@ function MovementDialog({
               step="0.01"
               value={cost}
               onChange={(e) => setCost(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <Label>Date</Label>
+            <Input
+              type="date"
+              value={createdAt}
+              onChange={(e) => setCreatedAt(e.target.value)}
             />
           </div>
           <div>
