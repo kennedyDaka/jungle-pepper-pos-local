@@ -99,7 +99,7 @@ const FOOD_ROWS: MatrixRowDef[] = [
   {
     kind: "stock",
     label: "PREGOS/BITOQUES (120g)",
-    aliases: ["PREGOS/BITOQUES (80G)", "PREGOS/BITOQUES (120G)", "SLICED 120G"],
+    aliases: ["SLICED 120G"],
     highlight: true,
   },
   { kind: "section", label: "M I N C E " },
@@ -166,7 +166,7 @@ const FOOD_ROWS: MatrixRowDef[] = [
   {
     kind: "stock",
     label: "BURGER (6 each pkt)",
-    aliases: ["BURGER BUNS", "BREAD BURGER PKTS"],
+    aliases: ["BURGER BUNS"],
     highlight: true,
   },
   { kind: "stock", label: "LOAF GARLIC", aliases: ["LOAF PKTS"], highlight: true },
@@ -238,11 +238,11 @@ const DRINK_ROWS: DrinkRowDef[] = [
   {
     kind: "stock",
     label: "WINE RED DRY (DRODSTY)",
-    aliases: ["DROSTDY WINE BOTTLE", "DRODSTY WINE BOTTLE", "RED DRY DROSTDY"],
+    aliases: ["RED DRY DROSTDY"],
   },
-  { kind: "stock", label: "WINE RED DRY (OVERMEER)", aliases: ["OVERMEER WINE BOTTLE", "RED DRY OVERMEER WINE"] },
+  { kind: "stock", label: "WINE RED DRY (OVERMEER)", aliases: ["RED DRY OVERMEER WINE"] },
   { kind: "stock", label: "WINE RED SWEET", aliases: ["RED SWEET WINE BOTTLE"] },
-  { kind: "stock", label: "WINE WHITE DRY", aliases: ["WHITE WINE BOTTLE", "WHITE WINE DRY"] },
+  { kind: "stock", label: "WINE WHITE DRY", aliases: ["WHITE WINE DRY"] },
   { kind: "section", label: "B E E R S" },
   { kind: "stock", label: "CHILL", aliases: ["CHILL BEER"] },
   { kind: "stock", label: "GREEN", aliases: ["GREEN BEER"] },

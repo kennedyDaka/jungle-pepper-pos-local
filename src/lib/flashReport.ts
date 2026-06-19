@@ -58,7 +58,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
   ]],
   ["RUMP", [
     { label: "RUMP SLICED BULK (1Kg)", aliases: ["RUMP SLICED (1KG)", "SLICED (1KG)"] },
-    { label: "PREGOS/BITOQUES (120g)", aliases: ["PREGOS/BITOQUES (80G)", "PREGOS/BITOQUES (120G)", "SLICED 120G"] },
+    { label: "PREGOS/BITOQUES (120g)", aliases: ["SLICED 120G"] },
   ]],
   ["MINCE", [
     { label: "MINCE BULK (1Kg)", aliases: ["MINCE BULK (1KG)", "BULK (1KG)"] },
@@ -83,7 +83,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     { label: "DOUGH PIZZA BASES (Thick)", aliases: ["DOUGH PIZZA BASES THICK"] },
   ]],
   ["BREAD", [
-    { label: "BREAD BURGER (6 each pkt)", aliases: ["BREAD BURGER PKTS", "BURGER (6 EACH PKT)", "BURGER BUNS"] },
+    { label: "BREAD BURGER (6 each pkt)", aliases: ["BURGER (6 EACH PKT)", "BURGER BUNS"] },
   ]],
   ["RICE", [
     { label: "BULK (Kg)", aliases: ["RICE BULK"] },
@@ -143,10 +143,10 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     { label: "POMME BREEZE (CIDER)", aliases: ["POME BREEZE CIDER"], menuAliases: ["POME BREEZE"] },
   ]],
   ["WINES - GLASS", [
-    { label: "WINE RED DRY (DRODSTY)", aliases: ["DROSTDY WINE BOTTLE", "DRODSTY WINE BOTTLE", "RED DRY DROSTDY"], menuAliases: ["RED DRY (DROSTDY)"] },
-    { label: "WINE RED DRY (OVERMEER)", aliases: ["OVERMEER WINE BOTTLE", "RED DRY OVERMEER WINE"], menuAliases: ["RED DRY (OVERMEER)"] },
+    { label: "WINE RED DRY (DRODSTY)", aliases: ["RED DRY DROSTDY"], menuAliases: ["RED DRY (DROSTDY)"] },
+    { label: "WINE RED DRY (OVERMEER)", aliases: ["RED DRY OVERMEER WINE"], menuAliases: ["RED DRY (OVERMEER)"] },
     { label: "WINE RED SWEET", aliases: ["RED SWEET WINE BOTTLE"], menuAliases: ["RED SWEET"] },
-    { label: "WINE WHITE DRY", aliases: ["WHITE WINE BOTTLE", "WHITE WINE DRY"], menuAliases: ["WHITE WINE GLASS"] },
+    { label: "WINE WHITE DRY", aliases: ["WHITE WINE DRY"], menuAliases: ["WHITE WINE GLASS"] },
   ]],
   ["LIQUORS + MORE", []],
   ["BRANDY", [
