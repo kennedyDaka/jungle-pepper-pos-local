@@ -41,7 +41,6 @@ export type FlashReportInput = {
   movements: MatrixMovement[];
   ledgerMovements: MatrixMovement[];
   sales: MatrixOrder[];
-  menuItemCategoryMap?: Record<string, string>;
 };
 
 type FlashStockItem = {
@@ -203,21 +202,20 @@ function countMenuSales(label: string, sales: MatrixOrder[]) {
   return qty;
 }
 
-function buildSoldAs(itemId: string, movements: MatrixMovement[], catMap: Record<string, string>): string {
+function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
   const agg = new Map<string, number>();
   for (const movement of movements) {
     if (movement.item_id !== itemId) continue;
     if ((movement.qty ?? 0) >= 0) continue;
     const names = (movement.menu_item_names ?? "").split(",").map((s) => s.trim()).filter(Boolean);
     for (const name of names) {
-      const cat = catMap[name] || "Other";
-      agg.set(cat, (agg.get(cat) ?? 0) + 1);
+      agg.set(name, (agg.get(name) ?? 0) + 1);
     }
   }
   if (agg.size === 0) return "";
   return [...agg.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([cat, qty]) => `${cat} x${qty}`)
+    .map(([name, qty]) => `${name} x${qty}`)
     .join(", ");
 }
 
@@ -392,9 +390,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       const rawExpected = hasStock ? rawOpening + rawPurchases - rawUsage : 0;
       const rawVariance = hasStock ? rawClosing - rawExpected : 0;
 
-      const soldAs = itemId && input.menuItemCategoryMap
-        ? buildSoldAs(itemId, input.movements, input.menuItemCategoryMap)
-        : "";
+      const soldAs = itemId ? buildSoldAs(itemId, input.movements) : "";
 
       const r = ws.addRow([
         label,

@@ -1472,7 +1472,10 @@ function SalesHistoryDialog({
           </div>
 
           {(() => {
-            const missingSummary = missingOrderNumbersSummary(orders);
+            const dayOrders = orders.filter((o: any) =>
+              o.created_at?.startsWith(to),
+            );
+            const missingSummary = missingOrderNumbersSummary(dayOrders);
             return missingSummary ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
                 {missingSummary}
