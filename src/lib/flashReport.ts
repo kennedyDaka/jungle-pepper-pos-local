@@ -9,6 +9,7 @@ import {
   type MatrixMovement,
   type MatrixOrder,
 } from "@/lib/stockMatrixReport";
+import { findMissingOrderNumbers } from "@/lib/orderSequence";
 
 const HEADER_FILL: ExcelJS.Fill = {
   type: "pattern",
@@ -40,6 +41,7 @@ export type FlashReportInput = {
   movements: MatrixMovement[];
   ledgerMovements: MatrixMovement[];
   sales: MatrixOrder[];
+  menuItemCategoryMap?: Record<string, string>;
 };
 
 type FlashStockItem = {
@@ -201,6 +203,24 @@ function countMenuSales(label: string, sales: MatrixOrder[]) {
   return qty;
 }
 
+function buildSoldAs(itemId: string, movements: MatrixMovement[], catMap: Record<string, string>): string {
+  const agg = new Map<string, number>();
+  for (const movement of movements) {
+    if (movement.item_id !== itemId) continue;
+    if ((movement.qty ?? 0) >= 0) continue;
+    const names = (movement.menu_item_names ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    for (const name of names) {
+      const cat = catMap[name] || "Other";
+      agg.set(cat, (agg.get(cat) ?? 0) + 1);
+    }
+  }
+  if (agg.size === 0) return "";
+  return [...agg.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([cat, qty]) => `${cat} x${qty}`)
+    .join(", ");
+}
+
 export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Jungle Pepper POS";
@@ -215,6 +235,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   ws.getColumn(5).width = 20;
   ws.getColumn(6).width = 22;
   ws.getColumn(7).width = 16;
+  ws.getColumn(8).width = 48;
 
   const titleRow = ws.addRow(["JUNGLE PEPPER — DAILY FLASH REPORT"]);
   titleRow.getCell(1).font = TITLE_FONT;
@@ -291,6 +312,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     "Expected Closing Stock",
     "Tonight's Actual Count",
     "Variance",
+    "Sold As",
   ]);
   stockHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = HEADER_FILL;
@@ -314,12 +336,14 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       let rawClosing = 0;
       let hasStock = false;
       let item: MatrixItem | undefined;
+      let itemId: string | undefined;
 
       if (isMenu) {
         rawUsage = countMenuSales(label, input.sales);
       } else if (menuAliases !== undefined) {
         item = resolveItem(input.items, exact, label, aliases);
         if (item) {
+          itemId = item.id;
           const summary = summarizeStock(item, input.movements, input.ledgerMovements);
           rawOpening = summary.opening;
           rawPurchases = summary.purchase;
@@ -349,6 +373,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       } else {
         item = resolveItem(input.items, exact, label, aliases);
         if (item) {
+          itemId = item.id;
           const summary = summarizeStock(item, input.movements, input.ledgerMovements);
           rawOpening = summary.opening;
           rawPurchases = summary.purchase;
@@ -367,6 +392,10 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       const rawExpected = hasStock ? rawOpening + rawPurchases - rawUsage : 0;
       const rawVariance = hasStock ? rawClosing - rawExpected : 0;
 
+      const soldAs = itemId && input.menuItemCategoryMap
+        ? buildSoldAs(itemId, input.movements, input.menuItemCategoryMap)
+        : "";
+
       const r = ws.addRow([
         label,
         stockCell(rawOpening),
@@ -375,9 +404,10 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
         isMenu ? null : stockCell(rawExpected),
         isMenu ? null : stockCell(rawClosing),
         isMenu ? null : stockCell(rawVariance),
+        soldAs || null,
       ]);
 
-      for (let c = 1; c <= 7; c++) {
+      for (let c = 1; c <= 8; c++) {
         r.getCell(c).border = BORDER_THIN;
       }
 
@@ -390,6 +420,26 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       });
     });
   });
+
+  ws.addRow([]);
+  ws.addRow([]);
+
+  const s3Title = ws.addRow(["3. MISSING ORDER NUMBERS"]);
+  s3Title.getCell(1).font = { bold: true, size: 12, underline: "single" };
+  ws.addRow([]);
+
+  const missingNos = findMissingOrderNumbers(input.sales);
+  if (missingNos.length === 0) {
+    ws.addRow(["No missing order numbers detected."]);
+  } else {
+    const chunkSize = 20;
+    for (let i = 0; i < missingNos.length; i += chunkSize) {
+      const chunk = missingNos.slice(i, i + chunkSize);
+      ws.addRow([`Missing: ${chunk.join(", ")}`]);
+    }
+    ws.addRow([]);
+    ws.addRow([`Total missing order numbers: ${missingNos.length}`]);
+  }
 
   return wb;
 }

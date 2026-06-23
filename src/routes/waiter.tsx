@@ -259,6 +259,10 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
     addToCart(extra.dbName, extra.name, resolvedPrice, []);
   };
 
+  const addDbItem = (dbItem: { name: string; id: string; price: number }) => {
+    addToCart(dbItem.name, dbItem.name, Number(dbItem.price), []);
+  };
+
   const addToCart = (dbName: string, displayName: string, price: number, modifiers: { id: string; name: string; price_delta: number }[]) => {
     const dbItem = itemsByName[dbName.toLowerCase()];
     const menuItemId = dbItem?.id ?? "";
@@ -356,6 +360,7 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
             onClick={() => setCrustDialog({ itemKey: "test", name: "", dbName: "", price: 0 })}
             style={{ display: "none" }}
           />
+          <ExtrasFolder items={items.data ?? []} onAdd={addDbItem} itemsLoading={items.isLoading} livePrice={livePrice} />
           <DrinksFolder onAdd={addExtraItem} itemsLoading={items.isLoading} livePrice={livePrice} />
           {Array.from({ length: TOTAL_PAGES }).map((_, page) => (
             <MenuPage key={page} page={page} onAdd={addItem} livePrice={livePrice} />
@@ -584,6 +589,65 @@ function DrinksFolder({ onAdd, itemsLoading, livePrice }: { onAdd: (id: string) 
               </div>
             </section>
           ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const EXTRAS_CATEGORIES = ["Dairy", "Meats", "Veggie", "Sauces"];
+
+function ExtrasFolder({ items, itemsLoading, livePrice, onAdd }: { items: any[]; itemsLoading: boolean; livePrice: (dbName: string) => number | undefined; onAdd: (item: any) => void }) {
+  const grouped = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const item of items) {
+      const cat = item.categories?.name;
+      if (cat && EXTRAS_CATEGORIES.includes(cat)) {
+        if (!map[cat]) map[cat] = [];
+        map[cat].push(item);
+      }
+    }
+    return map;
+  }, [items]);
+  const count = Object.values(grouped).reduce((s, arr) => s + arr.length, 0);
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button type="button" className="group flex w-full items-center gap-4 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:border-primary/60 hover:bg-primary/5 active:scale-[0.997]">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
+            <ChefHat className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-bold tracking-tight">Extras</h2>
+            <p className="text-xs text-muted-foreground">{count} items</p>
+          </div>
+          <span className="rounded-full border border-border bg-secondary/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground">Open</span>
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><ChefHat className="h-5 w-5 text-primary" /> Extras</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-5 pt-2">
+          {EXTRAS_CATEGORIES.map((cat) => {
+            const catItems = grouped[cat] ?? [];
+            if (catItems.length === 0) return null;
+            return (
+              <section key={cat}>
+                <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-primary/90">{cat}</h3>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {catItems.map((it: any) => (
+                    <button key={it.id} onClick={() => onAdd(it)}
+                      disabled={itemsLoading}
+                      className="flex flex-col items-start gap-0.5 rounded-md border border-border/60 bg-secondary/30 p-2 text-left transition hover:border-primary/60 hover:bg-primary/10 active:scale-[0.98]">
+                      <span className="line-clamp-2 text-xs font-medium leading-tight">{it.name}</span>
+                      <span className="text-[11px] font-semibold tabular-nums text-primary">{formatMK(livePrice(it.name) ?? Number(it.price))}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </DialogContent>
     </Dialog>

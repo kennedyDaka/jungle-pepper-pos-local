@@ -38,6 +38,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { MWK, fmtQty, paymentMethodLabel } from "@/lib/format";
+import { missingOrderNumbersSummary } from "@/lib/orderSequence";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
 import { authService } from "@/services/authService";
 import { menuService } from "@/services/menuService";
@@ -1469,6 +1470,15 @@ function SalesHistoryDialog({
               />
             </div>
           </div>
+
+          {(() => {
+            const missingSummary = missingOrderNumbersSummary(orders);
+            return missingSummary ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                {missingSummary}
+              </div>
+            ) : null;
+          })()}
 
           {loading && <LoadingState label="Loading sales history..." />}
           {error ? <ErrorState error={error} label="Could not load sales history" /> : null}

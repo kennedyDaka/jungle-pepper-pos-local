@@ -58,6 +58,7 @@ const POS_CATEGORY_GROUPS = [
   { id: "soft-drinks",       label: "SOFT DRINKS" },
   { id: "juices-mocktails",  label: "JUICES / MOCKTAILS" },
   { id: "liquor",            label: "LIQUOR" },
+  { id: "extras",            label: "EXTRAS" },
 ];
 
 function normalizeCategoryText(value: string | null | undefined) {
@@ -102,6 +103,9 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
   if (groupId === "liquor") {
     return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(category);
+  }
+  if (groupId === "extras") {
+    return ["DAIRY", "MEATS", "VEGGIE", "SAUCES"].includes(category);
   }
 
   return false;

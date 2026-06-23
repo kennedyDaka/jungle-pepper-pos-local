@@ -39,6 +39,7 @@ import {
   type ReportRow,
 } from "@/lib/xlsxReport";
 import { buildFlashReport } from "@/lib/flashReport";
+import { findMissingOrderNumbers, missingOrderNumbersSummary } from "@/lib/orderSequence";
 import { reportService } from "@/services/reportService";
 import { Download, FileText, Printer, Search } from "lucide-react";
 
@@ -1400,6 +1401,18 @@ function ReportsPage() {
     void writeReportWorkbook(wb, `expenses-${reportDateRange(from, to)}.xlsx`);
   };
 
+  const buildMenuItemCategoryMap = (salesData: any[]): Record<string, string> => {
+    const map: Record<string, string> = {};
+    for (const order of salesData) {
+      for (const line of order.order_items ?? []) {
+        const name = line.menu_items?.name;
+        const cat = line.menu_items?.categories?.name;
+        if (name && cat) map[name] = cat;
+      }
+    }
+    return map;
+  };
+
   const exportFlashXlsx = () => {
     const flashPayAgg = new Map<string, number>();
     (stockMatrixSales.data ?? []).forEach((order: any) => {
@@ -1408,6 +1421,7 @@ function ReportsPage() {
       );
     });
     const paymentTotals = Object.fromEntries(flashPayAgg);
+    const menuItemCategoryMap = buildMenuItemCategoryMap(stockMatrixSales.data ?? []);
     const wb = buildFlashReport({
       reportDate: stockMatrixDate,
       preparedBy: "Kennedy Daka",
@@ -1416,6 +1430,7 @@ function ReportsPage() {
       movements: stockMatrixMovements.data ?? [],
       ledgerMovements: stockMatrixLedgerMovements.data ?? [],
       sales: stockMatrixSales.data ?? [],
+      menuItemCategoryMap,
     });
     void writeReportWorkbook(wb, `flash-report-${stockMatrixDate}.xlsx`, { logo: false });
   };
@@ -1652,6 +1667,10 @@ function ReportsPage() {
           <div className="text-xs uppercase text-muted-foreground">Sales</div>
           <div className="text-2xl font-bold">{MWK(totalSales)}</div>
           <div className="text-xs text-muted-foreground">{sales.data?.length ?? 0} orders</div>
+          {(() => {
+            const missingSummary = missingOrderNumbersSummary(sales.data ?? []);
+            return missingSummary ? <div className="text-xs text-destructive font-medium mt-1">{missingSummary}</div> : null;
+          })()}
         </Card>
         <Card className="p-4">
           <div className="text-xs uppercase text-muted-foreground">Expenses</div>
