@@ -74,8 +74,6 @@ function ReportsPage() {
   const fromIso = new Date(from + "T00:00:00").toISOString();
   const toIso = new Date(to + "T23:59:59").toISOString();
   const reportPeriodLabel = from === to ? from : `${from} to ${to}`;
-  const stockMatrixLedgerToDate = to > today ? to : today;
-  const stockMatrixLedgerToIso = new Date(stockMatrixLedgerToDate + "T23:59:59").toISOString();
 
   const branches = useQuery({
     queryKey: ["rep", "branches"],
@@ -97,19 +95,13 @@ function ReportsPage() {
     queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
   });
 
-  const stockMatrixMovements = useQuery({
-    queryKey: ["rep", "stock-matrix-movements", from, to, branchId],
-    queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
-  });
-
-  const stockMatrixLedgerMovements = useQuery({
-    queryKey: ["rep", "stock-matrix-ledger", from, to, stockMatrixLedgerToDate, branchId],
-    queryFn: () => reportService.listStockMovements(fromIso, stockMatrixLedgerToIso, branchId),
-  });
+  const stockMatrixMovements = stockMovements;
+  const stockMatrixLedgerMovements = stockMovements;
 
   const deductionAudit = useQuery({
     queryKey: ["rep", "deduction-audit", from, to, branchId],
     queryFn: () => reportService.listDeductionAudit(fromIso, toIso, branchId),
+    enabled: selectedReport === "deduction-audit",
   });
 
   const production = useQuery({
@@ -1442,9 +1434,7 @@ function ReportsPage() {
     sales.error ||
     items.error ||
     stockMovements.error ||
-    stockMatrixMovements.error ||
-    stockMatrixLedgerMovements.error ||
-    deductionAudit.error ||
+    (selectedReport === "deduction-audit" ? deductionAudit.error : null) ||
     production.error ||
     expenses.error;
 
@@ -1455,9 +1445,7 @@ function ReportsPage() {
         branches.isLoading ||
         items.isLoading ||
         stockMovements.isLoading ||
-        stockMatrixMovements.isLoading ||
-        stockMatrixLedgerMovements.isLoading ||
-        deductionAudit.isLoading ||
+        (selectedReport === "deduction-audit" && deductionAudit.isLoading) ||
         production.isLoading ||
         expenses.isLoading) && <LoadingState label="Loading live reports..." />}
       {dataError && <ErrorState error={dataError} label="Could not load reports" />}

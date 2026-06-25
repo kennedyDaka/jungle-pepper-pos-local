@@ -48,7 +48,6 @@ type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
   >;
 };
 
-type MovementWithRelations = Database["public"]["Views"]["stock_movement_details"]["Row"];
 type QueryPage<T> = PromiseLike<{ data: T[] | null; error: unknown }>;
 
 type ProductionLineWithRelations = Database["public"]["Tables"]["production_inputs"]["Row"] & {
@@ -73,6 +72,23 @@ type ProductionBatchWithRelations = Database["public"]["Tables"]["production_bat
   production_wastage?: ProductionWasteWithRelations[];
 };
 
+type RawMovementWithRelations = Database["public"]["Tables"]["stock_movements"]["Row"] & {
+  branches?: BranchRelation;
+  profiles?: StaffRelation;
+  items?: {
+    name: string;
+    stock_type: string;
+    bottle_ml: number | null;
+    shot_ml: number | null;
+    units?: Pick<Unit, "code" | "name"> | null;
+  } | null;
+};
+
+type MovementOrderContext = Pick<
+  Database["public"]["Tables"]["orders"]["Row"],
+  "id" | "physical_order_no" | "sale_type" | "source"
+>;
+
 function toStaff(row?: StaffRelation) {
   return row ? { username: row.username, full_name: row.full_name } : null;
 }
@@ -93,6 +109,114 @@ async function fetchAllReportPages<T>(
     if (page.length < REPORT_PAGE_SIZE) break;
   }
   return rows;
+}
+
+function chunks<T>(rows: T[], size = 100) {
+  const out: T[][] = [];
+  for (let index = 0; index < rows.length; index += size) out.push(rows.slice(index, index + size));
+  return out;
+}
+
+async function fetchByOrderIds<T>(
+  orderIds: string[],
+  buildQuery: (ids: string[]) => QueryPage<T>,
+  errorMessage: string,
+) {
+  const rows: T[] = [];
+  for (const idChunk of chunks(orderIds)) {
+    const { data, error } = await buildQuery(idChunk);
+    raiseIfError(error as any, errorMessage);
+    rows.push(...(data ?? []));
+  }
+  return rows;
+}
+
+async function fetchByIds<T>(
+  ids: string[],
+  buildQuery: (ids: string[]) => QueryPage<T>,
+  errorMessage: string,
+) {
+  return fetchByOrderIds(ids, buildQuery, errorMessage);
+}
+
+function groupBy<T>(rows: T[], pickKey: (row: T) => string | null | undefined) {
+  const grouped = new Map<string, T[]>();
+  rows.forEach((row) => {
+    const key = pickKey(row);
+    if (!key) return;
+    grouped.set(key, [...(grouped.get(key) ?? []), row]);
+  });
+  return grouped;
+}
+
+function uniqueText(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value)))).join(", ");
+}
+
+function titleCase(value: string | null | undefined) {
+  return (value ?? "").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function normalizeQtyText(value: string | null | undefined) {
+  if (!value) return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+  return Number.isInteger(numeric) ? String(numeric) : Number(numeric.toFixed(3)).toString();
+}
+
+function parsePosMovementNote(note: string | null | undefined) {
+  const text = note ?? "";
+  const orderId = text.match(/POS order\s+([0-9a-f-]{20,})/i)?.[1] ?? null;
+  const itemMatch = text.match(/\sitem\s+(.+?)\s+x([0-9]+(?:\.[0-9]+)?)/i);
+  const packagingSaleMatch = text.match(/\spackaging sale\s+(.+?)\s+x([0-9]+(?:\.[0-9]+)?)/i);
+  const packagingMatch = text.match(/\spackaging\s+(.+?)\s+x([0-9]+(?:\.[0-9]+)?)/i);
+  const modifierMatch = text.match(/\smodifier\s+(.+)$/i);
+  const itemQty = normalizeQtyText(itemMatch?.[2]);
+  const packagingQty = normalizeQtyText(packagingMatch?.[2] ?? packagingSaleMatch?.[2]);
+  const itemName = itemMatch?.[1]?.trim() ?? null;
+  const packagingName = (packagingMatch?.[1] ?? packagingSaleMatch?.[1])?.trim() ?? null;
+  const modifierName = modifierMatch?.[1]?.trim() ?? null;
+  const menuItem = itemName && itemQty ? `${itemName} x${itemQty}` : itemName;
+  const packagingItem =
+    packagingName && packagingQty ? `${packagingName} x${packagingQty}` : packagingName;
+
+  return {
+    orderId,
+    itemName,
+    itemQty: itemQty === null ? null : Number(itemQty),
+    packagingName,
+    modifierName,
+    menuItem,
+    packagingItem,
+  };
+}
+
+function movementOrderId(movement: RawMovementWithRelations) {
+  if (movement.ref_type === "order") return movement.ref_id;
+  return parsePosMovementNote(movement.note).orderId;
+}
+
+async function loadMovementOrders(movements: RawMovementWithRelations[]) {
+  const orderIds = Array.from(
+    new Set(movements.map(movementOrderId).filter((id): id is string => Boolean(id))),
+  );
+  if (orderIds.length === 0) return new Map<string, MovementOrderContext>();
+
+  const orders = await fetchByIds<MovementOrderContext>(
+    orderIds,
+    (ids) =>
+      supabase
+        .from("orders")
+        .select("id, physical_order_no, sale_type, source")
+        .in("id", ids) as QueryPage<MovementOrderContext>,
+    "Could not load movement order references",
+  );
+
+  return new Map(orders.map((order) => [order.id, order]));
+}
+
+function orderReference(order?: MovementOrderContext | null, fallback?: string | null) {
+  return order?.physical_order_no || (fallback ? fallback.slice(0, 8).toUpperCase() : null);
 }
 
 function toPackagingRow(
@@ -190,7 +314,35 @@ function toOrder(row: OrderWithRelations): OrderView {
   };
 }
 
-function toMovement(movement: MovementWithRelations) {
+function toRawMovement(movement: RawMovementWithRelations, order?: MovementOrderContext | null) {
+  const parsed = parsePosMovementNote(movement.note);
+  const isPosSale =
+    movement.type === "sale" && ["order", "order_item"].includes(movement.ref_type ?? "");
+  const destination = isPosSale
+    ? [
+        parsed.menuItem,
+        parsed.modifierName ? `modifier ${parsed.modifierName}` : null,
+        parsed.packagingItem ? `packaging ${parsed.packagingItem}` : null,
+      ]
+        .filter(Boolean)
+        .join(" - ")
+    : null;
+  const reference = orderReference(order, parsed.orderId ?? movement.ref_id);
+  const sourceLabel = isPosSale
+    ? "MW POS"
+    : movement.ref_type
+      ? titleCase(movement.ref_type)
+      : titleCase(movement.type);
+  const orderType =
+    order?.sale_type === "staff_meal"
+      ? "Staff Meal"
+      : order?.sale_type === "regular"
+        ? null
+        : titleCase(order?.sale_type);
+  const sourceDetail = isPosSale
+    ? uniqueText(["MW POS", reference, orderType, destination]).split(", ").join(" - ")
+    : (movement.note ?? sourceLabel);
+
   return {
     id: movement.id,
     branch_id: movement.branch_id,
@@ -205,35 +357,38 @@ function toMovement(movement: MovementWithRelations) {
     ref_id: movement.ref_id,
     created_by: movement.created_by,
     created_at: movement.created_at,
-    branches: movement.branch_name ? { name: movement.branch_name } : null,
-    profiles:
-      movement.user_username || movement.user_full_name
-        ? { username: movement.user_username ?? "", full_name: movement.user_full_name ?? "" }
-        : null,
-    items: movement.item_name
+    branches: movement.branches ? { name: movement.branches.name } : null,
+    profiles: toStaff(movement.profiles ?? null),
+    items: movement.items?.name
       ? {
-          name: movement.item_name,
-          stock_type: movement.stock_type,
-          bottle_ml: movement.bottle_ml === null ? null : Number(movement.bottle_ml),
-          shot_ml: movement.shot_ml === null ? null : Number(movement.shot_ml),
-          units: movement.unit_code ? { code: movement.unit_code } : undefined,
+          name: movement.items.name,
+          stock_type: movement.items.stock_type,
+          bottle_ml: movement.items.bottle_ml === null ? null : Number(movement.items.bottle_ml),
+          shot_ml: movement.items.shot_ml === null ? null : Number(movement.items.shot_ml),
+          units: movement.items.units ? { code: movement.items.units.code } : undefined,
         }
       : undefined,
-    source_label: movement.source_label,
-    source_detail: movement.source_detail,
-    destination: movement.destination,
-    invoice_no: movement.invoice_no,
-    order_type: movement.order_type,
-    menu_item_names: movement.menu_item_names,
-    menu_categories: movement.menu_categories,
-    modifier_names: movement.modifier_names,
-    order_item_qty: movement.order_item_qty === null ? null : Number(movement.order_item_qty),
-    production_ref: movement.production_ref,
-    production_outputs: movement.production_outputs,
-    production_inputs: movement.production_inputs,
-    expense_ref: movement.expense_ref,
-    expense_category: movement.expense_category,
-    supplier_name: movement.supplier_name,
+    source_label: sourceLabel,
+    source_detail: sourceDetail,
+    destination: destination || movement.note || null,
+    invoice_no: reference,
+    order_type: orderType,
+    menu_item_names: parsed.menuItem,
+    menu_categories: parsed.itemName?.toLowerCase().includes("pizza") ? "Pizza" : null,
+    modifier_names: parsed.modifierName,
+    order_item_qty: parsed.itemQty,
+    production_ref:
+      movement.ref_type === "production" && movement.ref_id
+        ? movement.ref_id.slice(0, 8).toUpperCase()
+        : null,
+    production_outputs: null,
+    production_inputs: null,
+    expense_ref:
+      movement.ref_type === "expense" && movement.ref_id
+        ? movement.ref_id.slice(0, 8).toUpperCase()
+        : null,
+    expense_category: null,
+    supplier_name: null,
   };
 }
 
@@ -286,12 +441,10 @@ export const reportService = {
   },
 
   async listSales(fromIso: string, toIso: string, branchId?: string | null) {
-    const data = await fetchAllReportPages<OrderWithRelations>((from, to) => {
+    const orders = await fetchAllReportPages<OrderWithRelations>((from, to) => {
       let query = supabase
         .from("orders")
-        .select(
-          "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_packaging:order_item_packaging!order_item_packaging_order_id_fkey(*, packaging_options(name), items(name, units(code))), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_omissions(*, items(name, units(code))), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
-        )
+        .select("*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name)")
         .eq("status", "paid")
         .gte("created_at", fromIso)
         .lte("created_at", toIso);
@@ -302,7 +455,102 @@ export const reportService = {
         .range(from, to) as QueryPage<OrderWithRelations>;
     }, "Could not load sales report");
 
-    return data.map(toOrder);
+    const orderIds = orders.map((order) => order.id);
+    if (orderIds.length === 0) return [];
+
+    const [payments, orderItems, orderPackaging] = await Promise.all([
+      fetchByIds<Database["public"]["Tables"]["payments"]["Row"]>(
+        orderIds,
+        (ids) => supabase.from("payments").select("*").in("order_id", ids) as QueryPage<any>,
+        "Could not load report payments",
+      ),
+      fetchByIds<NonNullable<OrderWithRelations["order_items"]>[number]>(
+        orderIds,
+        (ids) =>
+          supabase
+            .from("order_items")
+            .select("*, menu_items(name, categories(name))")
+            .in("order_id", ids) as QueryPage<any>,
+        "Could not load report order items",
+      ),
+      fetchByIds<NonNullable<OrderWithRelations["order_packaging"]>[number]>(
+        orderIds,
+        (ids) =>
+          supabase
+            .from("order_item_packaging")
+            .select("*, packaging_options(name), items(name, units(code))")
+            .in("order_id", ids)
+            .is("order_item_id", null) as QueryPage<any>,
+        "Could not load report order packaging",
+      ),
+    ]);
+
+    const orderItemIds = orderItems.map((item) => item.id);
+    const [modifiers, omissions, itemPackaging] =
+      orderItemIds.length === 0
+        ? [[], [], []]
+        : await Promise.all([
+            fetchByIds<
+              NonNullable<
+                NonNullable<OrderWithRelations["order_items"]>[number]["order_item_modifiers"]
+              >[number]
+            >(
+              orderItemIds,
+              (ids) =>
+                supabase
+                  .from("order_item_modifiers")
+                  .select("*, modifiers(name, price_delta)")
+                  .in("order_item_id", ids) as QueryPage<any>,
+              "Could not load report order modifiers",
+            ),
+            fetchByIds<
+              NonNullable<
+                NonNullable<OrderWithRelations["order_items"]>[number]["order_item_omissions"]
+              >[number]
+            >(
+              orderItemIds,
+              (ids) =>
+                (supabase as any)
+                  .from("order_item_omissions")
+                  .select("*, items(name, units(code))")
+                  .in("order_item_id", ids) as QueryPage<any>,
+              "Could not load report order omissions",
+            ),
+            fetchByIds<
+              NonNullable<
+                NonNullable<OrderWithRelations["order_items"]>[number]["order_item_packaging"]
+              >[number]
+            >(
+              orderItemIds,
+              (ids) =>
+                supabase
+                  .from("order_item_packaging")
+                  .select("*, packaging_options(name), items(name, units(code))")
+                  .in("order_item_id", ids) as QueryPage<any>,
+              "Could not load report item packaging",
+            ),
+          ]);
+
+    const paymentsByOrder = groupBy(payments, (payment) => payment.order_id);
+    const orderItemsByOrder = groupBy(orderItems, (item) => item.order_id);
+    const orderPackagingByOrder = groupBy(orderPackaging, (packaging) => packaging.order_id);
+    const modifiersByItem = groupBy(modifiers, (modifier) => modifier.order_item_id);
+    const omissionsByItem = groupBy(omissions, (omission) => omission.order_item_id);
+    const itemPackagingByItem = groupBy(itemPackaging, (packaging) => packaging.order_item_id);
+
+    return orders
+      .map((order) => ({
+        ...order,
+        payments: paymentsByOrder.get(order.id) ?? [],
+        order_packaging: orderPackagingByOrder.get(order.id) ?? [],
+        order_items: (orderItemsByOrder.get(order.id) ?? []).map((item) => ({
+          ...item,
+          order_item_modifiers: modifiersByItem.get(item.id) ?? [],
+          order_item_omissions: omissionsByItem.get(item.id) ?? [],
+          order_item_packaging: itemPackagingByItem.get(item.id) ?? [],
+        })),
+      }))
+      .map(toOrder);
   },
 
   async listItems() {
@@ -310,27 +558,37 @@ export const reportService = {
   },
 
   async listStockMovements(fromIso: string, toIso: string, branchId?: string | null) {
-    const data = await fetchAllReportPages<MovementWithRelations>((from, to) => {
+    const data = await fetchAllReportPages<RawMovementWithRelations>((from, to) => {
       let query = supabase
-        .from("stock_movement_details")
-        .select("*")
+        .from("stock_movements")
+        .select(
+          "*, branches(name), profiles:profiles!stock_movements_created_by_fkey(username, full_name), items(name, stock_type, bottle_ml, shot_ml, units(code, name))",
+        )
         .gte("created_at", fromIso)
         .lte("created_at", toIso);
 
       if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
       return query
         .order("created_at", { ascending: true })
-        .range(from, to) as QueryPage<MovementWithRelations>;
+        .range(from, to) as QueryPage<RawMovementWithRelations>;
     }, "Could not load stock movement report");
 
-    return groupPosSaleMovements(data.map(toMovement), "asc");
+    const orderById = await loadMovementOrders(data);
+    return groupPosSaleMovements(
+      data.map((movement) =>
+        toRawMovement(movement, orderById.get(movementOrderId(movement) ?? "")),
+      ),
+      "asc",
+    );
   },
 
   async listWastage(fromIso: string, toIso: string, branchId?: string | null) {
-    const data = await fetchAllReportPages<MovementWithRelations>((from, to) => {
+    const data = await fetchAllReportPages<RawMovementWithRelations>((from, to) => {
       let query = supabase
-        .from("stock_movement_details")
-        .select("*")
+        .from("stock_movements")
+        .select(
+          "*, branches(name), profiles:profiles!stock_movements_created_by_fkey(username, full_name), items(name, stock_type, bottle_ml, shot_ml, units(code, name))",
+        )
         .eq("type", "wastage")
         .gte("created_at", fromIso)
         .lte("created_at", toIso);
@@ -338,10 +596,13 @@ export const reportService = {
       if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
       return query
         .order("created_at", { ascending: false })
-        .range(from, to) as QueryPage<MovementWithRelations>;
+        .range(from, to) as QueryPage<RawMovementWithRelations>;
     }, "Could not load wastage report");
 
-    return data.map(toMovement);
+    const orderById = await loadMovementOrders(data);
+    return data.map((movement) =>
+      toRawMovement(movement, orderById.get(movementOrderId(movement) ?? "")),
+    );
   },
 
   async listProduction(fromIso: string, toIso: string, branchId?: string | null) {
