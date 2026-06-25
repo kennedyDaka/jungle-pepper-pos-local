@@ -98,22 +98,22 @@ const PACKAGING_CATEGORY = "__packaging";
 const PRICE_OVERRIDES_KEY = "pos_price_overrides";
 
 const POS_CATEGORY_GROUPS = [
-  { id: "starters",          label: "STARTERS" },
-  { id: "pastas",            label: "PASTAS" },
-  { id: "pizza",             label: "PIZZA" },
-  { id: "burgers",           label: "BURGERS" },
-  { id: "chips",             label: "CHIPS" },
-  { id: "pregos-bitoque",    label: "PREGOS/ BITOQUE" },
-  { id: "frango",            label: "FRANGO" },
-  { id: "camarao-marisco",   label: "CAMARAO / MARISCO" },
-  { id: EXTRAS_CATEGORY,     label: "EXTRAS" },
-  { id: "sweets",            label: "SWEETS" },
-  { id: "hot-drinks",        label: "HOT DRINKS" },
-  { id: "beers",             label: "BEERS" },
-  { id: "soft-drinks",       label: "SOFT DRINKS" },
-  { id: "juices-mocktails",  label: "JUICES / MOCKTAILS" },
-  { id: "liquor",            label: "LIQUOR" },
-  { id: PACKAGING_CATEGORY,  label: "PACKAGING" },
+  { id: "starters", label: "STARTERS" },
+  { id: "pastas", label: "PASTAS" },
+  { id: "pizza", label: "PIZZA" },
+  { id: "burgers", label: "BURGERS" },
+  { id: "chips", label: "CHIPS" },
+  { id: "pregos-bitoque", label: "PREGOS/ BITOQUE" },
+  { id: "frango", label: "FRANGO" },
+  { id: "camarao-marisco", label: "CAMARAO / MARISCO" },
+  { id: EXTRAS_CATEGORY, label: "EXTRAS" },
+  { id: "sweets", label: "SWEETS" },
+  { id: "hot-drinks", label: "HOT DRINKS" },
+  { id: "beers", label: "BEERS" },
+  { id: "soft-drinks", label: "SOFT DRINKS" },
+  { id: "juices-mocktails", label: "JUICES / MOCKTAILS" },
+  { id: "liquor", label: "LIQUOR" },
+  { id: PACKAGING_CATEGORY, label: "PACKAGING" },
 ];
 
 function normalizeCategoryText(value: string | null | undefined) {
@@ -223,7 +223,9 @@ function setPriceOverride(itemId: string, price: number) {
     const overrides = getPriceOverrides();
     overrides[itemId] = price;
     localStorage.setItem(PRICE_OVERRIDES_KEY, JSON.stringify(overrides));
-  } catch {}
+  } catch {
+    return;
+  }
 }
 
 function orderCashier(order: any) {
@@ -277,7 +279,7 @@ function PendingOrdersDialog({
 
   const prevOrdersRef = useRef<any[]>([]);
 
-  const orders = useMemo(() => (pendingOrders.data ?? []), [pendingOrders.data]);
+  const orders = useMemo(() => pendingOrders.data ?? [], [pendingOrders.data]);
 
   useEffect(() => {
     if (!pendingOrders.data) return;
@@ -338,23 +340,34 @@ function PendingOrdersDialog({
           </DialogHeader>
           <div className="flex-1 overflow-auto space-y-2">
             {pendingOrders.isLoading && <LoadingState label="Loading pending orders..." />}
-            {pendingOrders.error && <ErrorState error={pendingOrders.error} label="Could not load orders" />}
+            {pendingOrders.error && (
+              <ErrorState error={pendingOrders.error} label="Could not load orders" />
+            )}
             {orders.length === 0 && !pendingOrders.isLoading && (
               <p className="text-sm text-muted-foreground p-4 text-center">No pending orders.</p>
             )}
             {orders.map((order: any) => {
               const tableLabel = order.tables?.label ?? order.table_label ?? "Takeaway";
-              const cashier = order.cashier_name ?? order.profiles?.full_name ?? order.profiles?.username ?? "Waiter";
+              const cashier =
+                order.cashier_name ??
+                order.profiles?.full_name ??
+                order.profiles?.username ??
+                "Waiter";
               const total = Number(order.total);
               const isWebsite = order.source === "website";
               return (
-                <div key={order.id} className={`border rounded-lg p-3 ${isWebsite ? "border-yellow-400 bg-yellow-50/30 dark:bg-yellow-950/10" : "border-border"}`}>
+                <div
+                  key={order.id}
+                  className={`border rounded-lg p-3 ${isWebsite ? "border-yellow-400 bg-yellow-50/30 dark:bg-yellow-950/10" : "border-border"}`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm">{tableLabel}</span>
                         {isWebsite && (
-                          <span className="text-[10px] bg-yellow-200 text-yellow-800 px-1.5 py-0.5 rounded uppercase font-bold">Web</span>
+                          <span className="text-[10px] bg-yellow-200 text-yellow-800 px-1.5 py-0.5 rounded uppercase font-bold">
+                            Web
+                          </span>
                         )}
                         <span className="text-xs bg-secondary px-2 py-0.5 rounded-full uppercase">
                           {order.status}
@@ -370,7 +383,11 @@ function PendingOrdersDialog({
                             <span>{line.menu_items?.name ?? "Item"}</span>
                             {(line.order_item_modifiers ?? []).length > 0 && (
                               <span className="text-xs text-muted-foreground">
-                                ({line.order_item_modifiers.map((m: any) => m.modifiers?.name).join(", ")})
+                                (
+                                {line.order_item_modifiers
+                                  .map((m: any) => m.modifiers?.name)
+                                  .join(", ")}
+                                )
                               </span>
                             )}
                           </div>
@@ -378,7 +395,8 @@ function PendingOrdersDialog({
                       </div>
                       {order.customer_name && (
                         <p className="text-xs text-foreground mt-1">
-                          {order.customer_name}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
+                          {order.customer_name}
+                          {order.customer_phone ? ` · ${order.customer_phone}` : ""}
                         </p>
                       )}
                       {order.note && (
@@ -389,7 +407,12 @@ function PendingOrdersDialog({
                       <div className="font-bold text-primary">{MWK(total)}</div>
                       <div className="text-[10px] text-muted-foreground">{cashier}</div>
                       <div className="flex gap-1 mt-2">
-                        <Button size="sm" variant="outline" className="h-8" onClick={() => setPrintOrder(order)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => setPrintOrder(order)}
+                        >
                           <Printer className="h-3.5 w-3.5" />
                         </Button>
                         <Button
@@ -397,7 +420,11 @@ function PendingOrdersDialog({
                           variant="destructive"
                           className="h-8"
                           onClick={() => setCancelTarget({ id: order.id, reason: "" })}
-                          disabled={cancelOrder.isPending || order.status === "cancelled" || order.status === "paid"}
+                          disabled={
+                            cancelOrder.isPending ||
+                            order.status === "cancelled" ||
+                            order.status === "paid"
+                          }
                         >
                           <Ban className="h-3.5 w-3.5" />
                         </Button>
@@ -434,10 +461,7 @@ function PendingOrdersDialog({
       )}
 
       {printOrder && (
-        <KitchenOrderPrintDialog
-          order={printOrder}
-          onClose={() => setPrintOrder(null)}
-        />
+        <KitchenOrderPrintDialog order={printOrder} onClose={() => setPrintOrder(null)} />
       )}
 
       {cancelTarget && (
@@ -445,9 +469,7 @@ function PendingOrdersDialog({
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Cancel order</DialogTitle>
-              <DialogDescription>
-                Enter a reason for cancelling this order.
-              </DialogDescription>
+              <DialogDescription>Enter a reason for cancelling this order.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <Label>Reason</Label>
@@ -458,7 +480,9 @@ function PendingOrdersDialog({
               />
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="ghost" onClick={() => setCancelTarget(null)}>Back</Button>
+              <Button variant="ghost" onClick={() => setCancelTarget(null)}>
+                Back
+              </Button>
               <Button
                 variant="destructive"
                 disabled={cancelOrder.isPending || !cancelTarget.reason.trim()}
@@ -488,18 +512,26 @@ function KitchenOrderPrintDialog({ order, onClose }: { order: any; onClose: () =
             <div className="font-bold text-sm">JUNGLE PEPPER</div>
             <div>Kidney Crescent, Blantyre</div>
             <div className="mt-1 font-bold text-base">{tableLabel}</div>
-            <div className="mt-1">Order: {order.physical_order_no || order.id.slice(0, 8).toUpperCase()}</div>
+            <div className="mt-1">
+              Order: {order.physical_order_no || order.id.slice(0, 8).toUpperCase()}
+            </div>
             <div>{new Date(order.created_at).toLocaleString()}</div>
-            {order.source === "website" && <div className="text-yellow-600 font-bold mt-1">WEBSITE ORDER</div>}
+            {order.source === "website" && (
+              <div className="text-yellow-600 font-bold mt-1">WEBSITE ORDER</div>
+            )}
           </div>
           <hr className="my-1 border-black" />
           {(order.order_items ?? []).map((line: any) => (
             <div key={line.id} className="mb-1">
               <div className="flex justify-between font-bold">
-                <span>{line.qty}x {line.menu_items?.name ?? "Item"}</span>
+                <span>
+                  {line.qty}x {line.menu_items?.name ?? "Item"}
+                </span>
               </div>
               {(line.order_item_modifiers ?? []).length > 0 && (
-                <div className="pl-2">{line.order_item_modifiers.map((m: any) => m.modifiers?.name).join(", ")}</div>
+                <div className="pl-2">
+                  {line.order_item_modifiers.map((m: any) => m.modifiers?.name).join(", ")}
+                </div>
               )}
               {line.takeaway && <div className="pl-2 text-blue-600">TAKEAWAY</div>}
               {line.note && <div className="pl-2 text-orange-600">Note: {line.note}</div>}
@@ -960,51 +992,56 @@ function PosPage() {
                   className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
                 >
                   <div className="font-medium text-sm leading-tight">{option.name}</div>
-                  <div className="text-primary font-semibold text-sm mt-1">
-                    {MWK(option.price)}
-                  </div>
+                  <div className="text-primary font-semibold text-sm mt-1">{MWK(option.price)}</div>
                   <div className="text-[11px] text-muted-foreground mt-1">Takeaway box</div>
                 </button>
               ))
             : activeCat === EXTRAS_CATEGORY
-            ? (() => {
-                const sectionOrder = ["DAIRY", "MEATS", "VEGGIE", "SAUCES"];
-                const groups: Record<string, any[]> = {};
-                for (const item of filtered) {
-                  const cat = normalizeCategoryText(item.categories?.name);
-                  if (!groups[cat]) groups[cat] = [];
-                  groups[cat].push(item);
-                }
-                return sectionOrder.flatMap((section) => {
-                  const items = groups[section];
-                  if (!items || items.length === 0) return [];
-                  return [
-                    <div key={`hdr-${section}`} className="col-span-full font-bold text-xs text-muted-foreground uppercase tracking-wider mt-3 first:mt-0">{section}</div>,
-                    ...items.map((mi: any) => (
-                      <button
-                        key={mi.id}
-                        onClick={() => addItem(mi)}
-                        disabled={menuOptionsLoading}
-                        className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+              ? (() => {
+                  const sectionOrder = ["DAIRY", "MEATS", "VEGGIE", "SAUCES"];
+                  const groups: Record<string, any[]> = {};
+                  for (const item of filtered) {
+                    const cat = normalizeCategoryText(item.categories?.name);
+                    if (!groups[cat]) groups[cat] = [];
+                    groups[cat].push(item);
+                  }
+                  return sectionOrder.flatMap((section) => {
+                    const items = groups[section];
+                    if (!items || items.length === 0) return [];
+                    return [
+                      <div
+                        key={`hdr-${section}`}
+                        className="col-span-full font-bold text-xs text-muted-foreground uppercase tracking-wider mt-3 first:mt-0"
                       >
-                        <div className="font-medium text-sm leading-tight">{mi.name}</div>
-                        <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
-                      </button>
-                    )),
-                  ];
-                });
-              })()
-            : filtered.map((mi: any) => (
-                <button
-                  key={mi.id}
-                  onClick={() => addItem(mi)}
-                  disabled={menuOptionsLoading}
-                  className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
-                >
-                  <div className="font-medium text-sm leading-tight">{mi.name}</div>
-                  <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
-                </button>
-              ))}
+                        {section}
+                      </div>,
+                      ...items.map((mi: any) => (
+                        <button
+                          key={mi.id}
+                          onClick={() => addItem(mi)}
+                          disabled={menuOptionsLoading}
+                          className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                        >
+                          <div className="font-medium text-sm leading-tight">{mi.name}</div>
+                          <div className="text-primary font-semibold text-sm mt-1">
+                            {MWK(mi.price)}
+                          </div>
+                        </button>
+                      )),
+                    ];
+                  });
+                })()
+              : filtered.map((mi: any) => (
+                  <button
+                    key={mi.id}
+                    onClick={() => addItem(mi)}
+                    disabled={menuOptionsLoading}
+                    className="text-left p-3 rounded-lg bg-card border border-border hover:border-primary hover:bg-secondary transition-colors disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <div className="font-medium text-sm leading-tight">{mi.name}</div>
+                    <div className="text-primary font-semibold text-sm mt-1">{MWK(mi.price)}</div>
+                  </button>
+                ))}
         </div>
       </div>
 
@@ -1078,11 +1115,7 @@ function PosPage() {
                     onChange={(event) => {
                       const newPrice = Math.max(0, Number(event.target.value) || 0);
                       setCart((rows) =>
-                        rows.map((row) =>
-                          row.key === l.key
-                            ? { ...row, price: newPrice }
-                            : row,
-                        ),
+                        rows.map((row) => (row.key === l.key ? { ...row, price: newPrice } : row)),
                       );
                       if (l.item_id) setPriceOverride(l.item_id, newPrice);
                     }}
@@ -1101,12 +1134,11 @@ function PosPage() {
                         const newPrice = Math.max(0, Number(event.target.value) || 0);
                         setCart((rows) =>
                           rows.map((row) =>
-                            row.key === l.key
-                              ? { ...row, price: newPrice }
-                              : row,
+                            row.key === l.key ? { ...row, price: newPrice } : row,
                           ),
                         );
-                        if (isMenuLine(l) && l.menu_item_id) setPriceOverride(l.menu_item_id, newPrice);
+                        if (isMenuLine(l) && l.menu_item_id)
+                          setPriceOverride(l.menu_item_id, newPrice);
                       }}
                       className="h-8 text-right"
                     />
@@ -1239,7 +1271,9 @@ function PosPage() {
           <div className="grid grid-cols-2 gap-2">
             <Button
               className="w-full"
-              disabled={branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust}
+              disabled={
+                branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust
+              }
               onClick={() => setPayOpen(true)}
             >
               Pay {MWK(total)}
@@ -1247,7 +1281,9 @@ function PosPage() {
             <Button
               className="w-full"
               variant="secondary"
-              disabled={branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust}
+              disabled={
+                branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust
+              }
               onClick={() => setStaffMealOpen(true)}
             >
               <UserCheck className="h-4 w-4 mr-1" />
@@ -1472,9 +1508,7 @@ function SalesHistoryDialog({
           </div>
 
           {(() => {
-            const dayOrders = orders.filter((o: any) =>
-              o.created_at?.startsWith(to),
-            );
+            const dayOrders = orders.filter((o: any) => o.created_at?.startsWith(to));
             const missingSummary = missingOrderNumbersSummary(dayOrders);
             return missingSummary ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">

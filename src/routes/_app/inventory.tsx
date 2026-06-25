@@ -685,11 +685,7 @@ function MovementDialog({
           </div>
           <div>
             <Label>Date</Label>
-            <Input
-              type="date"
-              value={createdAt}
-              onChange={(e) => setCreatedAt(e.target.value)}
-            />
+            <Input type="date" value={createdAt} onChange={(e) => setCreatedAt(e.target.value)} />
           </div>
           <div>
             <Label>Note</Label>

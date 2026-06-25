@@ -44,21 +44,21 @@ type CartLine = {
 };
 
 const POS_CATEGORY_GROUPS = [
-  { id: "starters",          label: "STARTERS" },
-  { id: "pastas",            label: "PASTAS" },
-  { id: "pizza",             label: "PIZZA" },
-  { id: "burgers",           label: "BURGERS" },
-  { id: "chips",             label: "CHIPS" },
-  { id: "pregos-bitoque",    label: "PREGOS/ BITOQUE" },
-  { id: "frango",            label: "FRANGO" },
-  { id: "camarao-marisco",   label: "CAMARAO / MARISCO" },
-  { id: "sweets",            label: "SWEETS" },
-  { id: "hot-drinks",        label: "HOT DRINKS" },
-  { id: "beers",             label: "BEERS" },
-  { id: "soft-drinks",       label: "SOFT DRINKS" },
-  { id: "juices-mocktails",  label: "JUICES / MOCKTAILS" },
-  { id: "liquor",            label: "LIQUOR" },
-  { id: "extras",            label: "EXTRAS" },
+  { id: "starters", label: "STARTERS" },
+  { id: "pastas", label: "PASTAS" },
+  { id: "pizza", label: "PIZZA" },
+  { id: "burgers", label: "BURGERS" },
+  { id: "chips", label: "CHIPS" },
+  { id: "pregos-bitoque", label: "PREGOS/ BITOQUE" },
+  { id: "frango", label: "FRANGO" },
+  { id: "camarao-marisco", label: "CAMARAO / MARISCO" },
+  { id: "sweets", label: "SWEETS" },
+  { id: "hot-drinks", label: "HOT DRINKS" },
+  { id: "beers", label: "BEERS" },
+  { id: "soft-drinks", label: "SOFT DRINKS" },
+  { id: "juices-mocktails", label: "JUICES / MOCKTAILS" },
+  { id: "liquor", label: "LIQUOR" },
+  { id: "extras", label: "EXTRAS" },
 ];
 
 function normalizeCategoryText(value: string | null | undefined) {
@@ -102,7 +102,9 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
   if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
   if (groupId === "liquor") {
-    return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(category);
+    return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(
+      category,
+    );
   }
   if (groupId === "extras") {
     return ["DAIRY", "MEATS", "VEGGIE", "SAUCES"].includes(category);
@@ -118,7 +120,11 @@ function WaiterPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [orderNote, setOrderNote] = useState("");
-  const [modOpen, setModOpen] = useState<{ menuId: string; lineKey: string; removeOnCancel?: boolean } | null>(null);
+  const [modOpen, setModOpen] = useState<{
+    menuId: string;
+    lineKey: string;
+    removeOnCancel?: boolean;
+  } | null>(null);
   const [kitchenReceipt, setKitchenReceipt] = useState<any>(null);
 
   const membership = useQuery({
@@ -173,23 +179,34 @@ function WaiterPage() {
   const filtered = useMemo(() => {
     let list = items.data ?? [];
     if (activeCat) list = list.filter((item: any) => itemMatchesPosGroup(item, activeCat));
-    if (search.trim()) list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
+    if (search.trim())
+      list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
     return list;
   }, [items.data, activeCat, search]);
 
   const addItem = (mi: any) => {
     const key = crypto.randomUUID();
-    setCart((c) => [...c, { key, menu_item_id: mi.id, name: mi.name, price: Number(mi.price), qty: 1, modifiers: [] }]);
+    setCart((c) => [
+      ...c,
+      { key, menu_item_id: mi.id, name: mi.name, price: Number(mi.price), qty: 1, modifiers: [] },
+    ]);
     const itemMods = (mods.data ?? []).filter((m: any) => m.menu_item_id === mi.id);
-    const crustMods = itemMods.filter((m: any) => m.name === "Thin Crust" || m.name === "Thick Crust");
+    const crustMods = itemMods.filter(
+      (m: any) => m.name === "Thin Crust" || m.name === "Thick Crust",
+    );
     if (crustMods.length) setModOpen({ menuId: mi.id, lineKey: key, removeOnCancel: true });
   };
 
-  const lineTotal = (l: CartLine) => (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty;
+  const lineTotal = (l: CartLine) =>
+    (l.price + l.modifiers.reduce((s, m) => s + Number(m.price_delta), 0)) * l.qty;
   const subtotal = cart.reduce((s, l) => s + lineTotal(l), 0);
 
   const requiresCrust = (line: CartLine) =>
-    (mods.data ?? []).some((m: any) => m.menu_item_id === line.menu_item_id && (m.name === "Thin Crust" || m.name === "Thick Crust"));
+    (mods.data ?? []).some(
+      (m: any) =>
+        m.menu_item_id === line.menu_item_id &&
+        (m.name === "Thin Crust" || m.name === "Thick Crust"),
+    );
 
   const hasSelectedCrust = (line: CartLine) =>
     line.modifiers.some((m) => m.name === "Thin Crust" || m.name === "Thick Crust");
@@ -240,13 +257,18 @@ function WaiterPage() {
 
         <div className="flex flex-wrap gap-2 items-center">
           <div className="min-w-44">
-            <Select value={selectedTableId ?? ""} onValueChange={(v) => setSelectedTableId(v || null)}>
+            <Select
+              value={selectedTableId ?? ""}
+              onValueChange={(v) => setSelectedTableId(v || null)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select table..." />
               </SelectTrigger>
               <SelectContent>
                 {(tables.data ?? []).map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -259,11 +281,16 @@ function WaiterPage() {
           />
         </div>
 
-        <Tabs value={activeCat ?? "all"} onValueChange={(v) => setActiveCat(v === "all" ? null : v)}>
+        <Tabs
+          value={activeCat ?? "all"}
+          onValueChange={(v) => setActiveCat(v === "all" ? null : v)}
+        >
           <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="all">ALL</TabsTrigger>
             {POS_CATEGORY_GROUPS.map((cat) => (
-              <TabsTrigger key={cat.id} value={cat.id}>{cat.label}</TabsTrigger>
+              <TabsTrigger key={cat.id} value={cat.id}>
+                {cat.label}
+              </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
@@ -285,7 +312,10 @@ function WaiterPage() {
 
       <Card className="p-3 flex flex-col min-h-0">
         <h2 className="font-semibold mb-2">
-          Order {selectedTableId ? `- ${(tables.data ?? []).find((t) => t.id === selectedTableId)?.label ?? ""}` : ""}
+          Order{" "}
+          {selectedTableId
+            ? `- ${(tables.data ?? []).find((t) => t.id === selectedTableId)?.label ?? ""}`
+            : ""}
         </h2>
         <div className="flex-1 overflow-auto space-y-2">
           {cart.length === 0 && (
@@ -301,7 +331,11 @@ function WaiterPage() {
               </div>
               {l.modifiers.length > 0 && (
                 <div className="text-xs text-muted-foreground">
-                  {l.modifiers.map((m) => m.name + (Number(m.price_delta) > 0 ? ` +${MWK(m.price_delta)}` : "")).join(", ")}
+                  {l.modifiers
+                    .map(
+                      (m) => m.name + (Number(m.price_delta) > 0 ? ` +${MWK(m.price_delta)}` : ""),
+                    )
+                    .join(", ")}
                 </div>
               )}
               {requiresCrust(l) && !hasSelectedCrust(l) && (
@@ -309,11 +343,25 @@ function WaiterPage() {
               )}
               <div className="flex items-center justify-between mt-1">
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => setCart((c) => c.map((x) => (x.key === l.key ? { ...x, qty: Math.max(1, x.qty - 1) } : x)))}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setCart((c) =>
+                        c.map((x) => (x.key === l.key ? { ...x, qty: Math.max(1, x.qty - 1) } : x)),
+                      )
+                    }
+                  >
                     <Minus className="h-3 w-3" />
                   </Button>
                   <span className="w-6 text-center">{l.qty}</span>
-                  <Button size="sm" variant="ghost" onClick={() => setCart((c) => c.map((x) => (x.key === l.key ? { ...x, qty: x.qty + 1 } : x)))}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setCart((c) => c.map((x) => (x.key === l.key ? { ...x, qty: x.qty + 1 } : x)))
+                    }
+                  >
                     <Plus className="h-3 w-3" />
                   </Button>
                 </div>
@@ -324,13 +372,22 @@ function WaiterPage() {
                 <Input
                   placeholder="Special instructions..."
                   value={l.note ?? ""}
-                  onChange={(e) => setCart((c) => c.map((x) => (x.key === l.key ? { ...x, note: e.target.value } : x)))}
+                  onChange={(e) =>
+                    setCart((c) =>
+                      c.map((x) => (x.key === l.key ? { ...x, note: e.target.value } : x)),
+                    )
+                  }
                   className="h-8"
                 />
               </div>
               {requiresCrust(l) && (
-                <Button type="button" variant="secondary" size="sm" className="mt-2 h-7 w-full text-xs"
-                  onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2 h-7 w-full text-xs"
+                  onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}
+                >
                   Change crust
                 </Button>
               )}
@@ -348,7 +405,9 @@ function WaiterPage() {
             <span>Subtotal</span>
             <span className="text-primary">{MWK(subtotal)}</span>
           </div>
-          {hasMissingCrust && <p className="text-xs text-destructive">Choose thin or thick crust for every pizza.</p>}
+          {hasMissingCrust && (
+            <p className="text-xs text-destructive">Choose thin or thick crust for every pizza.</p>
+          )}
           <Button
             className="w-full"
             disabled={cart.length === 0 || !selectedTableId || hasMissingCrust || submit.isPending}
@@ -361,6 +420,7 @@ function WaiterPage() {
 
       {modOpen && (
         <ModifierDialog
+          menuId={modOpen.menuId}
           mods={(mods.data ?? []).filter((m: any) => m.menu_item_id === modOpen.menuId)}
           current={cart.find((l) => l.key === modOpen.lineKey)?.modifiers ?? []}
           onClose={() => setModOpen(null)}
@@ -369,7 +429,9 @@ function WaiterPage() {
             setModOpen(null);
           }}
           onSave={(selected) => {
-            setCart((c) => c.map((x) => (x.key === modOpen.lineKey ? { ...x, modifiers: selected } : x)));
+            setCart((c) =>
+              c.map((x) => (x.key === modOpen.lineKey ? { ...x, modifiers: selected } : x)),
+            );
             setModOpen(null);
           }}
         />
@@ -383,7 +445,11 @@ function WaiterPage() {
 }
 
 function ModifierDialog({
-  mods, current, onClose, onCancel, onSave,
+  mods,
+  current,
+  onClose,
+  onCancel,
+  onSave,
 }: {
   menuId: string;
   mods: any[];
@@ -408,8 +474,11 @@ function ModifierDialog({
             <div className="text-xs uppercase text-muted-foreground mb-1">Base (required)</div>
             <div className="grid grid-cols-2 gap-2">
               {crustMods.map((m) => (
-                <button key={m.id} onClick={() => setCrust(m.id)}
-                  className={`p-3 rounded border font-medium ${crust === m.id ? "border-primary bg-primary/10" : "border-border"}`}>
+                <button
+                  key={m.id}
+                  onClick={() => setCrust(m.id)}
+                  className={`p-3 rounded border font-medium ${crust === m.id ? "border-primary bg-primary/10" : "border-border"}`}
+                >
                   {m.name}
                 </button>
               ))}
@@ -417,9 +486,15 @@ function ModifierDialog({
           </div>
         )}
         <DialogFooter>
-          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
-          <Button disabled={crustMods.length > 0 && !crust}
-            onClick={() => onSave(mods.filter((m) => m.id === crust))}>Add</Button>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            disabled={crustMods.length > 0 && !crust}
+            onClick={() => onSave(mods.filter((m) => m.id === crust))}
+          >
+            Add
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -434,7 +509,10 @@ function KitchenReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () 
           <DialogTitle>Kitchen Order</DialogTitle>
           <DialogDescription>Show this to the kitchen staff.</DialogDescription>
         </DialogHeader>
-        <div className="bg-white text-black p-4 rounded text-xs font-mono print-area" id="kitchen-receipt">
+        <div
+          className="bg-white text-black p-4 rounded text-xs font-mono print-area"
+          id="kitchen-receipt"
+        >
           <div className="text-center mb-2">
             <div className="font-bold text-sm">JUNGLE PEPPER</div>
             <div>Kidney Crescent, Blantyre</div>
@@ -446,7 +524,9 @@ function KitchenReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () 
           {receipt.items.map((l: any) => (
             <div key={l.key} className="mb-1">
               <div className="flex justify-between font-bold">
-                <span>{l.qty}x {l.name}</span>
+                <span>
+                  {l.qty}x {l.name}
+                </span>
               </div>
               {l.modifiers?.length > 0 && (
                 <div className="pl-2">{l.modifiers.map((m: any) => m.name).join(", ")}</div>

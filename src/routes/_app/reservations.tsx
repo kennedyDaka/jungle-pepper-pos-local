@@ -32,7 +32,8 @@ function ReservationsPage() {
         .eq("active", true)
         .maybeSingle();
       if (membershipError) throw membershipError;
-      if (membershipData) return membershipData as { branch_id: string; branches: { id: string; name: string } };
+      if (membershipData)
+        return membershipData as { branch_id: string; branches: { id: string; name: string } };
       const { data: branchData, error: branchError } = await supabase
         .from("branches")
         .select("id, name")
@@ -98,7 +99,9 @@ function ReservationsPage() {
       </div>
 
       {reservations.isLoading && <LoadingState label="Loading reservations..." />}
-      {reservations.error && <ErrorState error={reservations.error} label="Could not load reservations" />}
+      {reservations.error && (
+        <ErrorState error={reservations.error} label="Could not load reservations" />
+      )}
 
       {!reservations.isLoading && !reservations.error && filtered.length === 0 && (
         <p className="text-muted-foreground text-sm py-8 text-center">
@@ -129,8 +132,8 @@ function ReservationsPage() {
             </div>
             <div className="text-sm space-y-0.5">
               <p>
-                <span className="text-muted-foreground">Date:</span>{" "}
-                {fmtDate(r.reservation_date)} at {r.reservation_time.slice(0, 5)}
+                <span className="text-muted-foreground">Date:</span> {fmtDate(r.reservation_date)}{" "}
+                at {r.reservation_time.slice(0, 5)}
               </p>
               <p>
                 <span className="text-muted-foreground">Guests:</span> {r.guests}

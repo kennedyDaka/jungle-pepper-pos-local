@@ -47,7 +47,8 @@ function AdminTablesPage() {
         .eq("active", true)
         .maybeSingle();
       if (membershipError) throw membershipError;
-      if (membershipData) return membershipData as { branch_id: string; branches: { id: string; name: string } };
+      if (membershipData)
+        return membershipData as { branch_id: string; branches: { id: string; name: string } };
       const { data: branchData, error: branchError } = await supabase
         .from("branches")
         .select("id, name")
@@ -115,7 +116,10 @@ function AdminTablesPage() {
       sort_order?: number;
       active?: boolean;
     }) => {
-      const { error } = await supabase.from("tables").update({ label, capacity, sort_order, active }).eq("id", id);
+      const { error } = await supabase
+        .from("tables")
+        .update({ label, capacity, sort_order, active })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -214,7 +218,9 @@ function AdminTablesPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button variant="ghost" onClick={() => setShowAdd(false)}>
+                Cancel
+              </Button>
               <Button
                 disabled={!newLabel.trim() || addTable.isPending}
                 onClick={() => addTable.mutate()}
@@ -236,7 +242,12 @@ function TableRow({
   busy,
 }: {
   table: Table;
-  onSave: (patch: { label?: string; capacity?: number; sort_order?: number; active?: boolean }) => void;
+  onSave: (patch: {
+    label?: string;
+    capacity?: number;
+    sort_order?: number;
+    active?: boolean;
+  }) => void;
   onDelete: () => void;
   busy: boolean;
 }) {

@@ -210,7 +210,7 @@ export const inventoryService = {
     note?: string;
     createdAt: string;
   }) {
-    const { data, error } = await supabase.rpc("apply_stock_movement_with_date", {
+    const { data, error } = await (supabase as any).rpc("apply_stock_movement_with_date", {
       _item_id: input.itemId,
       _type: input.type,
       _qty: input.qty,

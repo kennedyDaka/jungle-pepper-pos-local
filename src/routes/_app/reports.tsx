@@ -38,8 +38,8 @@ import {
   type ReportMatrix,
   type ReportRow,
 } from "@/lib/xlsxReport";
-import { buildFlashReport } from "@/lib/flashReport";
-import { findMissingOrderNumbers, missingOrderNumbersSummary } from "@/lib/orderSequence";
+import { buildFlashReport, buildFlashReportRows } from "@/lib/flashReport";
+import { missingOrderNumbersSummary } from "@/lib/orderSequence";
 import { reportService } from "@/services/reportService";
 import { Download, FileText, Printer, Search } from "lucide-react";
 
@@ -73,10 +73,8 @@ function ReportsPage() {
 
   const fromIso = new Date(from + "T00:00:00").toISOString();
   const toIso = new Date(to + "T23:59:59").toISOString();
-  const stockMatrixDate = to || today;
-  const stockMatrixFromIso = new Date(stockMatrixDate + "T00:00:00").toISOString();
-  const stockMatrixToIso = new Date(stockMatrixDate + "T23:59:59").toISOString();
-  const stockMatrixLedgerToDate = stockMatrixDate > today ? stockMatrixDate : today;
+  const reportPeriodLabel = from === to ? from : `${from} to ${to}`;
+  const stockMatrixLedgerToDate = to > today ? to : today;
   const stockMatrixLedgerToIso = new Date(stockMatrixLedgerToDate + "T23:59:59").toISOString();
 
   const branches = useQuery({
@@ -99,20 +97,14 @@ function ReportsPage() {
     queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
   });
 
-  const stockMatrixSales = useQuery({
-    queryKey: ["rep", "stock-matrix-sales", stockMatrixDate, branchId],
-    queryFn: () => reportService.listSales(stockMatrixFromIso, stockMatrixToIso, branchId),
-  });
-
   const stockMatrixMovements = useQuery({
-    queryKey: ["rep", "stock-matrix-movements", stockMatrixDate, branchId],
-    queryFn: () => reportService.listStockMovements(stockMatrixFromIso, stockMatrixToIso, branchId),
+    queryKey: ["rep", "stock-matrix-movements", from, to, branchId],
+    queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
   });
 
   const stockMatrixLedgerMovements = useQuery({
-    queryKey: ["rep", "stock-matrix-ledger", stockMatrixDate, stockMatrixLedgerToDate, branchId],
-    queryFn: () =>
-      reportService.listStockMovements(stockMatrixFromIso, stockMatrixLedgerToIso, branchId),
+    queryKey: ["rep", "stock-matrix-ledger", from, to, stockMatrixLedgerToDate, branchId],
+    queryFn: () => reportService.listStockMovements(fromIso, stockMatrixLedgerToIso, branchId),
   });
 
   const deductionAudit = useQuery({
@@ -140,12 +132,12 @@ function ReportsPage() {
       ? "All branches"
       : (branches.data?.find((branch: any) => branch.id === branchId)?.name ?? "Selected branch");
   const stockMatrixInput = {
-    date: stockMatrixDate,
+    date: reportPeriodLabel,
     branchLabel,
     items: items.data ?? [],
     movements: stockMatrixMovements.data ?? [],
     ledgerMovements: stockMatrixLedgerMovements.data ?? [],
-    sales: stockMatrixSales.data ?? [],
+    sales: sales.data ?? [],
   };
 
   const itemAgg = new Map<string, { qty: number; revenue: number }>();
@@ -216,6 +208,9 @@ function ReportsPage() {
   const movementsForItem = (itemId: string) =>
     movements.filter((movement) => movement.item_id === itemId);
 
+  const ledgerMovementsForItem = (itemId: string) =>
+    (stockMatrixLedgerMovements.data ?? []).filter((movement) => movement.item_id === itemId);
+
   const quantityDisplay = (
     qty: number | string | null | undefined,
     item?: {
@@ -235,11 +230,14 @@ function ReportsPage() {
 
   const movementSummaryForItem = (item: any) => {
     const itemMoves = movementsForItem(item.id);
+    const ledgerMoves = ledgerMovementsForItem(item.id);
     const qtyIn = sumBy(itemMoves, (movement) => Math.max(0, moneyValue(movement.qty)));
     const qtyOut = Math.abs(sumBy(itemMoves, (movement) => Math.min(0, moneyValue(movement.qty))));
     const netMovement = sumBy(itemMoves, (movement) => moneyValue(movement.qty));
-    const closingQty = moneyValue(item.qty_on_hand);
-    const openingQty = closingQty - netMovement;
+    const ledgerNet = sumBy(ledgerMoves, (movement) => moneyValue(movement.qty));
+    const currentQty = moneyValue(item.qty_on_hand);
+    const openingQty = currentQty - ledgerNet;
+    const closingQty = openingQty + netMovement;
     return { itemMoves, qtyIn, qtyOut, netMovement, openingQty, closingQty };
   };
 
@@ -544,15 +542,12 @@ function ReportsPage() {
       .filter((item: any) => item.stock_type === "beverage" && Number(item.bottle_ml) > 0)
       .map((item: any) => {
         const itemMoves = movements.filter((movement) => movement.item_id === item.id);
+        const summary = movementSummaryForItem(item);
         const bottleMl = Number(item.bottle_ml);
         const servingMl = Number(item.shot_ml) || 0;
         const servingsPerBottle = fullServingsPerContainer(item) ?? 0;
-        const openingUnits = itemMoves.length
-          ? Number(itemMoves[0].qty_before ?? 0)
-          : Number(item.qty_on_hand);
-        const closingUnits = itemMoves.length
-          ? Number(itemMoves[itemMoves.length - 1].qty_after ?? item.qty_on_hand)
-          : Number(item.qty_on_hand);
+        const openingUnits = summary.openingQty;
+        const closingUnits = summary.closingQty;
         const salesUnits = Math.abs(
           sumBy(
             itemMoves.filter((movement) => movement.type === "sale"),
@@ -1005,6 +1000,20 @@ function ReportsPage() {
 
   const reportCatalog = [
     {
+      id: "flash-report",
+      title: "Flash Report",
+      rows: buildFlashReportRows({
+        reportDate: reportPeriodLabel,
+        rangeLabel,
+        preparedBy: "Kennedy Daka",
+        paymentTotals: Object.fromEntries(payAgg),
+        items: items.data ?? [],
+        movements: stockMatrixMovements.data ?? [],
+        ledgerMovements: stockMatrixLedgerMovements.data ?? [],
+        sales: sales.data ?? [],
+      }),
+    },
+    {
       id: "stock-matrix",
       title: "Stock Matrix",
       rows: buildStockMatrixPreviewRows(stockMatrixInput),
@@ -1211,7 +1220,7 @@ function ReportsPage() {
       ...stockMatrixInput,
       generatedAt: new Date(),
     });
-    void writeReportWorkbook(wb, stockMatrixFilename(stockMatrixDate), { logo: false });
+    void writeReportWorkbook(wb, stockMatrixFilename(from, to), { logo: false });
   };
 
   const exportStockLedgerXlsx = () => {
@@ -1402,23 +1411,17 @@ function ReportsPage() {
   };
 
   const exportFlashXlsx = () => {
-    const flashPayAgg = new Map<string, number>();
-    (stockMatrixSales.data ?? []).forEach((order: any) => {
-      order.payments?.forEach((payment: any) =>
-        flashPayAgg.set(payment.method, (flashPayAgg.get(payment.method) ?? 0) + Number(payment.amount)),
-      );
-    });
-    const paymentTotals = Object.fromEntries(flashPayAgg);
     const wb = buildFlashReport({
-      reportDate: stockMatrixDate,
+      reportDate: reportPeriodLabel,
+      rangeLabel,
       preparedBy: "Kennedy Daka",
-      paymentTotals,
+      paymentTotals: Object.fromEntries(payAgg),
       items: items.data ?? [],
       movements: stockMatrixMovements.data ?? [],
       ledgerMovements: stockMatrixLedgerMovements.data ?? [],
-      sales: stockMatrixSales.data ?? [],
+      sales: sales.data ?? [],
     });
-    void writeReportWorkbook(wb, `flash-report-${stockMatrixDate}.xlsx`, { logo: false });
+    void writeReportWorkbook(wb, `flash-report-${reportDateRange(from, to)}.xlsx`, { logo: false });
   };
 
   const exportCsv = (filename: string, rows: (string | number)[][]) => {
@@ -1437,7 +1440,6 @@ function ReportsPage() {
     sales.error ||
     items.error ||
     stockMovements.error ||
-    stockMatrixSales.error ||
     stockMatrixMovements.error ||
     stockMatrixLedgerMovements.error ||
     deductionAudit.error ||
@@ -1451,7 +1453,6 @@ function ReportsPage() {
         branches.isLoading ||
         items.isLoading ||
         stockMovements.isLoading ||
-        stockMatrixSales.isLoading ||
         stockMatrixMovements.isLoading ||
         stockMatrixLedgerMovements.isLoading ||
         deductionAudit.isLoading ||
@@ -1654,8 +1655,10 @@ function ReportsPage() {
           <div className="text-2xl font-bold">{MWK(totalSales)}</div>
           <div className="text-xs text-muted-foreground">{sales.data?.length ?? 0} orders</div>
           {(() => {
-            const missingSummary = missingOrderNumbersSummary(stockMatrixSales.data ?? []);
-            return missingSummary ? <div className="text-xs text-destructive font-medium mt-1">{missingSummary}</div> : null;
+            const missingSummary = missingOrderNumbersSummary(sales.data ?? []);
+            return missingSummary ? (
+              <div className="text-xs text-destructive font-medium mt-1">{missingSummary}</div>
+            ) : null;
           })()}
         </Card>
         <Card className="p-4">

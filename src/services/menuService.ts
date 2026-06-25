@@ -23,14 +23,22 @@ type MenuRowWithRelations = Database["public"]["Tables"]["menu_items"]["Row"] & 
 };
 
 function toMenuItem(row: MenuRowWithRelations): MenuItemView {
+  const catName = row.categories?.name ?? null;
   return {
     id: row.id,
     name: row.name,
+    slug: slugify(row.name),
     category_id: row.category_id,
     price: Number(row.price),
     description: row.description,
     active: row.active,
     sort_order: row.sort_order,
+    kind: deriveKind(catName),
+    featured: false,
+    spicy: false,
+    vegetarian: false,
+    image_url: null,
+    category_name: catName,
     categories: row.categories ? { name: row.categories.name } : undefined,
   };
 }
@@ -112,7 +120,7 @@ export const menuService = {
   },
 
   async listWebsiteMenuItems() {
-    let query = supabase
+    const query = supabase
       .from("menu_items")
       .select("*, categories!inner(name)")
       .eq("categories.kind", "menu")

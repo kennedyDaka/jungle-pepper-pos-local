@@ -20,7 +20,10 @@ type CartCtx = {
   items: CartItem[];
   count: number;
   subtotal: number;
-  add: (item: Omit<CartItem, "quantity" | "modifiers"> & { modifiers?: CartItemModifier[] }, qty?: number) => void;
+  add: (
+    item: Omit<CartItem, "quantity" | "modifiers"> & { modifiers?: CartItemModifier[] },
+    qty?: number,
+  ) => void;
   setQty: (id: string, qty: number) => void;
   remove: (id: string) => void;
   clear: () => void;
@@ -33,7 +36,14 @@ const Ctx = createContext<CartCtx | null>(null);
 const KEY = "jp_cart_v2";
 
 function itemKey(item: { id: string; modifiers?: CartItemModifier[] }): string {
-  return item.id + ":" + (item.modifiers ?? []).map((m) => m.modifier_id).sort().join(",");
+  return (
+    item.id +
+    ":" +
+    (item.modifiers ?? [])
+      .map((m) => m.modifier_id)
+      .sort()
+      .join(",")
+  );
 }
 
 export function WebsiteCartProvider({ children }: { children: ReactNode }) {
@@ -45,34 +55,55 @@ export function WebsiteCartProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) setItems(JSON.parse(raw));
-    } catch {}
+    } catch {
+      localStorage.removeItem(KEY);
+    }
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
+    try {
+      localStorage.setItem(KEY, JSON.stringify(items));
+    } catch {
+      return;
+    }
   }, [items, hydrated]);
 
-  const value = useMemo<CartCtx>(() => ({
-    items,
-    count: items.reduce((a, b) => a + b.quantity, 0),
-    subtotal: items.reduce((a, b) => a + b.quantity * b.price_mwk + b.modifiers.reduce((s, m) => s + m.price_delta * b.quantity, 0), 0),
-    add: (it, qty = 1) => {
-      setItems((cur) => {
-        const key = itemKey(it);
-        const ex = cur.find((c) => itemKey(c) === key);
-        if (ex) return cur.map((c) => itemKey(c) === key ? { ...c, quantity: c.quantity + qty } : c);
-        return [...cur, { ...it, quantity: qty, modifiers: it.modifiers ?? [] }];
-      });
-    },
-    setQty: (id, qty) => setItems((cur) => qty <= 0 ? cur.filter((c) => c.id !== id) : cur.map((c) => c.id === id ? { ...c, quantity: qty } : c)),
-    remove: (id) => setItems((cur) => cur.filter((c) => c.id !== id)),
-    clear: () => setItems([]),
-    isOpen,
-    open: () => setOpen(true),
-    close: () => setOpen(false),
-  }), [items, isOpen]);
+  const value = useMemo<CartCtx>(
+    () => ({
+      items,
+      count: items.reduce((a, b) => a + b.quantity, 0),
+      subtotal: items.reduce(
+        (a, b) =>
+          a +
+          b.quantity * b.price_mwk +
+          b.modifiers.reduce((s, m) => s + m.price_delta * b.quantity, 0),
+        0,
+      ),
+      add: (it, qty = 1) => {
+        setItems((cur) => {
+          const key = itemKey(it);
+          const ex = cur.find((c) => itemKey(c) === key);
+          if (ex)
+            return cur.map((c) => (itemKey(c) === key ? { ...c, quantity: c.quantity + qty } : c));
+          return [...cur, { ...it, quantity: qty, modifiers: it.modifiers ?? [] }];
+        });
+      },
+      setQty: (id, qty) =>
+        setItems((cur) =>
+          qty <= 0
+            ? cur.filter((c) => c.id !== id)
+            : cur.map((c) => (c.id === id ? { ...c, quantity: qty } : c)),
+        ),
+      remove: (id) => setItems((cur) => cur.filter((c) => c.id !== id)),
+      clear: () => setItems([]),
+      isOpen,
+      open: () => setOpen(true),
+      close: () => setOpen(false),
+    }),
+    [items, isOpen],
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

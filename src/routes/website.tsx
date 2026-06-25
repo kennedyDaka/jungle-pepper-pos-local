@@ -1,11 +1,30 @@
 import { createFileRoute, Outlet, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/services/repositories/supabaseClient";
 import { WebsiteCartProvider } from "@/lib/website-cart";
 import { CartButton, CartDrawer, OrderBar } from "@/components/website/CartDrawer";
 import { IMAGES } from "@/lib/website-images";
-import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Menu, Minus, Plus, ShoppingCart, X } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { LoadingState } from "@/components/DataState";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { MWK } from "@/lib/format";
+import { menuService } from "@/services/menuService";
+import { orderService } from "@/services/orderService";
+import { toast } from "sonner";
+import logo from "@/assets/jungle-pepper-logo.png";
 
 export const Route = createFileRoute("/website")({
   component: WebsiteLayout,
@@ -50,19 +69,59 @@ function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-[color:var(--border)] bg-[color:var(--brand-paper)]/95 backdrop-blur">
       <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2.5 sm:px-4">
         <Link to="/website" className="flex min-w-0 items-center gap-2">
-          <img src={IMAGES.logo} alt="Jungle Pepper" className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" />
-          <span className="font-display text-lg leading-none tracking-wide text-[color:var(--brand-red)] sm:text-2xl">JUNGLE PEPPER</span>
+          <img
+            src={IMAGES.logo}
+            alt="Jungle Pepper"
+            className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11"
+          />
+          <span className="font-display text-lg leading-none tracking-wide text-[color:var(--brand-red)] sm:text-2xl">
+            JUNGLE PEPPER
+          </span>
         </Link>
         <nav className="hidden md:flex items-center justify-end gap-5 text-sm font-semibold uppercase tracking-wider">
-          <Link to="/website" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Home</Link>
-          <Link to="/website/menu" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Menu</Link>
-          <Link to="/website/reservations" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Reserve</Link>
-          <Link to="/website/about" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>About</Link>
-          <Link to="/website/contact" className="hover:text-[color:var(--brand-red)]" activeProps={{ className: "text-[color:var(--brand-red)]" }}>Contact</Link>
+          <Link
+            to="/website"
+            className="hover:text-[color:var(--brand-red)]"
+            activeProps={{ className: "text-[color:var(--brand-red)]" }}
+          >
+            Home
+          </Link>
+          <Link
+            to="/website/menu"
+            className="hover:text-[color:var(--brand-red)]"
+            activeProps={{ className: "text-[color:var(--brand-red)]" }}
+          >
+            Menu
+          </Link>
+          <Link
+            to="/website/reservations"
+            className="hover:text-[color:var(--brand-red)]"
+            activeProps={{ className: "text-[color:var(--brand-red)]" }}
+          >
+            Reserve
+          </Link>
+          <Link
+            to="/website/about"
+            className="hover:text-[color:var(--brand-red)]"
+            activeProps={{ className: "text-[color:var(--brand-red)]" }}
+          >
+            About
+          </Link>
+          <Link
+            to="/website/contact"
+            className="hover:text-[color:var(--brand-red)]"
+            activeProps={{ className: "text-[color:var(--brand-red)]" }}
+          >
+            Contact
+          </Link>
         </nav>
         <div className="flex items-center gap-1.5 justify-self-end">
           <CartButton />
-          <button onClick={() => setOpen((v) => !v)} aria-label="Menu" className="grid h-9 w-9 place-items-center rounded-full md:hidden hover:bg-black/5">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-label="Menu"
+            className="grid h-9 w-9 place-items-center rounded-full md:hidden hover:bg-black/5"
+          >
             {open ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
@@ -70,8 +129,24 @@ function SiteHeader() {
       {open && (
         <nav className="md:hidden border-t border-[color:var(--border)] bg-[color:var(--brand-paper)]">
           <div className="mx-auto grid max-w-6xl gap-1 px-3 py-2 text-sm font-semibold uppercase tracking-wider">
-            {[["/website","Home"],["/website/menu","Menu"],["/website/reservations","Reserve"],["/website/about","About"],["/website/contact","Contact"]].map(([to,label]) => (
-              <Link key={to} to={to} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 hover:bg-[color:var(--brand-yellow)]/30" activeProps={{ className: "text-[color:var(--brand-red)] bg-[color:var(--brand-yellow)]/40" }}>{label}</Link>
+            {[
+              ["/website", "Home"],
+              ["/website/menu", "Menu"],
+              ["/website/reservations", "Reserve"],
+              ["/website/about", "About"],
+              ["/website/contact", "Contact"],
+            ].map(([to, label]) => (
+              <Link
+                key={to}
+                to={to}
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2.5 hover:bg-[color:var(--brand-yellow)]/30"
+                activeProps={{
+                  className: "text-[color:var(--brand-red)] bg-[color:var(--brand-yellow)]/40",
+                }}
+              >
+                {label}
+              </Link>
             ))}
           </div>
         </nav>
@@ -89,25 +164,56 @@ function SiteFooter() {
             <img src={IMAGES.logo} alt="" className="h-12 w-12" />
             <span className="font-display text-xl">JUNGLE PEPPER</span>
           </div>
-          <p className="mt-3 text-sm opacity-80">Malawi's own pizza & authentic Portuguese cuisine.</p>
+          <p className="mt-3 text-sm opacity-80">
+            Malawi's own pizza & authentic Portuguese cuisine.
+          </p>
         </div>
         <div className="text-sm">
           <h4 className="font-display text-base text-[color:var(--brand-yellow)]">Visit</h4>
-          <p className="mt-2 opacity-90">Kidney Crescent Road,<br/>Opposite O. Jussabs, Next to OMG.<br/>Blantyre, Malawi.</p>
-          <p className="mt-3 opacity-90">Wed – Sun · 11:30 – 21:00<br/>Mon & Tue · Closed</p>
+          <p className="mt-2 opacity-90">
+            Kidney Crescent Road,
+            <br />
+            Opposite O. Jussabs, Next to OMG.
+            <br />
+            Blantyre, Malawi.
+          </p>
+          <p className="mt-3 opacity-90">
+            Wed – Sun · 11:30 – 21:00
+            <br />
+            Mon & Tue · Closed
+          </p>
         </div>
         <div className="text-sm">
           <h4 className="font-display text-base text-[color:var(--brand-yellow)]">Contact</h4>
-          <p className="mt-2"><a href="tel:+265999826229" className="hover:underline">0999 826 229</a></p>
-          <p><a href="tel:+265888826229" className="hover:underline">0888 826 229</a></p>
+          <p className="mt-2">
+            <a href="tel:+265999826229" className="hover:underline">
+              0999 826 229
+            </a>
+          </p>
+          <p>
+            <a href="tel:+265888826229" className="hover:underline">
+              0888 826 229
+            </a>
+          </p>
         </div>
       </div>
       <div className="border-t border-white/10 py-5">
-        <a href="https://operonsystems.com" target="_blank" rel="noreferrer" className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1 px-4 text-center opacity-80 transition hover:opacity-100">
+        <a
+          href="https://operonsystems.com"
+          target="_blank"
+          rel="noreferrer"
+          className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1 px-4 text-center opacity-80 transition hover:opacity-100"
+        >
           <span className="text-[10px] uppercase tracking-[0.25em] opacity-70">Powered by</span>
-          <img src={IMAGES.operon} alt="Operon Systems" className="h-10 w-auto brightness-0 invert" />
+          <img
+            src={IMAGES.operon}
+            alt="Operon Systems"
+            className="h-10 w-auto brightness-0 invert"
+          />
         </a>
-        <p className="mt-4 text-center text-[11px] opacity-60">© {new Date().getFullYear()} Jungle Pepper. All rights reserved.</p>
+        <p className="mt-4 text-center text-[11px] opacity-60">
+          © {new Date().getFullYear()} Jungle Pepper. All rights reserved.
+        </p>
       </div>
     </footer>
   );
@@ -125,10 +231,20 @@ type CartLine = {
 };
 
 const MENU_CATEGORIES = [
-  "starters", "pastas", "pizza", "burgers", "chips",
-  "pregos-bitoque", "frango", "camarao-marisco",
-  "sweets", "hot-drinks", "beers", "soft-drinks",
-  "juices-mocktails", "liquor",
+  "starters",
+  "pastas",
+  "pizza",
+  "burgers",
+  "chips",
+  "pregos-bitoque",
+  "frango",
+  "camarao-marisco",
+  "sweets",
+  "hot-drinks",
+  "beers",
+  "soft-drinks",
+  "juices-mocktails",
+  "liquor",
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -189,7 +305,9 @@ function itemMatchesGroup(item: any, groupId: string) {
   if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
   if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
   if (groupId === "liquor") {
-    return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(category);
+    return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(
+      category,
+    );
   }
 
   return false;
@@ -237,7 +355,8 @@ function WebsitePage() {
   const filtered = useMemo(() => {
     let list = items.data ?? [];
     if (activeCat) list = list.filter((item: any) => itemMatchesGroup(item, activeCat));
-    if (search.trim()) list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
+    if (search.trim())
+      list = list.filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()));
     return list;
   }, [items.data, activeCat, search]);
 
@@ -249,7 +368,14 @@ function WebsitePage() {
     }
     setCart((c) => [
       ...c,
-      { key: crypto.randomUUID(), menu_item_id: mi.id, name: mi.name, price: Number(mi.price), qty: 1, packaging: [] },
+      {
+        key: crypto.randomUUID(),
+        menu_item_id: mi.id,
+        name: mi.name,
+        price: Number(mi.price),
+        qty: 1,
+        packaging: [],
+      },
     ]);
   };
 
@@ -267,11 +393,15 @@ function WebsitePage() {
             qty: l.qty,
             note: l.note ?? null,
             modifiers: [],
-            packaging: orderType === "takeaway" ? l.packaging : null,
+            packaging: null,
           })),
         },
         branchId,
-        { tableId: orderType === "dine-in" ? selectedTableId ?? undefined : undefined, customerName: name.trim() || undefined, customerPhone: phone.trim() || undefined },
+        {
+          tableId: orderType === "dine-in" ? (selectedTableId ?? undefined) : undefined,
+          customerName: name.trim() || undefined,
+          customerPhone: phone.trim() || undefined,
+        },
       );
     },
     onSuccess: (orderId) => {
@@ -314,7 +444,11 @@ function WebsitePage() {
             <div className="text-[10px] text-muted-foreground">Kidney Crescent - Blantyre</div>
           </div>
           <div className="flex-1" />
-          <Button variant="outline" size="sm" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}
+          >
             <ShoppingCart className="h-4 w-4 mr-1" />
             Cart ({cart.length})
           </Button>
@@ -335,11 +469,16 @@ function WebsitePage() {
               />
             </div>
 
-            <Tabs value={activeCat ?? "all"} onValueChange={(v) => setActiveCat(v === "all" ? null : v)}>
+            <Tabs
+              value={activeCat ?? "all"}
+              onValueChange={(v) => setActiveCat(v === "all" ? null : v)}
+            >
               <TabsList className="flex-wrap h-auto">
                 <TabsTrigger value="all">ALL</TabsTrigger>
                 {MENU_CATEGORIES.map((cat) => (
-                  <TabsTrigger key={cat} value={cat}>{CATEGORY_LABELS[cat]}</TabsTrigger>
+                  <TabsTrigger key={cat} value={cat}>
+                    {CATEGORY_LABELS[cat]}
+                  </TabsTrigger>
                 ))}
               </TabsList>
             </Tabs>
@@ -379,13 +518,18 @@ function WebsitePage() {
 
               {orderType === "dine-in" && (
                 <div className="mb-4">
-                  <Select value={selectedTableId ?? ""} onValueChange={(v) => setSelectedTableId(v || null)}>
+                  <Select
+                    value={selectedTableId ?? ""}
+                    onValueChange={(v) => setSelectedTableId(v || null)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select table..." />
                     </SelectTrigger>
                     <SelectContent>
                       {(tables.data ?? []).map((t) => (
-                        <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -397,7 +541,10 @@ function WebsitePage() {
               )}
               <div className="space-y-2 max-h-80 overflow-auto">
                 {cart.map((l) => (
-                  <div key={l.key} className="flex items-center justify-between gap-2 text-sm border-b border-border pb-2">
+                  <div
+                    key={l.key}
+                    className="flex items-center justify-between gap-2 text-sm border-b border-border pb-2"
+                  >
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{l.name}</div>
                       <div className="text-xs text-muted-foreground">{MWK(l.price)} each</div>
@@ -405,17 +552,39 @@ function WebsitePage() {
                         <Input
                           placeholder="Note..."
                           value={l.note ?? ""}
-                          onChange={(e) => setCart((c) => c.map((x) => (x.key === l.key ? { ...x, note: e.target.value } : x)))}
+                          onChange={(e) =>
+                            setCart((c) =>
+                              c.map((x) => (x.key === l.key ? { ...x, note: e.target.value } : x)),
+                            )
+                          }
                           className="h-7 text-xs"
                         />
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => setCart((c) => c.map((x) => (x.key === l.key ? { ...x, qty: Math.max(1, x.qty - 1) } : x)))}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setCart((c) =>
+                            c.map((x) =>
+                              x.key === l.key ? { ...x, qty: Math.max(1, x.qty - 1) } : x,
+                            ),
+                          )
+                        }
+                      >
                         <Minus className="h-3 w-3" />
                       </Button>
                       <span className="w-5 text-center text-xs">{l.qty}</span>
-                      <Button size="sm" variant="ghost" onClick={() => setCart((c) => c.map((x) => (x.key === l.key ? { ...x, qty: x.qty + 1 } : x)))}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setCart((c) =>
+                            c.map((x) => (x.key === l.key ? { ...x, qty: x.qty + 1 } : x)),
+                          )
+                        }
+                      >
                         <Plus className="h-3 w-3" />
                       </Button>
                       <button onClick={() => setCart((c) => c.filter((x) => x.key !== l.key))}>
@@ -433,18 +602,38 @@ function WebsitePage() {
                     <span className="text-primary">{MWK(subtotal)}</span>
                   </div>
                   <div>
-                    <Label>Your name <span className="text-destructive">*</span></Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
-                    {!name.trim() && <p className="text-xs text-destructive mt-0.5">Name is required</p>}
+                    <Label>
+                      Your name <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Name"
+                    />
+                    {!name.trim() && (
+                      <p className="text-xs text-destructive mt-0.5">Name is required</p>
+                    )}
                   </div>
                   <div>
-                    <Label>Phone <span className="text-destructive">*</span></Label>
-                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0999 000 000" />
-                    {!phone.trim() && <p className="text-xs text-destructive mt-0.5">Phone is required</p>}
+                    <Label>
+                      Phone <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="0999 000 000"
+                    />
+                    {!phone.trim() && (
+                      <p className="text-xs text-destructive mt-0.5">Phone is required</p>
+                    )}
                   </div>
                   <div>
                     <Label>Note</Label>
-                    <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Special instructions..." />
+                    <Input
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Special instructions..."
+                    />
                   </div>
                   <Button
                     className="w-full"

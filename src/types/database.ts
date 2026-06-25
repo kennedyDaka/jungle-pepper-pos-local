@@ -1587,7 +1587,11 @@ export type Database = {
         Returns: string;
       };
       update_order_status: {
-        Args: { _new_status: Database["public"]["Enums"]["order_status"]; _note?: string; _order_id: string };
+        Args: {
+          _new_status: Database["public"]["Enums"]["order_status"];
+          _note?: string;
+          _order_id: string;
+        };
         Returns: undefined;
       };
       process_payment: {

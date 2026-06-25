@@ -37,7 +37,12 @@ export const orderService = {
     payload: WaiterOrderPayload,
     branchId: string,
     payments: PaymentInput[],
-    options?: { physicalOrderNo?: string; saleAt?: string; saleType?: string; staffMealReason?: string },
+    options?: {
+      physicalOrderNo?: string;
+      saleAt?: string;
+      saleType?: string;
+      staffMealReason?: string;
+    },
   ) {
     const { data, error } = await supabase.rpc("create_pos_order", {
       _payload: payload as unknown as Json,
@@ -53,7 +58,12 @@ export const orderService = {
     return data;
   },
 
-  async createWaiterOrder(payload: WaiterOrderPayload, branchId: string, tableId?: string, customerId?: string) {
+  async createWaiterOrder(
+    payload: WaiterOrderPayload,
+    branchId: string,
+    tableId?: string,
+    customerId?: string,
+  ) {
     const { data, error } = await supabase.rpc("create_waiter_order", {
       _payload: payload as unknown as Json,
       _branch_id: branchId,
@@ -68,7 +78,12 @@ export const orderService = {
   async createWebsiteOrder(
     payload: WebsiteOrderPayload,
     branchId: string,
-    options?: { tableId?: string; customerName?: string; customerPhone?: string; customerId?: string },
+    options?: {
+      tableId?: string;
+      customerName?: string;
+      customerPhone?: string;
+      customerId?: string;
+    },
   ) {
     const { data, error } = await supabase.rpc("create_website_order", {
       _payload: payload as unknown as Json,
@@ -95,7 +110,13 @@ export const orderService = {
   async processPayment(
     orderId: string,
     payments: PaymentInput[],
-    options?: { physicalOrderNo?: string; saleAt?: string; discount?: number; saleType?: string; staffMealReason?: string },
+    options?: {
+      physicalOrderNo?: string;
+      saleAt?: string;
+      discount?: number;
+      saleType?: string;
+      staffMealReason?: string;
+    },
   ) {
     const { data, error } = await supabase.rpc("process_payment", {
       _order_id: orderId,
@@ -124,17 +145,21 @@ export const orderService = {
   },
 
   async getPendingOrders(branchId: string) {
-    const { data: orders, error } = await supabase.rpc("get_pending_orders", { _branch_id: branchId });
+    const { data: orders, error } = await supabase.rpc("get_pending_orders", {
+      _branch_id: branchId,
+    });
     raiseIfError(error, "Could not fetch pending orders");
     if (!orders || orders.length === 0) return [];
     const orderIds = orders.map((o: any) => o.id);
     const { data: items, error: itemsError } = await supabase
       .from("order_items")
-      .select(`
+      .select(
+        `
         *,
         menu_items(name, categories(name)),
         order_item_modifiers(modifiers(name, price_delta))
-      `)
+      `,
+      )
       .in("order_id", orderIds);
     raiseIfError(itemsError, "Could not fetch order items");
     return orders.map((order: any) => ({

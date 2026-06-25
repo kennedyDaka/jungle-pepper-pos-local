@@ -22,6 +22,7 @@ export type MatrixMovement = {
   created_at: string;
   invoice_no?: string | null;
   menu_item_names?: string | null;
+  order_item_qty?: number | null;
   destination?: string | null;
   source_detail?: string | null;
   source_label?: string | null;
@@ -313,13 +314,19 @@ export function normalizeName(value: string) {
     .trim();
 }
 
-function dateTitle(date: string) {
+function shortDateLabel(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   const label = new Date(year, (month || 1) - 1, day || 1).toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
   });
-  return `DATE ${label.toUpperCase()}`;
+  return label.toUpperCase();
+}
+
+function dateTitle(date: string) {
+  const [from, to] = date.split(" to ").map((part) => part.trim());
+  if (from && to) return `PERIOD ${shortDateLabel(from)} TO ${shortDateLabel(to)}`;
+  return `DATE ${shortDateLabel(date)}`;
 }
 
 export function itemIndex(items: MatrixItem[]) {
@@ -392,7 +399,10 @@ function stockDetails(movements: MatrixMovement[]) {
   );
 }
 
-export function menuSalesSummary(row: Extract<MatrixRowDef, { kind: "menu" }>, orders: MatrixOrder[]) {
+export function menuSalesSummary(
+  row: Extract<MatrixRowDef, { kind: "menu" }>,
+  orders: MatrixOrder[],
+) {
   const aliases = new Set(row.menuAliases.map(normalizeName));
   let qty = 0;
   const details: string[] = [];
@@ -435,8 +445,8 @@ export function summarizeStock(
   const ledger = ledgerMovements.filter((movement) => movement.item_id === item.id);
   const periodNet = period.reduce((sum, movement) => sum + numeric(movement.qty), 0);
   const ledgerNet = ledger.reduce((sum, movement) => sum + numeric(movement.qty), 0);
-  const closing = numeric(item.qty_on_hand);
-  const opening = closing - ledgerNet;
+  const currentClosing = numeric(item.qty_on_hand);
+  const opening = currentClosing - ledgerNet;
   const purchase = period.reduce(
     (sum, movement) => sum + (numeric(movement.qty) > 0 ? numeric(movement.qty) : 0),
     0,
@@ -447,6 +457,7 @@ export function summarizeStock(
       0,
     ),
   );
+  const closing = opening + periodNet;
   const expected = opening + periodNet;
   const missing = expected - closing;
 
@@ -728,6 +739,6 @@ export function buildStockMatrixWorkbook(input: StockMatrixInput) {
   return workbook;
 }
 
-export function stockMatrixFilename(date: string) {
-  return `stock-matrix-${date}.xlsx`;
+export function stockMatrixFilename(from: string, to?: string) {
+  return `stock-matrix-${to && to !== from ? `${from}_to_${to}` : from}.xlsx`;
 }

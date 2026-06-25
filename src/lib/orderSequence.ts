@@ -1,29 +1,169 @@
-export function findMissingOrderNumbers(orders: { physical_order_no?: string | null }[]): number[] {
-  const nums: number[] = [];
-  for (const order of orders) {
-    if (order.physical_order_no) {
-      const n = parseInt(order.physical_order_no, 10);
-      if (!isNaN(n)) nums.push(n);
-    }
-  }
-  if (nums.length < 2) return [];
-  nums.sort((a, b) => a - b);
-  const min = nums[0];
-  const max = nums[nums.length - 1];
-  const present = new Set(nums);
+type OrderNumberSource = {
+  physical_order_no?: string | null;
+  created_at?: string | null;
+};
+
+export type OrderNumberSequence = {
+  date: string;
+  index: number;
+  start: number;
+  end: number;
+  count: number;
+  numbers: number[];
+  missing: number[];
+};
+
+export type DailyOrderNumberAudit = {
+  date: string;
+  sequences: OrderNumberSequence[];
+  ignored: string[];
+};
+
+const RECEIPT_BOOK_JUMP = 10;
+
+function parseOrderNumber(value: string | null | undefined) {
+  const trimmed = String(value ?? "").trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  return Number(trimmed);
+}
+
+function localDateKey(value: string | null | undefined) {
+  if (!value) return "Unknown date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function sequenceMissing(numbers: number[]) {
+  const present = new Set(numbers);
+  const start = Math.min(...numbers);
+  const end = Math.max(...numbers);
   const missing: number[] = [];
-  for (let i = min; i <= max; i++) {
-    if (!present.has(i)) missing.push(i);
+  for (let value = start; value <= end; value += 1) {
+    if (!present.has(value)) missing.push(value);
   }
   return missing;
 }
 
-export function missingOrderNumbersSummary(
-  orders: { physical_order_no?: string | null }[],
-): string {
-  const missing = findMissingOrderNumbers(orders);
-  if (missing.length === 0) return "";
-  if (missing.length <= 5) return `Missing order numbers: ${missing.join(", ")}`;
-  const prefix = missing.slice(0, 5);
-  return `Missing order numbers: ${prefix.join(", ")}... (+${missing.length - 5} more)`;
+function buildSequence(date: string, index: number, numbers: number[]): OrderNumberSequence {
+  const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+  return {
+    date,
+    index,
+    start: sorted[0],
+    end: sorted[sorted.length - 1],
+    count: numbers.length,
+    numbers: sorted,
+    missing: sequenceMissing(sorted),
+  };
+}
+
+export function analyzeDailyOrderNumbers(
+  orders: OrderNumberSource[],
+  options: { receiptBookJump?: number } = {},
+): DailyOrderNumberAudit[] {
+  const jump = options.receiptBookJump ?? RECEIPT_BOOK_JUMP;
+  const grouped = new Map<
+    string,
+    Array<{ number: number; createdAt: number; orderIndex: number; raw: string }>
+  >();
+  const ignoredByDate = new Map<string, string[]>();
+
+  orders.forEach((order, orderIndex) => {
+    const date = localDateKey(order.created_at);
+    const raw = String(order.physical_order_no ?? "").trim();
+    const number = parseOrderNumber(raw);
+    if (number === null) {
+      if (raw) ignoredByDate.set(date, [...(ignoredByDate.get(date) ?? []), raw]);
+      return;
+    }
+    const createdAt = order.created_at ? new Date(order.created_at).getTime() : 0;
+    grouped.set(date, [
+      ...(grouped.get(date) ?? []),
+      { number, createdAt: Number.isFinite(createdAt) ? createdAt : 0, orderIndex, raw },
+    ]);
+  });
+
+  const dates = Array.from(new Set([...grouped.keys(), ...ignoredByDate.keys()])).sort();
+
+  return dates.map((date) => {
+    const rows = (grouped.get(date) ?? []).sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+      return a.orderIndex - b.orderIndex;
+    });
+
+    const sequenceBuckets: number[][] = [];
+    rows.forEach((row) => {
+      const current = sequenceBuckets[sequenceBuckets.length - 1];
+      if (!current?.length) {
+        sequenceBuckets.push([row.number]);
+        return;
+      }
+
+      const previous = current[current.length - 1];
+      const isNewBook = row.number <= previous || row.number - previous > jump;
+      if (isNewBook) sequenceBuckets.push([row.number]);
+      else current.push(row.number);
+    });
+
+    return {
+      date,
+      sequences: sequenceBuckets.map((numbers, index) => buildSequence(date, index + 1, numbers)),
+      ignored: ignoredByDate.get(date) ?? [],
+    };
+  });
+}
+
+export function findMissingOrderNumbers(orders: OrderNumberSource[]): number[] {
+  return analyzeDailyOrderNumbers(orders).flatMap((day) =>
+    day.sequences.flatMap((sequence) => sequence.missing),
+  );
+}
+
+export function formatSequenceRange(sequence: Pick<OrderNumberSequence, "start" | "end">) {
+  return sequence.start === sequence.end
+    ? String(sequence.start)
+    : `${sequence.start}-${sequence.end}`;
+}
+
+export function missingOrderNumbersSummary(orders: OrderNumberSource[]): string {
+  const audits = analyzeDailyOrderNumbers(orders);
+  const missingParts = audits.flatMap((day) =>
+    day.sequences
+      .filter((sequence) => sequence.missing.length > 0)
+      .map(
+        (sequence) =>
+          `${day.date} seq ${sequence.index} (${formatSequenceRange(sequence)}): ${sequence.missing
+            .slice(0, 5)
+            .join(
+              ", ",
+            )}${sequence.missing.length > 5 ? `... (+${sequence.missing.length - 5})` : ""}`,
+      ),
+  );
+
+  if (missingParts.length > 0) {
+    return `Missing order numbers: ${missingParts.slice(0, 2).join("; ")}${
+      missingParts.length > 2 ? `; +${missingParts.length - 2} more sequence(s)` : ""
+    }`;
+  }
+
+  const multiSequenceDays = audits
+    .filter((day) => day.sequences.length > 1)
+    .map(
+      (day) =>
+        `${day.date}: ${day.sequences
+          .map((sequence) => `seq ${sequence.index} ${formatSequenceRange(sequence)}`)
+          .join("; ")}`,
+    );
+
+  if (multiSequenceDays.length > 0) {
+    return `Receipt book sequences: ${multiSequenceDays.slice(0, 2).join(" | ")}${
+      multiSequenceDays.length > 2 ? ` | +${multiSequenceDays.length - 2} more day(s)` : ""
+    }`;
+  }
+
+  return "";
 }

@@ -1,8 +1,19 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import type { CartItemModifier } from "@/lib/website-cart";
 
 export function BaseModifierDialog({
-  open, onClose, title, description, modifiers, onSelect,
+  open,
+  onClose,
+  title,
+  description,
+  modifiers,
+  onSelect,
 }: {
   open: boolean;
   onClose: () => void;

@@ -1,5 +1,12 @@
 export type Role = "admin" | "cashier" | "storekeeper";
-export type OrderStatus = "paid" | "void" | "pending" | "preparing" | "ready" | "served" | "cancelled";
+export type OrderStatus =
+  | "paid"
+  | "void"
+  | "pending"
+  | "preparing"
+  | "ready"
+  | "served"
+  | "cancelled";
 export type OrderSource = "pos" | "waiter" | "website";
 export type CategoryKind = "menu" | "inventory";
 export type StockType = "raw" | "production" | "consumable" | "beverage";
