@@ -9,11 +9,7 @@ import {
   type MatrixMovement,
   type MatrixOrder,
 } from "@/lib/stockMatrixReport";
-import {
-  analyzeDailyOrderNumbers,
-  formatSequenceRange,
-  type OrderNumberSequence,
-} from "@/lib/orderSequence";
+import { analyzeDailyOrderNumbers } from "@/lib/orderSequence";
 import type { ReportRow } from "@/lib/xlsxReport";
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -51,6 +47,7 @@ export type FlashReportInput = {
   movements: MatrixMovement[];
   ledgerMovements: MatrixMovement[];
   sales: MatrixOrder[];
+  expenses?: ReportRow[];
 };
 
 type FlashStockItem = {
@@ -311,6 +308,13 @@ function parseDishQty(value: string, fallbackQty = 1) {
   };
 }
 
+function soldAsLabel(name: string, movement: MatrixMovement) {
+  const normalizedName = normalizeName(name);
+  const normalizedCategories = normalizeName(movement.menu_categories ?? "");
+  if (normalizedName.includes("PIZZA") || normalizedCategories.includes("PIZZA")) return "Pizza";
+  return name;
+}
+
 function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
   const agg = new Map<string, number>();
   for (const movement of movements) {
@@ -323,7 +327,8 @@ function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
     for (const rawName of names) {
       const parsed = parseDishQty(rawName, Number(movement.order_item_qty ?? 1) || 1);
       if (!parsed.name) continue;
-      agg.set(parsed.name, (agg.get(parsed.name) ?? 0) + parsed.qty);
+      const label = soldAsLabel(parsed.name, movement);
+      agg.set(label, (agg.get(label) ?? 0) + parsed.qty);
     }
   }
   if (agg.size === 0) return "";
@@ -432,10 +437,6 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
   return rows;
 }
 
-function sequenceStatus(sequence: OrderNumberSequence) {
-  return sequence.missing.length > 0 ? "Missing numbers" : "OK";
-}
-
 export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
   const rows: ReportRow[] = [];
 
@@ -453,48 +454,148 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
     rows.push({
       Section: row.section,
       Item: row.label,
-      Open: stockCell(row.opening),
-      Purchases: stockCell(row.purchases),
-      "System Sales": stockCell(row.usage),
-      Expected: row.isMenu ? null : stockCell(row.expected),
-      Close: row.isMenu ? null : stockCell(row.closing),
-      Variance: row.isMenu ? null : stockCell(row.variance),
-      "Sold As": row.soldAs,
+      opening: stockCell(row.opening),
+      purchases: stockCell(row.purchases),
+      sales: stockCell(row.usage),
+      closing: row.isMenu ? null : stockCell(row.expected),
+      actual: row.isMenu ? null : stockCell(row.closing),
+      difference: row.isMenu ? null : stockCell(row.variance),
+      "sold as": row.soldAs,
     });
   });
 
   const audits = analyzeDailyOrderNumbers(input.sales);
-  if (audits.length === 0) {
+  const missingByDate = audits
+    .map((audit) => ({
+      date: audit.date,
+      missing: audit.sequences.flatMap((sequence) => sequence.missing),
+    }))
+    .filter((audit) => audit.missing.length > 0);
+
+  if (missingByDate.length === 0) {
     rows.push({
       Section: "Missing Order Numbers",
-      Item: "No physical order numbers found for this period",
+      Item: "No missing order numbers",
     });
   }
-  audits.forEach((audit) => {
-    if (audit.sequences.length === 0) {
-      rows.push({
-        Section: "Missing Order Numbers",
-        Date: audit.date,
-        Item: "No numeric physical order numbers",
-        Status: audit.ignored.length ? `Ignored: ${audit.ignored.join(", ")}` : "No entries",
-      });
-      return;
-    }
 
-    audit.sequences.forEach((sequence) => {
-      rows.push({
-        Section: "Missing Order Numbers",
-        Date: audit.date,
-        Sequence: sequence.index,
-        Range: formatSequenceRange(sequence),
-        Orders: sequence.count,
-        Missing: sequence.missing.join(", "),
-        Status: sequenceStatus(sequence),
-      });
+  missingByDate.forEach((audit) => {
+    rows.push({
+      Section: "Missing Order Numbers",
+      Date: audit.date,
+      "Missing Order Numbers": audit.missing.join(", "),
     });
   });
 
+  (input.expenses ?? []).forEach((expense) => {
+    rows.push({ Section: "Expenses", ...expense });
+  });
+
   return rows;
+}
+
+function columnLetter(index: number) {
+  let column = "";
+  let value = index;
+  while (value > 0) {
+    const modulo = (value - 1) % 26;
+    column = String.fromCharCode(65 + modulo) + column;
+    value = Math.floor((value - modulo) / 26);
+  }
+  return column;
+}
+
+function addExpensesWorksheet(wb: ExcelJS.Workbook, input: FlashReportInput) {
+  const expenses = input.expenses ?? [];
+  const ws = wb.addWorksheet("Expenses");
+  ws.getColumn(1).width = 18;
+  ws.getColumn(2).width = 14;
+  ws.getColumn(3).width = 20;
+  ws.getColumn(4).width = 22;
+  ws.getColumn(5).width = 16;
+  ws.getColumn(6).width = 34;
+  ws.getColumn(7).width = 28;
+  ws.getColumn(8).width = 16;
+  ws.getColumn(9).width = 16;
+  ws.getColumn(10).width = 14;
+  ws.getColumn(11).width = 12;
+  ws.getColumn(12).width = 16;
+
+  const titleRow = ws.addRow(["JUNGLE PEPPER - FLASH REPORT EXPENSES"]);
+  titleRow.getCell(1).font = TITLE_FONT;
+  ws.addRow([`Period: ${input.rangeLabel ?? input.reportDate}`]).getCell(1).font = SUBTITLE_FONT;
+  ws.addRow([]);
+
+  const preferredColumns = [
+    "Ref",
+    "Date",
+    "Category",
+    "Supplier",
+    "Method",
+    "Description",
+    "Item",
+    "Purchase Count",
+    "Size Each",
+    "Stock Qty",
+    "Unit",
+    "Line Total",
+    "Affects Stock",
+  ];
+  const extraColumns = Array.from(
+    new Set(
+      expenses.flatMap((row) => Object.keys(row)).filter((key) => !preferredColumns.includes(key)),
+    ),
+  );
+  const columns = [...preferredColumns, ...extraColumns].filter((column) =>
+    expenses.length
+      ? expenses.some((row) => row[column] !== undefined && row[column] !== "")
+      : true,
+  );
+
+  const header = ws.addRow(columns);
+  header.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = HEADER_FILL;
+    cell.font = HEADER_FONT;
+    cell.border = BORDER_THIN;
+    cell.alignment = { vertical: "middle", wrapText: true };
+  });
+
+  if (expenses.length === 0) {
+    ws.addRow(["No expenses recorded for this period"]);
+    return;
+  }
+
+  const firstDataRow = ws.rowCount + 1;
+  expenses.forEach((expense) => {
+    const row = ws.addRow(columns.map((column) => expense[column] ?? ""));
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = BORDER_THIN;
+      cell.alignment = { vertical: "top", wrapText: true };
+    });
+  });
+
+  const totalColumnIndex =
+    columns.findIndex((column) => column === "Line Total" || column === "Amount") + 1;
+  if (totalColumnIndex > 0) {
+    const totalRowValues: Array<string | { formula: string }> = columns.map(() => "");
+    totalRowValues[0] = "TOTAL";
+    totalRowValues[totalColumnIndex - 1] = {
+      formula: `=SUM(${columnLetter(totalColumnIndex)}${firstDataRow}:${columnLetter(totalColumnIndex)}${ws.rowCount})`,
+    };
+    const totalRow = ws.addRow(totalRowValues);
+    totalRow.eachCell({ includeEmpty: true }, (cell) => {
+      cell.font = TOTALS_FONT;
+      cell.fill = TOTALS_FILL;
+      cell.border = BORDER_THIN;
+      cell.numFmt = "#,##0";
+    });
+  }
+
+  columns.forEach((column, index) => {
+    if (["Line Total", "Amount", "Unit Cost", "Stock Qty", "Purchase Count"].includes(column)) {
+      ws.getColumn(index + 1).numFmt = "#,##0.###";
+    }
+  });
 }
 
 export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
@@ -582,13 +683,13 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
 
   const stockHeader = ws.addRow([
     "Key Item",
-    "Morning Opening Stock",
-    "Purchases",
-    "System Sales (POS)",
-    "Expected Closing Stock",
-    "Tonight's Actual Count",
-    "Variance",
-    "Sold As",
+    "opening",
+    "purchases",
+    "sales",
+    "closing",
+    "actual",
+    "difference",
+    "sold as",
   ]);
   stockHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = HEADER_FILL;
@@ -638,42 +739,25 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   s3Title.getCell(1).font = { bold: true, size: 12, underline: "single" };
   ws.addRow([]);
 
-  const sequenceHeader = ws.addRow(["Date", "Sequence", "Range", "Orders", "Missing", "Status"]);
-  sequenceHeader.eachCell({ includeEmpty: true }, (cell) => {
+  const missingHeader = ws.addRow(["Date", "Missing Order Numbers"]);
+  missingHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = HEADER_FILL;
     cell.font = HEADER_FONT;
     cell.border = BORDER_THIN;
   });
 
   const audits = analyzeDailyOrderNumbers(input.sales);
-  if (audits.length === 0) {
-    ws.addRow(["", "", "", "", "", "No physical order numbers found for this period"]);
-  }
+  const missingByDate = audits
+    .map((audit) => ({
+      date: audit.date,
+      missing: audit.sequences.flatMap((sequence) => sequence.missing),
+    }))
+    .filter((audit) => audit.missing.length > 0);
 
-  audits.forEach((audit) => {
-    if (audit.sequences.length === 0) {
-      ws.addRow([
-        audit.date,
-        "",
-        "",
-        "",
-        "",
-        audit.ignored.length ? `Ignored: ${audit.ignored.join(", ")}` : "No numeric entries",
-      ]);
-      return;
-    }
+  if (missingByDate.length === 0) ws.addRow(["", "No missing order numbers"]);
+  missingByDate.forEach((audit) => ws.addRow([audit.date, audit.missing.join(", ")]));
 
-    audit.sequences.forEach((sequence) => {
-      ws.addRow([
-        audit.date,
-        sequence.index,
-        formatSequenceRange(sequence),
-        sequence.count,
-        sequence.missing.join(", "),
-        sequenceStatus(sequence),
-      ]);
-    });
-  });
+  addExpensesWorksheet(wb, input);
 
   return wb;
 }

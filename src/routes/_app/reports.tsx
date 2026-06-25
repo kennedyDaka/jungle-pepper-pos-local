@@ -1011,6 +1011,7 @@ function ReportsPage() {
         movements: stockMatrixMovements.data ?? [],
         ledgerMovements: stockMatrixLedgerMovements.data ?? [],
         sales: sales.data ?? [],
+        expenses: expenseLineRows(),
       }),
     },
     {
@@ -1420,6 +1421,7 @@ function ReportsPage() {
       movements: stockMatrixMovements.data ?? [],
       ledgerMovements: stockMatrixLedgerMovements.data ?? [],
       sales: sales.data ?? [],
+      expenses: expenseLineRows(),
     });
     void writeReportWorkbook(wb, `flash-report-${reportDateRange(from, to)}.xlsx`, { logo: false });
   };

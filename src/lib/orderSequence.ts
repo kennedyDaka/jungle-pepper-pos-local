@@ -131,39 +131,19 @@ export function formatSequenceRange(sequence: Pick<OrderNumberSequence, "start" 
 
 export function missingOrderNumbersSummary(orders: OrderNumberSource[]): string {
   const audits = analyzeDailyOrderNumbers(orders);
-  const missingParts = audits.flatMap((day) =>
-    day.sequences
-      .filter((sequence) => sequence.missing.length > 0)
-      .map(
-        (sequence) =>
-          `${day.date} seq ${sequence.index} (${formatSequenceRange(sequence)}): ${sequence.missing
-            .slice(0, 5)
-            .join(
-              ", ",
-            )}${sequence.missing.length > 5 ? `... (+${sequence.missing.length - 5})` : ""}`,
-      ),
-  );
+  const missingByDate = audits
+    .map((day) => ({
+      date: day.date,
+      missing: day.sequences.flatMap((sequence) => sequence.missing),
+    }))
+    .filter((day) => day.missing.length > 0);
 
-  if (missingParts.length > 0) {
-    return `Missing order numbers: ${missingParts.slice(0, 2).join("; ")}${
-      missingParts.length > 2 ? `; +${missingParts.length - 2} more sequence(s)` : ""
-    }`;
+  if (missingByDate.length === 0) return "";
+  if (missingByDate.length === 1) {
+    return `Missing order numbers: ${missingByDate[0].missing.join(", ")}`;
   }
 
-  const multiSequenceDays = audits
-    .filter((day) => day.sequences.length > 1)
-    .map(
-      (day) =>
-        `${day.date}: ${day.sequences
-          .map((sequence) => `seq ${sequence.index} ${formatSequenceRange(sequence)}`)
-          .join("; ")}`,
-    );
-
-  if (multiSequenceDays.length > 0) {
-    return `Receipt book sequences: ${multiSequenceDays.slice(0, 2).join(" | ")}${
-      multiSequenceDays.length > 2 ? ` | +${multiSequenceDays.length - 2} more day(s)` : ""
-    }`;
-  }
-
-  return "";
+  return `Missing order numbers: ${missingByDate
+    .map((day) => `${day.date}: ${day.missing.join(", ")}`)
+    .join("; ")}`;
 }
