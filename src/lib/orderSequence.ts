@@ -66,13 +66,10 @@ export function analyzeDailyOrderNumbers(
   options: { receiptBookJump?: number } = {},
 ): DailyOrderNumberAudit[] {
   const jump = options.receiptBookJump ?? RECEIPT_BOOK_JUMP;
-  const grouped = new Map<
-    string,
-    Array<{ number: number; createdAt: number; orderIndex: number; raw: string }>
-  >();
+  const grouped = new Map<string, number[]>();
   const ignoredByDate = new Map<string, string[]>();
 
-  orders.forEach((order, orderIndex) => {
+  orders.forEach((order) => {
     const date = localDateKey(order.created_at);
     const raw = String(order.physical_order_no ?? "").trim();
     const number = parseOrderNumber(raw);
@@ -80,33 +77,26 @@ export function analyzeDailyOrderNumbers(
       if (raw) ignoredByDate.set(date, [...(ignoredByDate.get(date) ?? []), raw]);
       return;
     }
-    const createdAt = order.created_at ? new Date(order.created_at).getTime() : 0;
-    grouped.set(date, [
-      ...(grouped.get(date) ?? []),
-      { number, createdAt: Number.isFinite(createdAt) ? createdAt : 0, orderIndex, raw },
-    ]);
+    grouped.set(date, [...(grouped.get(date) ?? []), number]);
   });
 
   const dates = Array.from(new Set([...grouped.keys(), ...ignoredByDate.keys()])).sort();
 
   return dates.map((date) => {
-    const rows = (grouped.get(date) ?? []).sort((a, b) => {
-      if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
-      return a.orderIndex - b.orderIndex;
-    });
+    const numbers = [...new Set(grouped.get(date) ?? [])].sort((a, b) => a - b);
 
     const sequenceBuckets: number[][] = [];
-    rows.forEach((row) => {
+    numbers.forEach((number) => {
       const current = sequenceBuckets[sequenceBuckets.length - 1];
       if (!current?.length) {
-        sequenceBuckets.push([row.number]);
+        sequenceBuckets.push([number]);
         return;
       }
 
       const previous = current[current.length - 1];
-      const isNewBook = row.number <= previous || row.number - previous > jump;
-      if (isNewBook) sequenceBuckets.push([row.number]);
-      else current.push(row.number);
+      const isNewBook = number - previous > jump;
+      if (isNewBook) sequenceBuckets.push([number]);
+      else current.push(number);
     });
 
     return {

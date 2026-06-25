@@ -49,6 +49,7 @@ type OrderWithRelations = Database["public"]["Tables"]["orders"]["Row"] & {
 };
 
 type MovementWithRelations = Database["public"]["Views"]["stock_movement_details"]["Row"];
+type QueryPage<T> = PromiseLike<{ data: T[] | null; error: unknown }>;
 
 type ProductionLineWithRelations = Database["public"]["Tables"]["production_inputs"]["Row"] & {
   items?: {
@@ -74,6 +75,24 @@ type ProductionBatchWithRelations = Database["public"]["Tables"]["production_bat
 
 function toStaff(row?: StaffRelation) {
   return row ? { username: row.username, full_name: row.full_name } : null;
+}
+
+const REPORT_PAGE_SIZE = 1000;
+
+async function fetchAllReportPages<T>(
+  buildPage: (from: number, to: number) => QueryPage<T>,
+  errorMessage: string,
+) {
+  const rows: T[] = [];
+  for (let from = 0; ; from += REPORT_PAGE_SIZE) {
+    const to = from + REPORT_PAGE_SIZE - 1;
+    const { data, error } = await buildPage(from, to);
+    raiseIfError(error as any, errorMessage);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < REPORT_PAGE_SIZE) break;
+  }
+  return rows;
 }
 
 function toPackagingRow(
@@ -267,21 +286,23 @@ export const reportService = {
   },
 
   async listSales(fromIso: string, toIso: string, branchId?: string | null) {
-    let query = supabase
-      .from("orders")
-      .select(
-        "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_packaging:order_item_packaging!order_item_packaging_order_id_fkey(*, packaging_options(name), items(name, units(code))), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_omissions(*, items(name, units(code))), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
-      )
-      .eq("status", "paid")
-      .gte("created_at", fromIso)
-      .lte("created_at", toIso);
+    const data = await fetchAllReportPages<OrderWithRelations>((from, to) => {
+      let query = supabase
+        .from("orders")
+        .select(
+          "*, branches(name), cashier:profiles!orders_cashier_id_fkey(username, full_name), payments(*), order_packaging:order_item_packaging!order_item_packaging_order_id_fkey(*, packaging_options(name), items(name, units(code))), order_items(*, menu_items(name, categories(name)), order_item_modifiers(*, modifiers(name, price_delta)), order_item_omissions(*, items(name, units(code))), order_item_packaging(*, packaging_options(name), items(name, units(code))))",
+        )
+        .eq("status", "paid")
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
 
-    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      return query
+        .order("created_at", { ascending: false })
+        .range(from, to) as QueryPage<OrderWithRelations>;
+    }, "Could not load sales report");
 
-    const { data, error } = await query.order("created_at", { ascending: false });
-
-    raiseIfError(error, "Could not load sales report");
-    return ((data ?? []) as unknown as OrderWithRelations[]).map(toOrder);
+    return data.map(toOrder);
   },
 
   async listItems() {
@@ -289,51 +310,57 @@ export const reportService = {
   },
 
   async listStockMovements(fromIso: string, toIso: string, branchId?: string | null) {
-    let query = supabase
-      .from("stock_movement_details")
-      .select("*")
-      .gte("created_at", fromIso)
-      .lte("created_at", toIso);
+    const data = await fetchAllReportPages<MovementWithRelations>((from, to) => {
+      let query = supabase
+        .from("stock_movement_details")
+        .select("*")
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
 
-    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      return query
+        .order("created_at", { ascending: true })
+        .range(from, to) as QueryPage<MovementWithRelations>;
+    }, "Could not load stock movement report");
 
-    const { data, error } = await query.order("created_at", { ascending: true });
-
-    raiseIfError(error, "Could not load stock movement report");
-    return groupPosSaleMovements(((data ?? []) as MovementWithRelations[]).map(toMovement), "asc");
+    return groupPosSaleMovements(data.map(toMovement), "asc");
   },
 
   async listWastage(fromIso: string, toIso: string, branchId?: string | null) {
-    let query = supabase
-      .from("stock_movement_details")
-      .select("*")
-      .eq("type", "wastage")
-      .gte("created_at", fromIso)
-      .lte("created_at", toIso);
+    const data = await fetchAllReportPages<MovementWithRelations>((from, to) => {
+      let query = supabase
+        .from("stock_movement_details")
+        .select("*")
+        .eq("type", "wastage")
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
 
-    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      return query
+        .order("created_at", { ascending: false })
+        .range(from, to) as QueryPage<MovementWithRelations>;
+    }, "Could not load wastage report");
 
-    const { data, error } = await query.order("created_at", { ascending: false });
-
-    raiseIfError(error, "Could not load wastage report");
-    return ((data ?? []) as MovementWithRelations[]).map(toMovement);
+    return data.map(toMovement);
   },
 
   async listProduction(fromIso: string, toIso: string, branchId?: string | null) {
-    let query = supabase
-      .from("production_batches")
-      .select(
-        "*, branches(name), creator:profiles!production_batches_created_by_fkey(username, full_name), production_inputs(*, items(name, units(code))), production_outputs(*, items(name, units(code))), production_wastage(*, items(name, units(code)))",
-      )
-      .gte("created_at", fromIso)
-      .lte("created_at", toIso);
+    const data = await fetchAllReportPages<ProductionBatchWithRelations>((from, to) => {
+      let query = supabase
+        .from("production_batches")
+        .select(
+          "*, branches(name), creator:profiles!production_batches_created_by_fkey(username, full_name), production_inputs(*, items(name, units(code))), production_outputs(*, items(name, units(code))), production_wastage(*, items(name, units(code)))",
+        )
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
 
-    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      return query
+        .order("created_at", { ascending: false })
+        .range(from, to) as QueryPage<ProductionBatchWithRelations>;
+    }, "Could not load production report");
 
-    const { data, error } = await query.order("created_at", { ascending: false });
-
-    raiseIfError(error, "Could not load production report");
-    return ((data ?? []) as ProductionBatchWithRelations[]).map((batch) => ({
+    return data.map((batch) => ({
       id: batch.id,
       branch_id: batch.branch_id,
       created_by: batch.created_by,
@@ -352,17 +379,18 @@ export const reportService = {
   },
 
   async listDeductionAudit(fromIso: string, toIso: string, branchId?: string | null) {
-    let query = supabase
-      .from("order_inventory_deduction_audit")
-      .select("*")
-      .gte("created_at", fromIso)
-      .lte("created_at", toIso);
+    const data = await fetchAllReportPages<any>((from, to) => {
+      let query = supabase
+        .from("order_inventory_deduction_audit")
+        .select("*")
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso);
 
-    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      return query.order("created_at", { ascending: false }).range(from, to) as QueryPage<any>;
+    }, "Could not load inventory deduction audit");
 
-    const { data, error } = await query.order("created_at", { ascending: false });
-    raiseIfError(error, "Could not load inventory deduction audit");
-    return (data ?? []).map((row) => ({
+    return data.map((row) => ({
       ...row,
       expected_qty: Number(row.expected_qty),
       actual_qty: Number(row.actual_qty),

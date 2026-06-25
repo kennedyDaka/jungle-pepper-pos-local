@@ -30,6 +30,25 @@ type ExpenseStockLineRowWithRelations =
     > | null;
   };
 
+type QueryPage<T> = PromiseLike<{ data: T[] | null; error: unknown }>;
+const EXPENSE_PAGE_SIZE = 1000;
+
+async function fetchAllExpensePages<T>(
+  buildPage: (from: number, to: number) => QueryPage<T>,
+  errorMessage: string,
+) {
+  const rows: T[] = [];
+  for (let from = 0; ; from += EXPENSE_PAGE_SIZE) {
+    const to = from + EXPENSE_PAGE_SIZE - 1;
+    const { data, error } = await buildPage(from, to);
+    raiseIfError(error as any, errorMessage);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < EXPENSE_PAGE_SIZE) break;
+  }
+  return rows;
+}
+
 function nextExpenseRef() {
   const now = new Date();
   const stamp = now.toISOString().replace(/\D/g, "").slice(0, 14);
@@ -121,22 +140,24 @@ export const expenseService = {
   },
 
   async listExpenses(from: string, to: string, branchId?: string | null) {
-    let query = supabase
-      .from("expenses")
-      .select(
-        "*, branches(name), creator:profiles!expenses_created_by_fkey(username, full_name), expense_categories(name), suppliers(name), expense_stock_lines(*, items(name, units(code)), stock_movements(id, type, qty, qty_before, qty_after, note, created_at))",
-      )
-      .gte("expense_date", from)
-      .lte("expense_date", to);
+    const data = await fetchAllExpensePages<ExpenseRowWithRelations>((fromRow, toRow) => {
+      let query = supabase
+        .from("expenses")
+        .select(
+          "*, branches(name), creator:profiles!expenses_created_by_fkey(username, full_name), expense_categories(name), suppliers(name), expense_stock_lines(*, items(name, units(code)), stock_movements(id, type, qty, qty_before, qty_after, note, created_at))",
+        )
+        .gte("expense_date", from)
+        .lte("expense_date", to);
 
-    if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
+      if (branchId && branchId !== "all") query = query.eq("branch_id", branchId);
 
-    const { data, error } = await query
-      .order("expense_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      return query
+        .order("expense_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .range(fromRow, toRow) as QueryPage<ExpenseRowWithRelations>;
+    }, "Could not load expenses");
 
-    raiseIfError(error, "Could not load expenses");
-    return ((data ?? []) as ExpenseRowWithRelations[]).map(toExpense);
+    return data.map(toExpense);
   },
 
   async recordExpense(input: {
