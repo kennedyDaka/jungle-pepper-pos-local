@@ -31,10 +31,38 @@ function localDateKey(value: string | null | undefined) {
   if (!value) return "Unknown date";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
+  return formatDateKey(date);
+}
+
+function formatDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function weekKeyFromDateKey(value: string) {
+  const date = new Date(value + "T00:00:00");
+  if (Number.isNaN(date.getTime())) return value;
+  const day = date.getDay() || 7;
+  date.setDate(date.getDate() - day + 1);
+  return formatDateKey(date);
+}
+
+function numberUsageByWeek(orders: OrderNumberSource[]) {
+  const used = new Map<string, Map<number, Set<string>>>();
+  orders.forEach((order) => {
+    const number = parseOrderNumber(order.physical_order_no);
+    if (number === null) return;
+    const date = localDateKey(order.created_at);
+    const week = weekKeyFromDateKey(date);
+    const weekMap = used.get(week) ?? new Map<number, Set<string>>();
+    const dates = weekMap.get(number) ?? new Set<string>();
+    dates.add(date);
+    weekMap.set(number, dates);
+    used.set(week, weekMap);
+  });
+  return used;
 }
 
 function sequenceMissing(numbers: number[]) {
@@ -63,9 +91,17 @@ function buildSequence(date: string, index: number, numbers: number[]): OrderNum
 
 export function analyzeDailyOrderNumbers(
   orders: OrderNumberSource[],
-  options: { receiptBookJump?: number } = {},
+  options: {
+    receiptBookJump?: number;
+    contextOrders?: OrderNumberSource[];
+    suppressNumbersUsedInSameWeek?: boolean;
+  } = {},
 ): DailyOrderNumberAudit[] {
   const jump = options.receiptBookJump ?? RECEIPT_BOOK_JUMP;
+  const suppressSameWeek = options.suppressNumbersUsedInSameWeek ?? true;
+  const weeklyUsage = suppressSameWeek
+    ? numberUsageByWeek(options.contextOrders ?? orders)
+    : new Map<string, Map<number, Set<string>>>();
   const grouped = new Map<string, number[]>();
   const ignoredByDate = new Map<string, string[]>();
 
@@ -101,14 +137,29 @@ export function analyzeDailyOrderNumbers(
 
     return {
       date,
-      sequences: sequenceBuckets.map((numbers, index) => buildSequence(date, index + 1, numbers)),
+      sequences: sequenceBuckets.map((numbers, index) => {
+        const sequence = buildSequence(date, index + 1, numbers);
+        if (!suppressSameWeek) return sequence;
+        const weekUsage = weeklyUsage.get(weekKeyFromDateKey(date));
+        return {
+          ...sequence,
+          missing: sequence.missing.filter((number) => {
+            const usedDates = weekUsage?.get(number);
+            if (!usedDates) return true;
+            return !Array.from(usedDates).some((usedDate) => usedDate !== date);
+          }),
+        };
+      }),
       ignored: ignoredByDate.get(date) ?? [],
     };
   });
 }
 
-export function findMissingOrderNumbers(orders: OrderNumberSource[]): number[] {
-  return analyzeDailyOrderNumbers(orders).flatMap((day) =>
+export function findMissingOrderNumbers(
+  orders: OrderNumberSource[],
+  options: Parameters<typeof analyzeDailyOrderNumbers>[1] = {},
+): number[] {
+  return analyzeDailyOrderNumbers(orders, options).flatMap((day) =>
     day.sequences.flatMap((sequence) => sequence.missing),
   );
 }
@@ -119,8 +170,11 @@ export function formatSequenceRange(sequence: Pick<OrderNumberSequence, "start" 
     : `${sequence.start}-${sequence.end}`;
 }
 
-export function missingOrderNumbersSummary(orders: OrderNumberSource[]): string {
-  const audits = analyzeDailyOrderNumbers(orders);
+export function missingOrderNumbersSummary(
+  orders: OrderNumberSource[],
+  options: Parameters<typeof analyzeDailyOrderNumbers>[1] = {},
+): string {
+  const audits = analyzeDailyOrderNumbers(orders, options);
   const missingByDate = audits
     .map((day) => ({
       date: day.date,

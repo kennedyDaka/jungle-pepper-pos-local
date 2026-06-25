@@ -178,6 +178,19 @@ function isoDateDaysAgo(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function orderNumberContextStart(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  const weekStart = new Date(date);
+  const day = weekStart.getDay() || 7;
+  weekStart.setDate(weekStart.getDate() - day + 1);
+
+  const previousDay = new Date(date);
+  previousDay.setDate(previousDay.getDate() - 1);
+
+  const start = previousDay < weekStart ? previousDay : weekStart;
+  return start.toISOString().slice(0, 10);
+}
+
 function orderReference(order: any) {
   return order.physical_order_no || order.id.slice(0, 8).toUpperCase();
 }
@@ -452,6 +465,7 @@ function PendingOrdersDialog({
       {pendingPayOrder && (
         <PaymentDialog
           total={Number(pendingPayOrder.total)}
+          initialPhysicalOrderNo={pendingPayOrder.physical_order_no}
           onClose={() => setPendingPayOrder(null)}
           onPay={(physicalOrderNo, saleAt, payments) =>
             processPayment.mutate({ order: pendingPayOrder, physicalOrderNo, saleAt, payments })
@@ -725,6 +739,24 @@ function PosPage() {
         new Date(`${historyFrom}T00:00:00`).toISOString(),
         new Date(`${historyTo}T23:59:59`).toISOString(),
       ),
+    enabled: historyOpen,
+  });
+
+  const orderNumberContextFrom = orderNumberContextStart(historyTo);
+  const orderNumberContext = useQuery({
+    queryKey: ["pos", "order-number-context", branchId, orderNumberContextFrom, historyTo],
+    queryFn: async () => {
+      let query = supabase
+        .from("orders")
+        .select("id, physical_order_no, created_at")
+        .eq("status", "paid")
+        .gte("created_at", new Date(`${orderNumberContextFrom}T00:00:00`).toISOString())
+        .lte("created_at", new Date(`${historyTo}T23:59:59`).toISOString());
+      if (branchId) query = query.eq("branch_id", branchId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
     enabled: historyOpen,
   });
 
@@ -1381,6 +1413,7 @@ function PosPage() {
       {historyOpen && (
         <SalesHistoryDialog
           orders={salesHistory.data ?? []}
+          orderNumberContext={[...(salesHistory.data ?? []), ...(orderNumberContext.data ?? [])]}
           loading={salesHistory.isLoading || salesHistory.isFetching}
           error={salesHistory.error}
           from={historyFrom}
@@ -1437,6 +1470,7 @@ function PosPage() {
 
 function SalesHistoryDialog({
   orders,
+  orderNumberContext,
   loading,
   error,
   from,
@@ -1449,6 +1483,7 @@ function SalesHistoryDialog({
   onReprint,
 }: {
   orders: any[];
+  orderNumberContext: any[];
   loading: boolean;
   error: unknown;
   from: string;
@@ -1509,7 +1544,9 @@ function SalesHistoryDialog({
 
           {(() => {
             const dayOrders = orders.filter((o: any) => o.created_at?.startsWith(to));
-            const missingSummary = missingOrderNumbersSummary(dayOrders);
+            const missingSummary = missingOrderNumbersSummary(dayOrders, {
+              contextOrders: orderNumberContext,
+            });
             return missingSummary ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
                 {missingSummary}
@@ -2066,18 +2103,20 @@ function ModifierDialog({
 
 function PaymentDialog({
   total,
+  initialPhysicalOrderNo,
   onClose,
   onPay,
   busy,
 }: {
   total: number;
+  initialPhysicalOrderNo?: string | null;
   onClose: () => void;
   onPay: (physicalOrderNo: string, saleAt: string, p: { method: string; amount: number }[]) => void;
   busy: boolean;
 }) {
   const [method, setMethod] = useState("cash");
   const [amount, setAmount] = useState(total);
-  const [physicalOrderNo, setPhysicalOrderNo] = useState("");
+  const [physicalOrderNo, setPhysicalOrderNo] = useState(initialPhysicalOrderNo ?? "");
   const [saleAt, setSaleAt] = useState(() => dateTimeLocalValue());
   const cleanedOrderNo = physicalOrderNo.trim();
   return (

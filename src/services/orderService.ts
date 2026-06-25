@@ -19,6 +19,7 @@ export type WaiterOrderPayload = {
   note?: string | null;
   items: WaiterOrderItem[];
   packaging_sales?: Array<{ option_id: string; qty: number; unit_price: number }>;
+  physical_order_no?: string | null;
 };
 
 export type WebsiteOrderPayload = {
@@ -63,9 +64,11 @@ export const orderService = {
     branchId: string,
     tableId?: string,
     customerId?: string,
+    options?: { physicalOrderNo?: string | null },
   ) {
+    const physicalOrderNo = options?.physicalOrderNo?.trim() || payload.physical_order_no || null;
     const { data, error } = await supabase.rpc("create_waiter_order", {
-      _payload: payload as unknown as Json,
+      _payload: { ...payload, physical_order_no: physicalOrderNo } as unknown as Json,
       _branch_id: branchId,
       _table_id: tableId ?? undefined,
       _customer_id: customerId ?? undefined,

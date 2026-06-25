@@ -84,6 +84,44 @@ type PastaSelection = {
   dbName: string;
 };
 
+function printReceiptElement(elementId: string, title: string) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=420,height=700");
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          @page { size: 80mm auto; margin: 4mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; color: #000; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+          .receipt-ticket { width: 72mm; }
+          .kitchen-ticket { font-size: 18px; line-height: 1.35; font-weight: 700; }
+          .kitchen-ticket .order-number { font-size: 30px; line-height: 1.1; margin-bottom: 8px; }
+          .kitchen-ticket .ticket-line { padding: 7px 0; border-top: 1px solid #000; }
+          .kitchen-ticket .line-note, .kitchen-ticket .order-note { font-size: 15px; font-weight: 700; margin-top: 3px; }
+          .customer-ticket { font-size: 12px; line-height: 1.35; }
+          .ticket-row { display: flex; justify-content: space-between; gap: 8px; }
+          .muted { font-size: 11px; color: #333; }
+          hr { border: 0; border-top: 1px solid #000; margin: 6px 0; }
+        </style>
+      </head>
+      <body>${element.outerHTML}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 100);
+}
+
 function WaiterPage() {
   const [verified, setVerified] = useState(false);
   const [branchId, setBranchId] = useState<string | null>(null);
@@ -217,6 +255,7 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
   const [discount, setDiscount] = useState(0);
   const [note, setNote] = useState("");
   const [orderNote, setOrderNote] = useState("");
+  const [physicalOrderNo, setPhysicalOrderNo] = useState("");
   const [crustDialog, setCrustDialog] = useState<{
     itemKey: string;
     name: string;
@@ -357,22 +396,31 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
         { discount, note: orderNote || null, items: waiterItems },
         branchId,
         service === "dine-in" ? (selectedTableId ?? undefined) : undefined,
+        undefined,
+        { physicalOrderNo: physicalOrderNo.trim() || null },
       );
     },
     onSuccess: (orderId) => {
+      const tableLabel =
+        service === "dine-in"
+          ? ((tables.data ?? []).find((t: any) => t.id === selectedTableId)?.label ?? "Table")
+          : "Takeaway";
       setSubmitResult({
         orderId,
+        physicalOrderNo: physicalOrderNo.trim() || null,
         lines: [...lines],
         subtotal,
         discount,
         total,
         note: orderNote,
         service,
+        tableLabel,
       });
       setLines([]);
       setDiscount(0);
       setNote("");
       setOrderNote("");
+      setPhysicalOrderNo("");
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -545,6 +593,12 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
               rows={2}
               className="resize-none"
             />
+            <Input
+              value={physicalOrderNo}
+              onChange={(e) => setPhysicalOrderNo(e.target.value)}
+              placeholder="Physical order number..."
+              className="h-9"
+            />
             <div className="flex items-center justify-between border-t border-border pt-3">
               <span className="text-base font-bold">Total</span>
               <span className="text-lg font-bold text-primary tabular-nums">{MWK(total)}</span>
@@ -571,11 +625,13 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
         discount={discount}
         total={total}
         orderNote={orderNote}
+        physicalOrderNo={physicalOrderNo}
         service={service}
         selectedTableId={selectedTableId}
         tables={tables.data ?? []}
         onSetDiscount={setDiscount}
         onSetOrderNote={setOrderNote}
+        onSetPhysicalOrderNo={setPhysicalOrderNo}
         onSetService={setService}
         onSetTable={setSelectedTableId}
         onInc={incQty}
@@ -615,11 +671,13 @@ function MobileCart({
   discount,
   total,
   orderNote,
+  physicalOrderNo,
   service,
   selectedTableId,
   tables,
   onSetDiscount,
   onSetOrderNote,
+  onSetPhysicalOrderNo,
   onSetService,
   onSetTable,
   onInc,
@@ -633,11 +691,13 @@ function MobileCart({
   discount: number;
   total: number;
   orderNote: string;
+  physicalOrderNo: string;
   service: ServiceType;
   selectedTableId: string | null;
   tables: any[];
   onSetDiscount: (v: number) => void;
   onSetOrderNote: (v: string) => void;
+  onSetPhysicalOrderNo: (v: string) => void;
   onSetService: (v: ServiceType) => void;
   onSetTable: (v: string | null) => void;
   onInc: (k: string) => void;
@@ -711,6 +771,12 @@ function MobileCart({
               placeholder="Note..."
               rows={2}
               className="resize-none text-sm"
+            />
+            <Input
+              value={physicalOrderNo}
+              onChange={(e) => onSetPhysicalOrderNo(e.target.value)}
+              placeholder="Physical order number..."
+              className="h-8"
             />
             <div className="flex justify-between font-bold text-base">
               <span>Total</span>
@@ -993,9 +1059,8 @@ function ShapeDialog({
 }
 
 function OrderReceiptDialog({ result, onClose }: { result: any; onClose: () => void }) {
-  const orderRef = result.orderId.slice(0, 8).toUpperCase();
-  const tableLabel =
-    result.service === "dine-in" ? `Table ${result.selectedTableId ?? ""}` : "Takeaway";
+  const orderRef = result.physicalOrderNo || result.orderId.slice(0, 8).toUpperCase();
+  const tableLabel = result.tableLabel ?? (result.service === "dine-in" ? "Table" : "Takeaway");
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -1003,7 +1068,7 @@ function OrderReceiptDialog({ result, onClose }: { result: any; onClose: () => v
         <DialogHeader>
           <DialogTitle>Order Placed</DialogTitle>
           <DialogDescription>
-            Order #{orderRef} — {tableLabel}
+            Order #{orderRef} - {tableLabel}
           </DialogDescription>
         </DialogHeader>
 
@@ -1018,45 +1083,39 @@ function OrderReceiptDialog({ result, onClose }: { result: any; onClose: () => v
           </TabsList>
 
           <TabsContent value="kitchen" className="mt-3">
-            <div className="bg-white text-black p-4 rounded text-xs font-mono" id="kitchen-receipt">
-              <div className="text-center mb-2">
-                <div className="font-bold text-sm">JUNGLE PEPPER</div>
-                <div>Kidney Crescent, Blantyre</div>
-                <div className="mt-1 font-bold text-base">{tableLabel}</div>
-                <div className="mt-1">Order: {orderRef}</div>
-                <div>{new Date().toLocaleString()}</div>
-              </div>
-              <hr className="my-1 border-black" />
+            <div
+              className="receipt-ticket kitchen-ticket bg-white text-black p-4 rounded font-mono"
+              id="kitchen-receipt"
+            >
+              <div className="order-number">ORDER {orderRef}</div>
+              <div className="mb-2 text-base">{tableLabel}</div>
               {result.lines.map((l: any) => (
-                <div key={l.key} className="mb-1">
-                  <div className="flex justify-between font-bold">
-                    <span>
-                      {l.qty}x {l.name}
-                    </span>
+                <div key={l.key} className="ticket-line">
+                  <div>
+                    {l.qty}x {l.name}
                   </div>
                   {l.modifiers?.length > 0 && (
-                    <div className="pl-2">{l.modifiers.map((m: any) => m.name).join(", ")}</div>
+                    <div className="line-note">
+                      {l.modifiers.map((m: any) => m.name).join(", ")}
+                    </div>
                   )}
-                  {l.note && <div className="pl-2 text-orange-600">Note: {l.note}</div>}
+                  {l.note && <div className="line-note">Note: {l.note}</div>}
                 </div>
               ))}
-              {result.note && (
-                <>
-                  <hr className="my-1 border-black" />
-                  <div className="italic">{result.note}</div>
-                </>
-              )}
-              <hr className="my-1 border-black" />
-              <div className="text-center font-bold">Obrigado!</div>
+              {result.note && <div className="order-note ticket-line">Note: {result.note}</div>}
             </div>
-            <Button variant="secondary" className="w-full mt-3" onClick={() => window.print()}>
+            <Button
+              variant="secondary"
+              className="w-full mt-3"
+              onClick={() => printReceiptElement("kitchen-receipt", `Kitchen ${orderRef}`)}
+            >
               <Printer className="h-4 w-4 mr-1" /> Print Kitchen
             </Button>
           </TabsContent>
 
           <TabsContent value="customer" className="mt-3">
             <div
-              className="bg-white text-black p-4 rounded text-xs font-mono"
+              className="receipt-ticket customer-ticket bg-white text-black p-4 rounded font-mono"
               id="customer-receipt"
             >
               <div className="text-center mb-2">
@@ -1068,7 +1127,7 @@ function OrderReceiptDialog({ result, onClose }: { result: any; onClose: () => v
               </div>
               <hr className="my-1 border-black" />
               {result.lines.map((l: any) => (
-                <div key={l.key} className="flex justify-between mb-1">
+                <div key={l.key} className="ticket-row mb-1">
                   <span>
                     {l.qty}x {l.name}
                   </span>
@@ -1081,25 +1140,27 @@ function OrderReceiptDialog({ result, onClose }: { result: any; onClose: () => v
                 </div>
               ))}
               <hr className="my-1 border-black" />
-              <div className="flex justify-between">
+              <div className="ticket-row">
                 <span>Subtotal</span>
                 <span>{MWK(result.subtotal)}</span>
               </div>
               {result.discount > 0 && (
-                <div className="flex justify-between">
+                <div className="ticket-row">
                   <span>Discount</span>
                   <span>-{MWK(result.discount)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-sm">
+              <div className="ticket-row font-bold text-sm">
                 <span>Total</span>
                 <span>{MWK(result.total)}</span>
               </div>
-              <div className="text-center mt-3 text-[10px] text-gray-500">
-                Payment to be settled at the counter
-              </div>
+              <div className="text-center mt-3 muted">Payment to be settled at the counter</div>
             </div>
-            <Button variant="secondary" className="w-full mt-3" onClick={() => window.print()}>
+            <Button
+              variant="secondary"
+              className="w-full mt-3"
+              onClick={() => printReceiptElement("customer-receipt", `Customer ${orderRef}`)}
+            >
               <Printer className="h-4 w-4 mr-1" /> Print Receipt
             </Button>
           </TabsContent>

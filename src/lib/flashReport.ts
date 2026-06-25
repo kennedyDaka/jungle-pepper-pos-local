@@ -266,14 +266,20 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
   ],
 ];
 
-const PAYMENT_METHOD_MAP: [string, string][] = [
-  ["NB (NATIONAL BANK)", "national_bank"],
-  ["STANDARD BANK", "standard_bank"],
-  ["CAPITAL BANK", "capital_bank"],
-  ["ECO BANK", "eco_bank"],
-  ["Airtel Money", "airtel_money"],
-  ["Physical Cash (Till)", "cash"],
+const PAYMENT_METHOD_MAP: Array<[string, string[]]> = [
+  ["Physical Cash (Till)", ["cash"]],
+  ["NB (NATIONAL BANK)", ["national_bank"]],
+  ["STANDARD BANK", ["standard_bank"]],
+  ["CAPITAL BANK", ["capital_bank"]],
+  ["ECO BANK", ["eco_bank"]],
+  ["BANK CARD / OTHER BANK", ["bank_card"]],
+  ["Airtel Money", ["airtel_money"]],
+  ["Mpamba", ["mpamba"]],
 ];
+
+function paymentTotal(paymentTotals: Record<string, number>, methods: string[]) {
+  return methods.reduce((sum, method) => sum + (Number(paymentTotals[method]) || 0), 0);
+}
 
 function stockCell(value: number) {
   return Math.abs(value) <= 0.000001 ? null : Number(value.toFixed(3));
@@ -440,11 +446,11 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
 export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
   const rows: ReportRow[] = [];
 
-  PAYMENT_METHOD_MAP.forEach(([displayName, dbMethod]) => {
+  PAYMENT_METHOD_MAP.forEach(([displayName, dbMethods]) => {
     rows.push({
       Section: "Cash & Bank",
       Item: displayName,
-      "Expected Deposits": input.paymentTotals[dbMethod] ?? 0,
+      "Expected Deposits": paymentTotal(input.paymentTotals, dbMethods),
       "Statement Deposited": 0,
       "Delayed Deposits": 0,
     });
@@ -647,8 +653,8 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
 
   const bankDataStartRow = ws.rowCount + 1;
 
-  PAYMENT_METHOD_MAP.forEach(([displayName, dbMethod]) => {
-    const expected = input.paymentTotals[dbMethod] ?? 0;
+  PAYMENT_METHOD_MAP.forEach(([displayName, dbMethods]) => {
+    const expected = paymentTotal(input.paymentTotals, dbMethods);
     const r = ws.addRow([displayName, expected, 0, null]);
 
     for (let c = 1; c <= 4; c++) {
@@ -663,9 +669,9 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
 
   const totalsRow = ws.addRow([
     "TOTAL REVENUE",
-    { formula: `=SUM(B${bankDataStartRow}:B${bankDataStartRow + 5})` },
-    { formula: `=SUM(C${bankDataStartRow}:C${bankDataStartRow + 5})` },
-    { formula: `=SUM(D${bankDataStartRow}:D${bankDataStartRow + 5})` },
+    { formula: `=SUM(B${bankDataStartRow}:B${bankDataStartRow + PAYMENT_METHOD_MAP.length - 1})` },
+    { formula: `=SUM(C${bankDataStartRow}:C${bankDataStartRow + PAYMENT_METHOD_MAP.length - 1})` },
+    { formula: `=SUM(D${bankDataStartRow}:D${bankDataStartRow + PAYMENT_METHOD_MAP.length - 1})` },
   ]);
   totalsRow.eachCell({ includeEmpty: true }, (cell) => {
     cell.font = TOTALS_FONT;

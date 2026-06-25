@@ -113,6 +113,39 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   return false;
 }
 
+function printReceiptElement(elementId: string, title: string) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=420,height=700");
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          @page { size: 80mm auto; margin: 4mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; color: #000; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+          .kitchen-ticket { width: 72mm; font-size: 18px; line-height: 1.35; font-weight: 700; }
+          .kitchen-ticket .order-number { font-size: 30px; line-height: 1.1; margin-bottom: 8px; }
+          .kitchen-ticket .ticket-line { padding: 7px 0; border-top: 1px solid #000; }
+          .kitchen-ticket .line-note, .kitchen-ticket .order-note { font-size: 15px; font-weight: 700; margin-top: 3px; }
+        </style>
+      </head>
+      <body>${element.outerHTML}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 100);
+}
+
 function WaiterPage() {
   const qc = useQueryClient();
   const [activeCat, setActiveCat] = useState<string | null>(null);
@@ -120,6 +153,7 @@ function WaiterPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [orderNote, setOrderNote] = useState("");
+  const [physicalOrderNo, setPhysicalOrderNo] = useState("");
   const [modOpen, setModOpen] = useState<{
     menuId: string;
     lineKey: string;
@@ -229,13 +263,22 @@ function WaiterPage() {
         },
         branchId,
         selectedTableId ?? undefined,
+        undefined,
+        { physicalOrderNo: physicalOrderNo.trim() || null },
       );
     },
     onSuccess: async (orderId) => {
       const tableLabel = (tables.data ?? []).find((t) => t.id === selectedTableId)?.label ?? "";
-      setKitchenReceipt({ orderId, tableLabel, items: [...cart], note: orderNote });
+      setKitchenReceipt({
+        orderId,
+        physicalOrderNo: physicalOrderNo.trim() || null,
+        tableLabel,
+        items: [...cart],
+        note: orderNote,
+      });
       setCart([]);
       setOrderNote("");
+      setPhysicalOrderNo("");
       qc.invalidateQueries({ queryKey: ["waiter"] });
     },
     onError: (e: any) => toast.error(e.message),
@@ -401,6 +444,12 @@ function WaiterPage() {
             onChange={(e) => setOrderNote(e.target.value)}
             className="h-8"
           />
+          <Input
+            placeholder="Physical order number..."
+            value={physicalOrderNo}
+            onChange={(e) => setPhysicalOrderNo(e.target.value)}
+            className="h-8"
+          />
           <div className="flex justify-between text-base font-bold border-t border-border pt-2">
             <span>Subtotal</span>
             <span className="text-primary">{MWK(subtotal)}</span>
@@ -502,49 +551,39 @@ function ModifierDialog({
 }
 
 function KitchenReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void }) {
+  const orderRef = receipt.physicalOrderNo || receipt.orderId.slice(0, 8).toUpperCase();
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Kitchen Order</DialogTitle>
-          <DialogDescription>Show this to the kitchen staff.</DialogDescription>
+          <DialogDescription>Print the kitchen order ticket.</DialogDescription>
         </DialogHeader>
         <div
-          className="bg-white text-black p-4 rounded text-xs font-mono print-area"
+          className="kitchen-ticket bg-white text-black p-4 rounded font-mono"
           id="kitchen-receipt"
         >
-          <div className="text-center mb-2">
-            <div className="font-bold text-sm">JUNGLE PEPPER</div>
-            <div>Kidney Crescent, Blantyre</div>
-            <div className="mt-1 font-bold text-base">{receipt.tableLabel}</div>
-            <div className="mt-1">Order: {receipt.orderId.slice(0, 8).toUpperCase()}</div>
-            <div>{new Date().toLocaleString()}</div>
-          </div>
-          <hr className="my-1 border-black" />
+          <div className="order-number">ORDER {orderRef}</div>
+          <div className="mb-2 text-base">{receipt.tableLabel}</div>
           {receipt.items.map((l: any) => (
-            <div key={l.key} className="mb-1">
-              <div className="flex justify-between font-bold">
-                <span>
-                  {l.qty}x {l.name}
-                </span>
+            <div key={l.key} className="ticket-line">
+              <div>
+                {l.qty}x {l.name}
               </div>
               {l.modifiers?.length > 0 && (
-                <div className="pl-2">{l.modifiers.map((m: any) => m.name).join(", ")}</div>
+                <div className="line-note">{l.modifiers.map((m: any) => m.name).join(", ")}</div>
               )}
-              {l.note && <div className="pl-2 text-orange-600">Note: {l.note}</div>}
+              {l.note && <div className="line-note">Note: {l.note}</div>}
             </div>
           ))}
-          {receipt.note && (
-            <>
-              <hr className="my-1 border-black" />
-              <div className="italic">{receipt.note}</div>
-            </>
-          )}
-          <hr className="my-1 border-black" />
-          <div className="text-center font-bold">Obrigado!</div>
+          {receipt.note && <div className="order-note ticket-line">Note: {receipt.note}</div>}
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="secondary" onClick={() => window.print()}>
+          <Button
+            variant="secondary"
+            onClick={() => printReceiptElement("kitchen-receipt", `Kitchen ${orderRef}`)}
+          >
             <Printer className="h-4 w-4 mr-1" /> Print
           </Button>
           <Button onClick={onClose}>Done</Button>
