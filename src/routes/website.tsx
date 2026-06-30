@@ -243,7 +243,6 @@ const MENU_CATEGORIES = [
   "hot-drinks",
   "beers",
   "soft-drinks",
-  "juices-mocktails",
   "liquor",
 ];
 
@@ -260,8 +259,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   "hot-drinks": "HOT DRINKS",
   beers: "BEERS",
   "soft-drinks": "SOFT DRINKS",
-  "juices-mocktails": "JUICES / MOCKTAILS",
-  liquor: "LIQUOR",
+  liquor: "LIQUOR / WINE",
 };
 
 function normalizeCategoryText(value: string | null | undefined) {
@@ -303,7 +301,6 @@ function itemMatchesGroup(item: any, groupId: string) {
   if (groupId === "hot-drinks") return category === "COFFEE AND TEA";
   if (groupId === "beers") return category === "BEERS AND CIDERS";
   if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
-  if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
   if (groupId === "liquor") {
     return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(
       category,

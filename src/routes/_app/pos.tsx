@@ -37,7 +37,7 @@ import {
   CalendarClock,
   ClipboardList,
 } from "lucide-react";
-import { MWK, fmtQty, paymentMethodLabel } from "@/lib/format";
+import { MWK, fmtDateTime, fmtQty, paymentMethodLabel } from "@/lib/format";
 import { missingOrderNumbersSummary } from "@/lib/orderSequence";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
 import { authService } from "@/services/authService";
@@ -111,8 +111,7 @@ const POS_CATEGORY_GROUPS = [
   { id: "hot-drinks", label: "HOT DRINKS" },
   { id: "beers", label: "BEERS" },
   { id: "soft-drinks", label: "SOFT DRINKS" },
-  { id: "juices-mocktails", label: "JUICES / MOCKTAILS" },
-  { id: "liquor", label: "LIQUOR" },
+  { id: "liquor", label: "LIQUOR / WINE" },
   { id: PACKAGING_CATEGORY, label: "PACKAGING" },
 ];
 
@@ -156,7 +155,6 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   if (groupId === "hot-drinks") return category === "COFFEE AND TEA";
   if (groupId === "beers") return category === "BEERS AND CIDERS";
   if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
-  if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
   if (groupId === "liquor") {
     return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(
       category,
@@ -386,7 +384,7 @@ function PendingOrdersDialog({
                           {order.status}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(order.created_at).toLocaleTimeString()}
+                          {new Date(order.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}
                         </span>
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
@@ -529,7 +527,7 @@ function KitchenOrderPrintDialog({ order, onClose }: { order: any; onClose: () =
             <div className="mt-1">
               Order: {order.physical_order_no || order.id.slice(0, 8).toUpperCase()}
             </div>
-            <div>{new Date(order.created_at).toLocaleString()}</div>
+            <div>{fmtDateTime(order.created_at)}</div>
             {order.source === "website" && (
               <div className="text-yellow-600 font-bold mt-1">WEBSITE ORDER</div>
             )}
@@ -1580,7 +1578,7 @@ function SalesHistoryDialog({
                 {filteredOrders.map((order) => (
                   <tr key={order.id} className="border-t border-border align-top">
                     <td className="p-2 whitespace-nowrap">
-                      {new Date(order.created_at).toLocaleString()}
+                      {fmtDateTime(order.created_at)}
                     </td>
                     <td className="p-2 font-medium">{orderReference(order)}</td>
                     <td className="p-2 min-w-72">{orderSummary(order)}</td>
@@ -2336,7 +2334,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
     doc.setFontSize(8);
     doc.text("Kidney Crescent, Blantyre", 40, y, { align: "center" });
     y += 4;
-    doc.text(new Date(receipt.at).toLocaleString(), 40, y, { align: "center" });
+    doc.text(fmtDateTime(receipt.at), 40, y, { align: "center" });
     y += 4;
     doc.text("Order: " + receiptRef, 40, y, { align: "center" });
     y += 4;
@@ -2406,7 +2404,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
             <img src={logo} alt="" width={50} height={50} className="mx-auto" />
             <div className="font-bold">JUNGLE PEPPER</div>
             <div>Kidney Crescent, Blantyre</div>
-            <div>{new Date(receipt.at).toLocaleString()}</div>
+            <div>{fmtDateTime(receipt.at)}</div>
             <div>Order: {receiptRef}</div>
             {receipt.saleType === "staff_meal" && <div className="font-bold">STAFF MEAL</div>}
           </div>

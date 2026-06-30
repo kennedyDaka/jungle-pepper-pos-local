@@ -1123,7 +1123,7 @@ function OrderReceiptDialog({ result, onClose }: { result: any; onClose: () => v
                 <div>Kidney Crescent, Blantyre</div>
                 <div className="mt-1">{tableLabel}</div>
                 <div className="mt-1">Order: {orderRef}</div>
-                <div>{new Date().toLocaleString()}</div>
+                <div>{new Date().toLocaleString("en-GB", { hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
               </div>
               <hr className="my-1 border-black" />
               {result.lines.map((l: any) => (

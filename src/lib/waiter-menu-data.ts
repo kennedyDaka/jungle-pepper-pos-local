@@ -306,15 +306,6 @@ export const EXTRA_MENU: ExtraCategory[] = [
     ],
   },
   {
-    id: "mocktails",
-    label: "Mocktails",
-    items: [
-      E("mt-chapman", "Chapman", "CHAPMAN", 12000, "Mocktails"),
-      E("mt-rockshandy", "Rockshandy", "ROCKSHANDY", 12000, "Mocktails"),
-      E("mt-lime", "Lime Cordial", "LIME CORDIAL", 5000, "Mocktails"),
-    ],
-  },
-  {
     id: "wine",
     label: "Wine",
     items: [

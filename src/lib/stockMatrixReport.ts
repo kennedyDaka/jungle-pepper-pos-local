@@ -319,7 +319,7 @@ function shortDateLabel(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   const label = new Date(year, (month || 1) - 1, day || 1).toLocaleDateString("en-GB", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
   });
   return label.toUpperCase();
 }

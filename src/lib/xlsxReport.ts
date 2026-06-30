@@ -139,7 +139,7 @@ function addMetadata(
 ) {
   const generatedAt = options.generatedAt ?? new Date();
   worksheet.addRow([options.title ?? sheetName]);
-  worksheet.addRow(["Generated", generatedAt.toLocaleString()]);
+  worksheet.addRow(["Generated", generatedAt.toLocaleString("en-GB", { hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })]);
   if (options.branchLabel) worksheet.addRow(["Branch", options.branchLabel]);
   if (options.rangeLabel) worksheet.addRow(["Period", options.rangeLabel]);
   if (options.filters) {

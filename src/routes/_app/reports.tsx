@@ -13,7 +13,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { MWK, fmtDate, fmtQty, paymentMethodLabel } from "@/lib/format";
+import { MWK, fmtDate, fmtDateTime, fmtQty, paymentMethodLabel } from "@/lib/format";
 import {
   fmtServingQty,
   fullServingsPerContainer,
@@ -237,7 +237,7 @@ function ReportsPage() {
     movements.map((movement) => {
       const qty = Number(movement.qty);
       return {
-        Date: new Date(movement.created_at).toLocaleString(),
+        Date: fmtDateTime(movement.created_at),
         Source: movement.source_label ?? movement.ref_type ?? movement.type,
         Reference:
           movement.invoice_no ??
@@ -378,7 +378,7 @@ function ReportsPage() {
       Supplier: expense.suppliers?.name ?? "",
       Description: expense.description ?? "",
       "Stock Item Lines": expense.expense_stock_lines?.length ?? 0,
-      "Recorded At": new Date(expense.created_at).toLocaleString(),
+      "Recorded At": fmtDateTime(expense.created_at),
     }));
 
   const expenseLineRows = (): ReportRow[] => {
@@ -507,7 +507,7 @@ function ReportsPage() {
 
         const row: ReportMatrix[number] = [
           index + 1,
-          new Date(order.created_at).toLocaleString(),
+          fmtDateTime(order.created_at),
           thin,
           thick,
         ];
@@ -630,7 +630,7 @@ function ReportsPage() {
         (order.order_items ?? []).some((line: any) => line.takeaway) ||
         (order.order_packaging ?? []).length > 0;
       return {
-        Date: new Date(order.created_at).toLocaleString(),
+        Date: fmtDateTime(order.created_at),
         "Invoice #": orderReference(order),
         Cashier: staffDisplay(order.profiles),
         Branch: order.branches?.name ?? "Main Branch",
@@ -656,7 +656,7 @@ function ReportsPage() {
       (order.order_items ?? []).forEach((line: any) => {
         const lineTotal = Number(line.qty) * Number(line.unit_price);
         rows.push({
-          Date: new Date(order.created_at).toLocaleString(),
+          Date: fmtDateTime(order.created_at),
           "Invoice #": orderReference(order),
           Branch: order.branches?.name ?? "Main Branch",
           "Menu Item": line.menu_items?.name ?? "-",
@@ -675,7 +675,7 @@ function ReportsPage() {
         (line.order_item_packaging ?? []).forEach((pack: any) => {
           const packTotal = Number(pack.qty) * Number(pack.unit_price);
           rows.push({
-            Date: new Date(order.created_at).toLocaleString(),
+            Date: fmtDateTime(order.created_at),
             "Invoice #": orderReference(order),
             Branch: order.branches?.name ?? "Main Branch",
             "Menu Item": pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
@@ -694,7 +694,7 @@ function ReportsPage() {
       (order.order_packaging ?? []).forEach((pack: any) => {
         const packTotal = Number(pack.qty) * Number(pack.unit_price);
         rows.push({
-          Date: new Date(order.created_at).toLocaleString(),
+          Date: fmtDateTime(order.created_at),
           "Invoice #": orderReference(order),
           Branch: order.branches?.name ?? "Main Branch",
           "Menu Item": pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
@@ -722,7 +722,7 @@ function ReportsPage() {
         const servings = servingQty(rawQty, movement.items);
         const servingCount = servings === null ? null : wholeServingQty(servings);
         return {
-          Date: new Date(movement.created_at).toLocaleString(),
+          Date: fmtDateTime(movement.created_at),
           "Linked Sale":
             movement.invoice_no ??
             (movement.ref_id ? movement.ref_id.slice(0, 8).toUpperCase() : ""),
@@ -753,7 +753,7 @@ function ReportsPage() {
       (order.order_items ?? []).forEach((line: any) => {
         (line.order_item_packaging ?? []).forEach((pack: any) =>
           rows.push({
-            Date: new Date(order.created_at).toLocaleString(),
+            Date: fmtDateTime(order.created_at),
             Branch: order.branches?.name ?? "Main Branch",
             "Menu Item": line.menu_items?.name ?? "",
             "Meal Qty": Number(line.qty),
@@ -770,7 +770,7 @@ function ReportsPage() {
       });
       (order.order_packaging ?? []).forEach((pack: any) =>
         rows.push({
-          Date: new Date(order.created_at).toLocaleString(),
+          Date: fmtDateTime(order.created_at),
           Branch: order.branches?.name ?? "Main Branch",
           "Menu Item": "Standalone packaging sale",
           "Meal Qty": "",
@@ -805,7 +805,7 @@ function ReportsPage() {
     productionRows.forEach((batch: any) => {
       batch.production_inputs?.forEach((line: any) =>
         rows.push({
-          Date: new Date(batch.created_at).toLocaleString(),
+          Date: fmtDateTime(batch.created_at),
           Branch: batch.branches?.name ?? "Main Branch",
           "Production Ref": batch.id.slice(0, 8).toUpperCase(),
           "Raw Material": line.items?.name ?? "",
@@ -826,7 +826,7 @@ function ReportsPage() {
     productionRows.forEach((batch: any) => {
       batch.production_outputs?.forEach((line: any) =>
         rows.push({
-          Date: new Date(batch.created_at).toLocaleString(),
+          Date: fmtDateTime(batch.created_at),
           Branch: batch.branches?.name ?? "Main Branch",
           "Production Ref": batch.id.slice(0, 8).toUpperCase(),
           "Output Item": line.items?.name ?? "",
@@ -953,7 +953,7 @@ function ReportsPage() {
 
   const deductionAuditRows = (): ReportRow[] =>
     deductionAuditData.map((row: any) => ({
-      Date: new Date(row.created_at).toLocaleString(),
+      Date: fmtDateTime(row.created_at),
       "Invoice #": row.invoice_no,
       Branch: row.branch_name ?? "Main Branch",
       Item: row.item_name,
@@ -1088,7 +1088,7 @@ function ReportsPage() {
         .map((payment: any) => `${paymentMethodLabel(payment.method)}:${payment.amount}`)
         .join(" | ");
       orderRows.push({
-        Date: new Date(order.created_at).toLocaleString(),
+        Date: fmtDateTime(order.created_at),
         OrderID: order.id,
         "Sale Type": order.sale_type === "staff_meal" ? "Staff Meal" : "Regular",
         Subtotal: Number(order.subtotal),
@@ -1101,7 +1101,7 @@ function ReportsPage() {
       });
       order.payments?.forEach((payment: any) =>
         paymentRows.push({
-          Date: new Date(order.created_at).toLocaleString(),
+          Date: fmtDateTime(order.created_at),
           OrderID: order.id,
           Method: paymentMethodLabel(payment.method),
           Amount: Number(payment.amount),
@@ -1111,7 +1111,7 @@ function ReportsPage() {
         const options = modifierNames(line);
         const crust = options.find((name) => name === "Thin Crust" || name === "Thick Crust");
         lineRows.push({
-          Date: new Date(order.created_at).toLocaleString(),
+          Date: fmtDateTime(order.created_at),
           OrderID: order.id,
           Item: line.menu_items?.name ?? "-",
           Category: line.menu_items?.categories?.name ?? "-",
@@ -1298,7 +1298,7 @@ function ReportsPage() {
     productionRows.forEach((batch: any) => {
       batch.production_inputs?.forEach((line: any) =>
         inputRows.push({
-          Date: new Date(batch.created_at).toLocaleString(),
+          Date: fmtDateTime(batch.created_at),
           BatchID: batch.id,
           Item: line.items?.name ?? "",
           Qty: Number(line.qty),
@@ -1309,7 +1309,7 @@ function ReportsPage() {
       );
       batch.production_outputs?.forEach((line: any) =>
         outputRows.push({
-          Date: new Date(batch.created_at).toLocaleString(),
+          Date: fmtDateTime(batch.created_at),
           BatchID: batch.id,
           Item: line.items?.name ?? "",
           Qty: Number(line.qty),
@@ -1320,7 +1320,7 @@ function ReportsPage() {
       );
       batch.production_wastage?.forEach((line: any) =>
         wasteProductionRows.push({
-          Date: new Date(batch.created_at).toLocaleString(),
+          Date: fmtDateTime(batch.created_at),
           BatchID: batch.id,
           Item: line.items?.name ?? "",
           Qty: Number(line.qty),
@@ -1344,7 +1344,7 @@ function ReportsPage() {
       wb,
       "Batches",
       productionRows.map((batch: any) => ({
-        Date: new Date(batch.created_at).toLocaleString(),
+        Date: fmtDateTime(batch.created_at),
         BatchID: batch.id,
         Inputs: batch.production_inputs?.length ?? 0,
         Outputs: batch.production_outputs?.length ?? 0,

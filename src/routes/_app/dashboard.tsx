@@ -52,8 +52,8 @@ function Dashboard() {
         <p className="text-sm text-muted-foreground">
           {new Date().toLocaleDateString("en-GB", {
             weekday: "long",
-            day: "numeric",
-            month: "long",
+            day: "2-digit",
+            month: "2-digit",
             year: "numeric",
           })}
         </p>

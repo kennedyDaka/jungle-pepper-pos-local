@@ -37,7 +37,7 @@ export function exportRowsCsv(meta: ExportMeta, rows: ReportRow[]) {
   const metadata = [
     ["Jungle Pepper"],
     [meta.title],
-    ["Generated", new Date().toLocaleString()],
+    ["Generated", new Date().toLocaleString("en-GB", { hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })],
     meta.branchLabel ? ["Branch", meta.branchLabel] : [],
     meta.rangeLabel ? ["Period", meta.rangeLabel] : [],
     ...Object.entries(meta.filters ?? {})
@@ -90,7 +90,7 @@ export async function exportRowsPdf(meta: ExportMeta, rows: ReportRow[]) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   const details = [
-    `Generated: ${new Date().toLocaleString()}`,
+    `Generated: ${new Date().toLocaleString("en-GB", { hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}`,
     meta.rangeLabel ? `Period: ${meta.rangeLabel}` : "",
     meta.branchLabel ? `Branch: ${meta.branchLabel}` : "",
     ...Object.entries(meta.filters ?? {})
@@ -118,7 +118,7 @@ export function printRows(meta: ExportMeta, rows: ReportRow[]) {
   const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
   if (!printWindow) return;
   const details = [
-    `<strong>Generated:</strong> ${new Date().toLocaleString()}`,
+    `<strong>Generated:</strong> ${new Date().toLocaleString("en-GB", { hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}`,
     meta.rangeLabel ? `<strong>Period:</strong> ${meta.rangeLabel}` : "",
     meta.branchLabel ? `<strong>Branch:</strong> ${meta.branchLabel}` : "",
     ...Object.entries(meta.filters ?? {})

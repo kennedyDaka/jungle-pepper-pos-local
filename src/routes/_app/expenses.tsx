@@ -15,7 +15,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { MWK, fmtQty, paymentMethodLabel } from "@/lib/format";
+import { MWK, fmtDateTime, fmtQty, paymentMethodLabel } from "@/lib/format";
 import {
   appendMatrixReportSheet,
   appendReportSheet,
@@ -238,7 +238,7 @@ function ExpensesPage() {
       Supplier: e.suppliers?.name ?? "",
       Description: e.description ?? "",
       "Stock Item Lines": e.expense_stock_lines?.length ?? 0,
-      "Recorded At": new Date(e.created_at).toLocaleString(),
+      "Recorded At": fmtDateTime(e.created_at),
     }));
 
   const expenseLineRows = (): ReportRow[] => {

@@ -15,6 +15,24 @@ export const fmtDate = (d: string | Date) =>
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
+  });
+
+export const fmtDateTime = (d: string | Date) =>
+  new Date(d).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+export const fmtDateDMY = (d: string | Date) =>
+  new Date(d).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {

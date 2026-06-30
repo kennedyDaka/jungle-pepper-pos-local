@@ -55,9 +55,8 @@ const POS_CATEGORY_GROUPS = [
   { id: "sweets", label: "SWEETS" },
   { id: "hot-drinks", label: "HOT DRINKS" },
   { id: "beers", label: "BEERS" },
-  { id: "soft-drinks", label: "SOFT DRINKS" },
-  { id: "juices-mocktails", label: "JUICES / MOCKTAILS" },
-  { id: "liquor", label: "LIQUOR" },
+  { id: "soft-drinks",       label: "SOFT DRINKS" },
+  { id: "liquor-wine",      label: "LIQUOR / WINE" },
   { id: "extras", label: "EXTRAS" },
 ];
 
@@ -100,8 +99,7 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   if (groupId === "hot-drinks") return category === "COFFEE AND TEA";
   if (groupId === "beers") return category === "BEERS AND CIDERS";
   if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
-  if (groupId === "juices-mocktails") return isJuiceOrMocktailItem(item);
-  if (groupId === "liquor") {
+  if (groupId === "liquor-wine") {
     return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(
       category,
     );
