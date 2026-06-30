@@ -314,11 +314,101 @@ function parseDishQty(value: string, fallbackQty = 1) {
   };
 }
 
-function soldAsLabel(name: string, movement: MatrixMovement) {
-  const normalizedName = normalizeName(name);
-  const normalizedCategories = normalizeName(movement.menu_categories ?? "");
-  if (normalizedName.includes("PIZZA") || normalizedCategories.includes("PIZZA")) return "Pizza";
-  return name;
+const SHORT_ITEM_NAMES: Record<string, string> = {
+  // Starters
+  "GARLIC LOAF": "LOAF",
+  "GARLIC LOAF CHEESE": "LOAF + CHEESE",
+  FOCACCIA: "FOCC",
+  "FOCACCIA CHEESE": "FOCC + CHEESE",
+  "GREEK SALAD": "GREEK",
+  "MIXED SALAD": "MIXED",
+
+  // Prego & Bitoques
+  "PLAIN PREGO": "PREGO",
+  "PREGO PIMENTO": "PIMENTO",
+  "BEEF BITOQUE": "B. BITOQUE",
+  "CHICKEN BITOQUE": "C. BITOQUE",
+
+  // Frango
+  "HALF CHURRASCO CHICKEN": "HALF",
+  "FULL CHURRASCO CHICKEN": "FULL",
+
+  // Pastas
+  "SPAGHETTI POMODORO": "SPAGH POMO",
+  "SPAGHETTI PICANTI": "SPAGH PICC",
+  "SPAGHETTI BOLOGNESE": "SPAGH BOLOG",
+  "SPAGHETTI CREAMY CHICKEN MUSHROOM": "SPAGH CHICK",
+  "SPAGHETTI CREAMY TOMATO PRAWN": "SPAGH PRAWN",
+  "PENNE POMODORO": "PENNE POMO",
+  "PENNE PICANTI": "PENNE PICC",
+  "PENNE BOLOGNESE": "PENNE BOLOG",
+  "PENNE CREAMY CHICKEN MUSHROOM": "PENNE CHICK",
+  "PENNE CREAMY TOMATO PRAWN": "PENNE PRAWN",
+  "FETTUCINE POMODORO": "FETT POMO",
+  "FETTUCINE PICANTI": "FETT PICC",
+  "FETTUCINE BOLOGNESE": "FETT BOLOG",
+  "FETTUCINE CREAMY CHICKEN MUSHROOM": "FETT CHICK",
+  "FETTUCINE CREAMY TOMATO PRAWN": "FETT PRAWN",
+
+  // Pizzas
+  "KATUNDU PIZZA": "KAT",
+  "MEXICANO PIZZA": "MEX",
+  "PORTUGUESE CHICKEN PIZZA": "CHICKEN",
+  "CHICKEN MUSHROOM PIZZA": "PORT MUSHROOM",
+  "SWEET SOUR SAFARI PIZZA": "SAFARI",
+  "MAFFIOSA PIZZA": "MAFF",
+  "PRAWN PIZZA": "FISH PRAWN",
+  "ANCHOVY PIZZA": "ANCHO",
+  "VEGETARIAN PIZZA": "VEG",
+  "VEGAN PIZZA": "VEGAN",
+  "MARGARITA PIZZA": "MARG",
+  "PICCANTI PIZZA": "PICC",
+  "JALAPENO PIZZA": "JALAPI",
+  "HUMMUS PIZZA": "HUMMUS",
+  "GODFATHER PIZZA": "GOD",
+  "MEDITERRANEAN PIZZA": "F. MED",
+
+  // Burgers
+  "JUNGLE PEPPER BURGER": "J. BURGER",
+  "CHICKEN BURGER": "C. BURGER",
+  "PRAWN BURGER": "PRAWN BURGER",
+  "VEGGIE BURGER": "VEGGIE",
+
+  // Chips
+  "PLAIN CHIPS SMALL": "CHIPS S",
+  "PLAIN CHIPS LARGE": "CHIPS L",
+  "MASALA CHIPS SMALL": "MASALA S",
+  "MASALA CHIPS LARGE": "MASALA L",
+
+  // Desserts
+  "CHOCOLATE CAKE": "CHOC CAKE",
+  PANCAKES: "PANCAKE",
+  "PANCAKES WITH ICE CREAM": "PANCAKE + ICE",
+  "ICE CREAM": "ICE",
+  "OREO ICE CREAM": "OREO",
+  "PASTEL DE BELEM": "BELEM",
+
+  // Hot drinks
+  "ITALIAN CAPPUCCINO": "I. CAPP",
+  "BRAZILIAN CAPPUCCINO": "B. CAPP",
+  KIDDOCCINO: "KIDDO",
+  "BICA ESPRESSO": "EXP",
+  "RAILWAY ESPRESSO BOMBOM": "RAILWAY",
+  CARIOCA: "CARIOCA",
+  MACCHIATO: "MACC",
+  PINGO: "PINGO",
+  BABYCHINO: "BABY",
+  "GALAO CAFFE LATTE": "GALAO",
+  "HOT CHOCOLATE": "HOT CHOC",
+  SUBMARINE: "SUB",
+  CHOCACHINO: "CHOCA",
+  "FILTER COFFEE": "FILTER",
+  "MALAWIAN TEA": "M. TEA",
+};
+
+function soldAsLabel(name: string, _movement: MatrixMovement) {
+  const key = normalizeName(name);
+  return SHORT_ITEM_NAMES[key] ?? name;
 }
 
 function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
