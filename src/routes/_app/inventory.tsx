@@ -37,6 +37,7 @@ function InventoryPage() {
   const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
   const [search, setSearch] = useState("");
+  const [locationFilter, setLocationFilter] = useState("all");
   const [stockOpen, setStockOpen] = useState<any | null>(null);
   const [binOpen, setBinOpen] = useState<any | null>(null);
   const [adjOpen, setAdjOpen] = useState<any | null>(null);
@@ -62,7 +63,8 @@ function InventoryPage() {
   };
 
   const filtered = (items.data ?? []).filter((i: any) =>
-    i.name.toLowerCase().includes(search.toLowerCase()),
+    i.name.toLowerCase().includes(search.toLowerCase()) &&
+    (locationFilter === "all" || i.location === locationFilter),
   );
 
   return (
@@ -70,6 +72,16 @@ function InventoryPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Inventory</h1>
         <div className="flex gap-2">
+          <Select value={locationFilter} onValueChange={setLocationFilter}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="kitchen">Kitchen</SelectItem>
+              <SelectItem value="stores">Stores</SelectItem>
+            </SelectContent>
+          </Select>
           <Input
             placeholder="Search items…"
             value={search}
@@ -91,6 +103,7 @@ function InventoryPage() {
           <thead className="bg-secondary/50">
             <tr className="text-left">
               <th className="p-2">Item</th>
+              <th className="p-2">Location</th>
               <th className="p-2">Category</th>
               <th className="p-2">Type</th>
               <th className="p-2 text-right">On hand</th>
@@ -106,6 +119,7 @@ function InventoryPage() {
               return (
                 <tr key={i.id} className="border-t border-border hover:bg-secondary/30">
                   <td className="p-2 font-medium">{i.name}</td>
+                  <td className="p-2 text-xs uppercase text-muted-foreground">{i.location ?? "—"}</td>
                   <td className="p-2 text-muted-foreground">{i.categories?.name}</td>
                   <td className="p-2 text-xs uppercase text-muted-foreground">{i.stock_type}</td>
                   <td
