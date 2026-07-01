@@ -28,7 +28,8 @@ export type StockMovementType =
   | "wastage"
   | "issue_out"
   | "complimentary"
-  | "breakage";
+  | "breakage"
+  | "transfer";
 
 export interface AuthUser {
   id: string;
@@ -87,6 +88,7 @@ export interface InventoryItem {
   active: boolean;
   bottle_ml?: number | null;
   shot_ml?: number | null;
+  location?: string | null;
 }
 
 export interface InventoryItemView extends InventoryItem {

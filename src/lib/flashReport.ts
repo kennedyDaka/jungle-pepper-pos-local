@@ -445,87 +445,139 @@ type FlashStockRow = {
   variance: number;
   soldAs: string;
   isMenu?: boolean;
+  kitchenOpening: number;
+  kitchenPurchases: number;
+  kitchenUsage: number;
+  kitchenClosing: number;
+  storesOpening: number;
+  storesPurchases: number;
+  storesUsage: number;
+  storesClosing: number;
 };
 
+function resolveAndSummarize(
+  items: MatrixItem[],
+  label: string,
+  aliases: string[],
+  sales: MatrixOrder[],
+  movements: MatrixMovement[],
+  ledgerMovements: MatrixMovement[],
+  menuAliases: string[] | undefined,
+  isMenu: boolean | undefined,
+): {
+  stores: { item?: MatrixItem; opening: number; purchases: number; usage: number; closing: number };
+  kitchen: { item?: MatrixItem; opening: number; purchases: number; usage: number; closing: number };
+  soldAsItemId?: string;
+} {
+  const defaultRow = { item: undefined, opening: 0, purchases: 0, usage: 0, closing: 0 };
+
+  if (isMenu) {
+    const menuUsage = countMenuSales(label, sales);
+    return {
+      stores: { ...defaultRow, usage: menuUsage },
+      kitchen: { ...defaultRow },
+    };
+  }
+
+  // Helper to compute a single location's summary
+  const locSummary = (location: string) => {
+    const locItems = items.filter(
+      (i) => i.location === location || (!i.location && location === 'stores')
+    );
+    const locExact = itemIndex(locItems);
+    const item = resolveItem(locItems, locExact, label, aliases);
+    if (!item) return { item: undefined, opening: 0, purchases: 0, usage: 0, closing: 0 };
+
+    let opening = 0;
+    let purchases = 0;
+    let usage = 0;
+    let closing = 0;
+
+    if (menuAliases !== undefined) {
+      const summary = summarizeStock(item, movements, ledgerMovements);
+      opening = summary.opening;
+      purchases = summary.purchase;
+      closing = summary.closing;
+      const allCandidates = [label, ...aliases, ...menuAliases].filter(Boolean);
+      for (const candidate of allCandidates) {
+        const qty = countMenuSales(candidate, sales);
+        if (qty > 0) { usage = qty; break; }
+      }
+      if (usage === 0) {
+        const summary2 = summarizeStock(item, movements, ledgerMovements);
+        usage = summary2.usage;
+        if (isMeasuredBeverage(item)) usage = wholeServingQty(servingQty(usage, item) ?? 0);
+      }
+      if (isMeasuredBeverage(item)) {
+        opening = wholeServingQty(servingQty(opening, item) ?? 0);
+        purchases = wholeServingQty(servingQty(purchases, item) ?? 0);
+        closing = wholeServingQty(servingQty(closing, item) ?? 0);
+      }
+    } else {
+      const summary = summarizeStock(item, movements, ledgerMovements);
+      opening = summary.opening;
+      purchases = summary.purchase;
+      usage = summary.usage;
+      closing = summary.closing;
+      if (isMeasuredBeverage(item)) {
+        opening = wholeServingQty(servingQty(opening, item) ?? 0);
+        purchases = wholeServingQty(servingQty(purchases, item) ?? 0);
+        usage = wholeServingQty(servingQty(usage, item) ?? 0);
+        closing = wholeServingQty(servingQty(closing, item) ?? 0);
+      }
+    }
+
+    return { item, opening, purchases, usage, closing };
+  };
+
+  const stores = locSummary('stores');
+  const kitchen = locSummary('kitchen');
+
+  return {
+    stores,
+    kitchen,
+    soldAsItemId: stores.item?.id || kitchen.item?.id,
+  };
+}
+
 function flashStockRows(input: FlashReportInput): FlashStockRow[] {
-  const exact = itemIndex(input.items);
   const rows: FlashStockRow[] = [];
 
   STOCK_SECTIONS.forEach(([sectionName, stockItems]) => {
     stockItems.forEach(({ label, aliases, isMenu, menuAliases }) => {
-      let rawOpening = 0;
-      let rawPurchases = 0;
-      let rawUsage = 0;
-      let rawClosing = 0;
-      let hasStock = false;
-      let item: MatrixItem | undefined;
-      let itemId: string | undefined;
+      const result = resolveAndSummarize(
+        input.items, label, aliases, input.sales,
+        input.movements, input.ledgerMovements, menuAliases, isMenu,
+      );
 
-      if (isMenu) {
-        rawUsage = countMenuSales(label, input.sales);
-      } else if (menuAliases !== undefined) {
-        item = resolveItem(input.items, exact, label, aliases);
-        if (item) {
-          itemId = item.id;
-          const summary = summarizeStock(item, input.movements, input.ledgerMovements);
-          rawOpening = summary.opening;
-          rawPurchases = summary.purchase;
-          rawClosing = summary.closing;
-          hasStock = true;
-        }
-        const allCandidates = [label, ...aliases, ...menuAliases].filter(Boolean);
-        for (const candidate of allCandidates) {
-          const qty = countMenuSales(candidate, input.sales);
-          if (qty > 0) {
-            rawUsage = qty;
-            break;
-          }
-        }
-        if (rawUsage === 0 && item) {
-          const summary = summarizeStock(item, input.movements, input.ledgerMovements);
-          rawUsage = summary.usage;
-          if (isMeasuredBeverage(item)) {
-            rawUsage = wholeServingQty(servingQty(rawUsage, item) ?? 0);
-          }
-        }
-        if (item && isMeasuredBeverage(item)) {
-          rawOpening = wholeServingQty(servingQty(rawOpening, item) ?? 0);
-          rawPurchases = wholeServingQty(servingQty(rawPurchases, item) ?? 0);
-          rawClosing = wholeServingQty(servingQty(rawClosing, item) ?? 0);
-        }
-      } else {
-        item = resolveItem(input.items, exact, label, aliases);
-        if (item) {
-          itemId = item.id;
-          const summary = summarizeStock(item, input.movements, input.ledgerMovements);
-          rawOpening = summary.opening;
-          rawPurchases = summary.purchase;
-          rawUsage = summary.usage;
-          rawClosing = summary.closing;
-          hasStock = true;
-        }
-        if (item && isMeasuredBeverage(item)) {
-          rawOpening = wholeServingQty(servingQty(rawOpening, item) ?? 0);
-          rawPurchases = wholeServingQty(servingQty(rawPurchases, item) ?? 0);
-          rawUsage = wholeServingQty(servingQty(rawUsage, item) ?? 0);
-          rawClosing = wholeServingQty(servingQty(rawClosing, item) ?? 0);
-        }
-      }
-
-      const rawExpected = hasStock ? rawOpening + rawPurchases - rawUsage : 0;
-      const rawVariance = hasStock ? rawClosing - rawExpected : 0;
+      const s = result.stores;
+      const k = result.kitchen;
+      const totalOpening = s.opening + k.opening;
+      const totalPurchases = s.purchases + k.purchases;
+      const totalUsage = s.usage + k.usage;
+      const totalExpected = totalOpening + totalPurchases - totalUsage;
+      const totalClosing = s.closing + k.closing;
+      const totalVariance = totalClosing - totalExpected;
 
       rows.push({
         section: sectionName,
         label,
-        opening: rawOpening,
-        purchases: rawPurchases,
-        usage: rawUsage,
-        expected: rawExpected,
-        closing: rawClosing,
-        variance: rawVariance,
-        soldAs: itemId ? buildSoldAs(itemId, input.movements) : "",
+        opening: totalOpening,
+        purchases: totalPurchases,
+        usage: totalUsage,
+        expected: totalExpected,
+        closing: totalClosing,
+        variance: totalVariance,
+        soldAs: result.soldAsItemId ? buildSoldAs(result.soldAsItemId, input.movements) : "",
         isMenu,
+        kitchenOpening: k.opening,
+        kitchenPurchases: k.purchases,
+        kitchenUsage: k.usage,
+        kitchenClosing: k.closing,
+        storesOpening: s.opening,
+        storesPurchases: s.purchases,
+        storesUsage: s.usage,
+        storesClosing: s.closing,
       });
     });
   });
@@ -547,6 +599,7 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
   });
 
   flashStockRows(input).forEach((row) => {
+    const hasKitchen = row.kitchenOpening !== 0 || row.kitchenPurchases !== 0 || row.kitchenUsage !== 0 || row.kitchenClosing !== 0;
     rows.push({
       Section: row.section,
       Item: row.label,
@@ -557,6 +610,16 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
       actual: row.isMenu ? null : stockCell(row.closing),
       difference: row.isMenu ? null : stockCell(row.variance),
       "sold as": row.soldAs,
+      ...(hasKitchen ? {
+        "K Opening": stockCell(row.kitchenOpening),
+        "K Purchases": stockCell(row.kitchenPurchases),
+        "K Usage": stockCell(row.kitchenUsage),
+        "K Closing": stockCell(row.kitchenClosing),
+        "S Opening": stockCell(row.storesOpening),
+        "S Purchases": stockCell(row.storesPurchases),
+        "S Usage": stockCell(row.storesUsage),
+        "S Closing": stockCell(row.storesClosing),
+      } : {}),
     });
   });
 
@@ -702,13 +765,21 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   const ws = wb.addWorksheet("Flash Report");
 
   ws.getColumn(1).width = 36;
-  ws.getColumn(2).width = 22;
-  ws.getColumn(3).width = 22;
-  ws.getColumn(4).width = 22;
-  ws.getColumn(5).width = 20;
-  ws.getColumn(6).width = 22;
-  ws.getColumn(7).width = 16;
+  ws.getColumn(2).width = 14;
+  ws.getColumn(3).width = 14;
+  ws.getColumn(4).width = 14;
+  ws.getColumn(5).width = 14;
+  ws.getColumn(6).width = 14;
+  ws.getColumn(7).width = 14;
   ws.getColumn(8).width = 48;
+  ws.getColumn(9).width = 12;
+  ws.getColumn(10).width = 12;
+  ws.getColumn(11).width = 12;
+  ws.getColumn(12).width = 12;
+  ws.getColumn(13).width = 12;
+  ws.getColumn(14).width = 12;
+  ws.getColumn(15).width = 12;
+  ws.getColumn(16).width = 12;
 
   const titleRow = ws.addRow(["JUNGLE PEPPER - FLASH REPORT"]);
   titleRow.getCell(1).font = TITLE_FONT;
@@ -786,6 +857,14 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     "actual",
     "difference",
     "sold as",
+    "K Open",
+    "K Pur",
+    "K Sale",
+    "K Close",
+    "S Open",
+    "S Pur",
+    "S Sale",
+    "S Close",
   ]);
   stockHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = HEADER_FILL;
@@ -804,6 +883,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       sectionRow.height = 20;
     }
 
+    const hasKitchen = stockRow.kitchenOpening !== 0 || stockRow.kitchenPurchases !== 0 || stockRow.kitchenUsage !== 0 || stockRow.kitchenClosing !== 0;
     const r = ws.addRow([
       stockRow.label,
       stockCell(stockRow.opening),
@@ -813,16 +893,27 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       stockRow.isMenu ? null : stockCell(stockRow.closing),
       stockRow.isMenu ? null : stockCell(stockRow.variance),
       stockRow.soldAs || null,
+      ...(hasKitchen ? [
+        stockCell(stockRow.kitchenOpening),
+        stockCell(stockRow.kitchenPurchases),
+        stockCell(stockRow.kitchenUsage),
+        stockCell(stockRow.kitchenClosing),
+        stockCell(stockRow.storesOpening),
+        stockCell(stockRow.storesPurchases),
+        stockCell(stockRow.storesUsage),
+        stockCell(stockRow.storesClosing),
+      ] : []),
     ]);
 
-    for (let c = 1; c <= 8; c++) {
+    for (let c = 1; c <= (hasKitchen ? 16 : 8); c++) {
       r.getCell(c).border = BORDER_THIN;
     }
 
     const FMT_INT = "#,##0";
     const FMT_DEC = "#,##0.###";
 
-    [2, 3, 4, 5, 6, 7].forEach((c) => {
+    const numCols = hasKitchen ? [2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16] : [2, 3, 4, 5, 6, 7];
+    numCols.forEach((c) => {
       const val = r.getCell(c).value;
       r.getCell(c).numFmt = typeof val === "number" && val % 1 !== 0 ? FMT_DEC : FMT_INT;
     });

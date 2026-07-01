@@ -33,6 +33,7 @@ function toItem(row: ItemRowWithRelations): InventoryItemView {
     active: row.active,
     bottle_ml: row.bottle_ml === null ? null : Number(row.bottle_ml),
     shot_ml: row.shot_ml === null ? null : Number(row.shot_ml),
+    location: row.location,
     categories: row.categories ? { name: row.categories.name } : undefined,
     units: row.units ? { code: row.units.code, name: row.units.name } : undefined,
     suppliers: row.suppliers ? { name: row.suppliers.name } : null,

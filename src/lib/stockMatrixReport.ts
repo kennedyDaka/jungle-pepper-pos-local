@@ -11,6 +11,7 @@ export type MatrixItem = {
   bottle_ml?: number | string | null;
   shot_ml?: number | string | null;
   units?: { code?: string | null } | null;
+  location?: string | null;
 };
 
 export type MatrixMovement = {
