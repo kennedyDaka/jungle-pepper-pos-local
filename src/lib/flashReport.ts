@@ -86,13 +86,6 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     ],
   ],
   [
-    "CAMARAO",
-    [
-      { label: "CAMARAO HALF (pkt 6)", aliases: ["CAMARAO HALF (PKT6)"] },
-      { label: "CAMARAO PASTA PKTS (80g)", aliases: ["CAMARAO PASTA PKTS (80G)"] },
-    ],
-  ],
-  [
     "CHEESE",
     [
       { label: "BLOCK (Qty)", aliases: ["CHEESE BLOCK QTY", "BLOCK (QTY)"] },
@@ -100,7 +93,6 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
       { label: "PIZZA CHEESE PKTS (120g)", aliases: ["CHEESE PIZZA PKTS (120G)"] },
       { label: "CHEESE BURGER/LOAF (40g)", aliases: ["CHEESE BURGER PKTS (40G)"] },
       { label: "MILK (500g)", aliases: ["MILK"] },
-      { label: "MARGARINE", aliases: [] },
     ],
   ],
   [
@@ -119,12 +111,6 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     "RICE",
     [
       { label: "BULK (Kg)", aliases: ["RICE BULK"] },
-      { label: "RICE MARISCO PKTS (200g)", aliases: ["MARISCO PKTS"] },
-      {
-        label: "RICE COOKED (Cont=3.200g) (1Kg)",
-        aliases: ["RICE COOKED(CONT=3.200G) (1KG)", "RICE COOKER"],
-      },
-      { label: "SALT (Kg)", aliases: ["SALT"] },
       { label: "SUGAR (Kg)", aliases: ["SUGAR"] },
     ],
   ],
@@ -132,8 +118,6 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     "OILS / SAUCES",
     [
       { label: "COOKING OIL BULK (L)", aliases: ["COOKING OIL BULK"] },
-      { label: "SAUCE FRANGO", aliases: [] },
-      { label: "SAUCE CAMARAO", aliases: [] },
     ],
   ],
   [
@@ -157,7 +141,6 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     "CHARCOAL / FIREWOOD",
     [
       { label: "CHARCOAL (Kg)", aliases: ["CHARCOAL"] },
-      { label: "FIREWOOD (Tonnes)", aliases: ["FIREWOOD"] },
     ],
   ],
   [
@@ -221,49 +204,6 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     ],
   ],
   ["LIQUORS + MORE", []],
-  [
-    "BRANDY",
-    [
-      {
-        label: "CAPE STARS",
-        aliases: ["CAPE STARS BRANDY BOTTLE"],
-        menuAliases: ["CAPE STARS BRANDY"],
-      },
-      { label: "PREMIER", aliases: ["PREMIER BRANDY BOTTLE"], menuAliases: ["PREMIER BRANDY"] },
-      { label: "KLIPDRIFT", aliases: ["KLIPDRIFT BRANDY BOTTLE"], menuAliases: [] },
-      { label: "KWV 3 YRS", aliases: ["KWV 3 YEARS BRANDY BOTTLE"], menuAliases: [] },
-      { label: "KWV 5 YRS", aliases: ["KWV 5 YEARS BRANDY BOTTLE"], menuAliases: [] },
-    ],
-  ],
-  [
-    "GIN",
-    [
-      { label: "CAPE STARS", aliases: ["CAPE STARS GIN BOTTLE"], menuAliases: ["CAPE STARS GIN"] },
-      { label: "MALAWI GIN", aliases: ["MALAWI GIN BOTTLE"], menuAliases: [] },
-    ],
-  ],
-  [
-    "WHISKEY",
-    [
-      {
-        label: "CAPE STARS",
-        aliases: ["CAPE STARS WHISKEY BOTTLE"],
-        menuAliases: ["CAPE STARS WHISKEY"],
-      },
-      { label: "J & B", aliases: ["J&B WHISKEY BOTTLE"], menuAliases: [] },
-      { label: "JAMESON", aliases: ["JAMESON BOTTLE"], menuAliases: [] },
-      { label: "JACK DANIELS", aliases: ["JACK DANIELS BOTTLE"], menuAliases: [] },
-    ],
-  ],
-  [
-    "VODKA",
-    [
-      { label: "CAPE STARS", aliases: ["CAPE STARS VODKA BOTTLE"] },
-      { label: "MALAWI VODKA", aliases: ["MALAWI VODKA BOTTLE"], menuAliases: [] },
-      { label: "ABSOLUT", aliases: ["ABSOLUT VODKA BOTTLE"], menuAliases: ["ABSOLUTE"] },
-      { label: "SMIRNOFF", aliases: ["SMIRNOFF VODKA BOTTLE"], menuAliases: [] },
-    ],
-  ],
 ];
 
 const PAYMENT_METHOD_MAP: Array<[string, string[]]> = [
@@ -303,8 +243,14 @@ function countMenuSales(label: string, sales: MatrixOrder[]) {
   return qty;
 }
 
-function parseDishQty(value: string, fallbackQty = 1) {
+function stripContext(value: string): string {
   const trimmed = value.trim();
+  if (/^(modifier|packaging)\s/i.test(trimmed)) return "";
+  return trimmed.replace(/\s+-\s+(modifier|packaging)\s+.*$/i, "").trim();
+}
+
+function parseDishQty(value: string, fallbackQty = 1) {
+  const trimmed = stripContext(value.trim());
   const match = trimmed.match(/^(.*?)(?:\s+x\s*([0-9]+(?:\.[0-9]+)?))?$/i);
   const name = (match?.[1] ?? trimmed).trim();
   const qty = match?.[2] ? Number(match[2]) : fallbackQty;
@@ -404,6 +350,81 @@ const SHORT_ITEM_NAMES: Record<string, string> = {
   CHOCACHINO: "CHOCA",
   "FILTER COFFEE": "FILTER",
   "MALAWIAN TEA": "M. TEA",
+
+  // Teas
+  "EARL GREY TEA": "E. GREY",
+  "ROOIBOS TEA": "ROOIBOS",
+  "CARIOCA DE LIMAO": "CARIOCA L",
+  "HERBAL TEAS": "HERBAL",
+
+  // Soft Drinks
+  "FANTA ORANGE": "F. ORANGE",
+  "FANTA PINEAPPLE": "F. PINE",
+  "FANTA PASSION": "F. PASSION",
+  "CHERRY PLUM": "CHERRY P",
+  "GINGER SOBO": "G. SOBO",
+  "GINGER ALE": "G. ALE",
+  "SODA WATER": "SODA",
+  "SOBO ORANGE": "S. ORANGE",
+  "BOX JUICES": "BOX J",
+  "COCOPINA": "COCO",
+
+  // Mocktails
+  CHAPMAN: "CHAP",
+  ROCKSHANDY: "ROCKY",
+  "LIME CORDIAL": "LIME",
+
+  // Wine
+  "RED DRY DROSTDY": "R. DRY D",
+  "RED DRY OVERMEER": "R. DRY O",
+  "RED SWEET": "R. SWEET",
+  "WHITE WINE GLASS": "WINE G",
+
+  // Beers & Ciders
+  "KUCHE KUCHE": "KUCHE",
+  "POME BREEZE": "POME",
+  SAPITWA: "SAPI",
+
+  // Gin
+  "CAPE STARS GIN": "CS GIN",
+  "MALAWI GIN": "M. GIN",
+
+  // Brandy
+  "CAPE STARS BRANDY": "CS BRANDY",
+  "PREMIER BRANDY": "P. BRANDY",
+  KLIPDRIFT: "KLIP",
+  "KWV 3 YRS": "KWV 3",
+  "KWV 5 YRS": "KWV 5",
+
+  // Rum
+  "CAPTAIN MORGAN": "C. MORGAN",
+
+  // Whiskey
+  "CAPE STARS WHISKEY": "CS WHISKY",
+  "J B": "J+B",
+  "RED LABEL": "R. LABEL",
+  "JACK DANIELS": "J. DANIELS",
+
+  // Tequila
+  "TEQUILA SILVER": "T. SILVER",
+  "TEQUILA GOLD": "T. GOLD",
+
+  // Liqueurs
+  "MARTINI RED": "MARTINI",
+  JAGERMEISTER: "JAGER",
+  "PELLEGRINI BITTERS": "P. BITTERS",
+
+  // Vodka
+  "MALAWI VODKA": "M. VODKA",
+
+  // Seafood
+  "ARROZ DE MARISCO": "RICE S/F",
+  "CAMARAO 6 PRAWNS": "6 PRAWNS",
+  "CAMARAO 12 PRAWNS": "12 PRAWNS",
+
+  // Salads
+  "EXTRA CHICKEN TOPPING": "CHICK TOP",
+  "SALAD CHICKEN TOPPING": "CHICK TOP",
 };
 
 function soldAsLabel(name: string, _movement: MatrixMovement) {
