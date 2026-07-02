@@ -61,7 +61,12 @@ function MenuItemPage() {
   );
 
   const handleAdd = () => {
-    if ((item.kind === "pizza" || item.kind === "pasta") && itemModifiers.length > 0) {
+    const crustMods = itemModifiers.filter((m: any) => /^(thin|thick)\s*crust$/i.test(m.name));
+    if (item.kind === "pizza" || crustMods.length > 0) {
+      setModifierDialog({ item, modifiers: crustMods.length > 0 ? crustMods : itemModifiers, kind: "base" });
+      return;
+    }
+    if (item.kind === "pasta" && itemModifiers.length > 0) {
       setModifierDialog({ item, modifiers: itemModifiers, kind: item.kind });
       return;
     }
@@ -131,9 +136,13 @@ function MenuItemPage() {
 
       <BaseModifierDialog
         open={modifierDialog !== null}
-        title={modifierDialog?.kind === "pizza" ? "Choose pizza base" : "Choose pasta shape"}
+        title={
+          modifierDialog?.kind === "pizza" || modifierDialog?.kind === "base"
+            ? "Choose dough base"
+            : "Choose pasta shape"
+        }
         description={
-          modifierDialog?.kind === "pizza"
+          modifierDialog?.kind === "pizza" || modifierDialog?.kind === "base"
             ? "Thick or thin dough base."
             : `Select the pasta type for ${modifierDialog?.item?.name ?? ""}.`
         }
@@ -147,7 +156,9 @@ function MenuItemPage() {
         onSelect={(mod) => {
           const d = modifierDialog!;
           const label =
-            d.kind === "pizza" ? `${d.item.name} (${mod.name})` : `${mod.name} ${d.item.name}`;
+            d.kind === "pizza" || d.kind === "base"
+              ? `${d.item.name} (${mod.name})`
+              : `${mod.name} ${d.item.name}`;
           add(
             {
               id: d.item.id,

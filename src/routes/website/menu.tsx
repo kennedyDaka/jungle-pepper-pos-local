@@ -73,13 +73,16 @@ function MenuPage() {
   const byCat = (catId: string) => items.filter((i) => i.category_id === catId);
 
   const handleAdd = (item: any) => {
-    if (item.kind === "pizza" || item.kind === "pasta") {
-      const mods = filterMods(
-        item,
-        (allModifiers ?? []).filter((m: any) => m.menu_item_id === item.id),
-      );
-      if (mods.length > 0) {
-        setModifierDialog({ item, modifiers: mods, kind: item.kind });
+    const itemMods = (allModifiers ?? []).filter((m: any) => m.menu_item_id === item.id);
+    const crustMods = itemMods.filter((m: any) => /^(thin|thick)\s*crust$/i.test(m.name));
+    if (item.kind === "pizza" || crustMods.length > 0) {
+      setModifierDialog({ item, modifiers: crustMods.length > 0 ? crustMods : itemMods, kind: "base" });
+      return;
+    }
+    if (item.kind === "pasta") {
+      const shapeMods = filterMods(item, itemMods);
+      if (shapeMods.length > 0) {
+        setModifierDialog({ item, modifiers: shapeMods, kind: item.kind });
         return;
       }
     }
@@ -145,9 +148,13 @@ function MenuPage() {
 
       <BaseModifierDialog
         open={modifierDialog !== null}
-        title={modifierDialog?.kind === "pizza" ? "Choose pizza base" : "Choose pasta shape"}
+        title={
+          modifierDialog?.kind === "pizza" || modifierDialog?.kind === "base"
+            ? "Choose dough base"
+            : "Choose pasta shape"
+        }
         description={
-          modifierDialog?.kind === "pizza"
+          modifierDialog?.kind === "pizza" || modifierDialog?.kind === "base"
             ? "Thick or thin dough base."
             : `Select the pasta type for ${modifierDialog?.item?.name ?? ""}.`
         }
@@ -161,7 +168,9 @@ function MenuPage() {
         onSelect={(mod) => {
           const d = modifierDialog!;
           const label =
-            d.kind === "pizza" ? `${d.item.name} (${mod.name})` : `${mod.name} ${d.item.name}`;
+            d.kind === "pizza" || d.kind === "base"
+              ? `${d.item.name} (${mod.name})`
+              : `${mod.name} ${d.item.name}`;
           add(
             {
               id: d.item.id,

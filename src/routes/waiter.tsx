@@ -304,7 +304,7 @@ function OrderPage({ branchId, branchName }: { branchId: string; branchName: str
 
   const addItem = (item: { name: string; dbName: string; price: number; kind?: string }) => {
     const resolvedPrice = livePrice(item.dbName) ?? item.price;
-    if (item.kind === "pizza") {
+    if (item.kind === "pizza" || item.dbName.startsWith("Focaccia")) {
       const dbItem = itemsByName[item.dbName.toLowerCase()];
       setCrustDialog({
         itemKey: crypto.randomUUID(),
@@ -1002,7 +1002,7 @@ function CrustDialog({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Choose pizza base</DialogTitle>
+          <DialogTitle>Choose dough base</DialogTitle>
           <DialogDescription>Thick or thin dough base.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-4">
