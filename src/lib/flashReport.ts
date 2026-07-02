@@ -61,6 +61,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
   [
     "CHICKEN",
     [
+      { label: "CHICKEN FRANGO FULL 1.2KG", aliases: ["FRANGO FULL (1.2KG)"] },
       { label: "FRANGO HALF (600g)", aliases: ["FRANGO HALF (600G)"] },
       { label: "FILLET TRAYS (400/500g)", aliases: ["FILLET TRAYS (500G)"] },
       { label: "CHICK PIZZA PKTS (80g)", aliases: ["PIZZA PKTS (80G)"] },
