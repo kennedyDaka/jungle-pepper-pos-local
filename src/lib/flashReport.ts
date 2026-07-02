@@ -459,6 +459,7 @@ function resolveAndSummarize(
   ledgerMovements: MatrixMovement[],
   menuAliases: string[] | undefined,
   isMenu: boolean | undefined,
+  firstSaleTs?: string | null,
 ): {
   stores: { item?: MatrixItem; opening: number; purchases: number; usage: number; closing: number };
   kitchen: {
@@ -489,8 +490,12 @@ function resolveAndSummarize(
     const item = resolveItem(locItems, locExact, label, aliases);
     if (!item) return { item: undefined, opening: 0, purchases: 0, usage: 0, closing: 0 };
 
+    const beforeFirstSale = (mov: MatrixMovement) =>
+      firstSaleTs && mov.created_at && mov.created_at < firstSaleTs;
+
     const periodMovements = movements.filter((mov) => {
       if (!mov.item_id) return false;
+      if (beforeFirstSale(mov)) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
       if (mov.type === "transfer") return false;
@@ -504,6 +509,7 @@ function resolveAndSummarize(
 
     const ledger = ledgerMovements.filter((mov) => {
       if (!mov.item_id) return false;
+      if (beforeFirstSale(mov)) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
       if (mov.type === "transfer") return false;
@@ -536,6 +542,12 @@ function resolveAndSummarize(
 }
 
 function flashStockRows(input: FlashReportInput): FlashStockRow[] {
+  const firstSaleTs = input.movements
+    .filter((m) => m.type === "sale" && (m.qty ?? 0) < 0)
+    .reduce<
+      string | null
+    >((earliest, m) => (!earliest || m.created_at < earliest ? m.created_at : earliest), null);
+
   const rows: FlashStockRow[] = [];
 
   STOCK_SECTIONS.forEach(([sectionName, stockItems]) => {
@@ -549,6 +561,7 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         input.ledgerMovements,
         menuAliases,
         isMenu,
+        firstSaleTs,
       );
 
       const s = result.stores;
