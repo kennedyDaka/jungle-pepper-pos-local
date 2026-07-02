@@ -3,23 +3,20 @@
 -- per the business rules, creates kitchen duplicates for items that
 -- exist in both locations, and updates recipes to point to kitchen items.
 
--- 1. Add 'transfer' to stock_movement_type for inter-location transfers
-alter type public.stock_movement_type add value if not exists 'transfer';
-
--- 2. Add location column to items
+-- 1. Add location column to items
 alter table public.items add column if not exists location text not null default 'stores'
   check (location in ('kitchen', 'stores'));
 
--- 3. Replace unique index to include location
+-- 2. Replace unique index to include location
 drop index if exists items_branch_name_unique_ci;
 create unique index items_branch_loc_name_unique_ci
   on public.items (coalesce(branch_id, '00000000-0000-0000-0000-000000000000'::uuid), location, lower(name))
   where active;
 
--- 4. Add location column to stock_movements
+-- 3. Add location column to stock_movements
 alter table public.stock_movements add column if not exists location text;
 
--- 5. Update apply_stock_movement_internal to record location from the item
+-- 4. Update apply_stock_movement_internal to record location from the item
 create or replace function app_private.apply_stock_movement_internal(
   _actor_id uuid,
   _item_id uuid,
@@ -136,7 +133,7 @@ $$;
 revoke all on function app_private.apply_stock_movement_internal(uuid, uuid, public.stock_movement_type, numeric, numeric, text, uuid, text, uuid) from public, anon;
 grant execute on function app_private.apply_stock_movement_internal(uuid, uuid, public.stock_movement_type, numeric, numeric, text, uuid, text, uuid) to authenticated, service_role;
 
--- 6. Update public wrapper (signature unchanged, location flows through automatically)
+-- 5. Update public wrapper (signature unchanged, location flows through automatically)
 create or replace function public.apply_stock_movement(
   _item_id uuid,
   _type public.stock_movement_type,
@@ -168,7 +165,7 @@ $$;
 revoke execute on function public.apply_stock_movement(uuid, public.stock_movement_type, numeric, numeric, text, uuid, text, uuid) from public, anon;
 grant execute on function public.apply_stock_movement(uuid, public.stock_movement_type, numeric, numeric, text, uuid, text, uuid) to authenticated;
 
--- 7. Assign locations to kitchen-only items (pre-portioned consumables)
+-- 6. Assign locations to kitchen-only items (pre-portioned consumables)
 update public.items set location = 'kitchen' where name in (
   'PIZZA PKTS (80G)',
   'BURGER (120G)',
@@ -182,7 +179,7 @@ update public.items set location = 'kitchen' where name in (
   'RICE COOKER'
 );
 
--- 8. Create kitchen duplicates for items that exist in both locations.
+-- 7. Create kitchen duplicates for items that exist in both locations.
 --    For each: INSERT a copy with location='kitchen', capture its new UUID,
 --    then transfer ALL current stock from stores to kitchen via a pair of
 --    transfer movements (issue_out on stores, purchase_in on kitchen).
@@ -271,14 +268,14 @@ begin
 end;
 $$;
 
--- 9. Backfill location on existing stock_movements from their item
+-- 8. Backfill location on existing stock_movements from their item
 update public.stock_movements sm
 set location = i.location
 from public.items i
 where sm.item_id = i.id
   and sm.location is null;
 
--- 10. Update stock_movement_details view to include location
+-- 9. Update stock_movement_details view to include location
 create or replace view public.stock_movement_details
 with (security_invoker = true)
 as
