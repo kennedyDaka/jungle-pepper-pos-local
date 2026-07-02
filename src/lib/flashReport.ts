@@ -482,46 +482,32 @@ function resolveAndSummarize(
     const item = resolveItem(locItems, locExact, label, aliases);
     if (!item) return { item: undefined, opening: 0, purchases: 0, usage: 0, closing: 0 };
 
-    let opening = 0;
-    let purchases = 0;
-    let usage = 0;
-    let closing = 0;
+    const periodMovements = movements.filter(mov => {
+      if (!mov.item_id) return false;
+      const matches = mov.item_id === item.id;
+      if (!matches) return false;
+      const movementItem = mov.items?.name === item.name;
+      if (!movementItem) return matches;
 
-    if (menuAliases !== undefined) {
-      const summary = summarizeStock(item, movements, ledgerMovements);
-      opening = summary.opening;
-      purchases = summary.purchase;
-      closing = summary.closing;
-      const allCandidates = [label, ...aliases, ...menuAliases].filter(Boolean);
-      for (const candidate of allCandidates) {
-        const qty = countMenuSales(candidate, sales);
-        if (qty > 0) { usage = qty; break; }
-      }
-      if (usage === 0) {
-        const summary2 = summarizeStock(item, movements, ledgerMovements);
-        usage = summary2.usage;
-        if (isMeasuredBeverage(item)) usage = wholeServingQty(servingQty(usage, item) ?? 0);
-      }
-      if (isMeasuredBeverage(item)) {
-        opening = wholeServingQty(servingQty(opening, item) ?? 0);
-        purchases = wholeServingQty(servingQty(purchases, item) ?? 0);
-        closing = wholeServingQty(servingQty(closing, item) ?? 0);
-      }
-    } else {
-      const summary = summarizeStock(item, movements, ledgerMovements);
-      opening = summary.opening;
-      purchases = summary.purchase;
-      usage = summary.usage;
-      closing = summary.closing;
-      if (isMeasuredBeverage(item)) {
-        opening = wholeServingQty(servingQty(opening, item) ?? 0);
-        purchases = wholeServingQty(servingQty(purchases, item) ?? 0);
-        usage = wholeServingQty(servingQty(usage, item) ?? 0);
-        closing = wholeServingQty(servingQty(closing, item) ?? 0);
-      }
-    }
+      const matchLocation = (mov.location || mov.items?.location) === location;
+      if (!matchLocation) return false;
+      return true;
+    });
 
-    return { item, opening, purchases, usage, closing };
+    const ledger = ledgerMovements.filter(mov => {
+      if (!mov.item_id) return false;
+      const matches = mov.item_id === item.id;
+      if (!matches) return false;
+      const movementItem = mov.items?.name === item.name;
+      if (!movementItem) return matches;
+
+      const matchLocation = (mov.location || mov.items?.location) === location;
+      if (!matchLocation) return false;
+      return true;
+    });
+
+    const summary = summarizeStock(item, periodMovements, ledger);
+    return { item, opening: summary.opening, purchases: summary.purchase, usage: summary.usage, closing: summary.closing };
   };
 
   const stores = locSummary('stores');

@@ -32,11 +32,13 @@ export type MatrixMovement = {
   expense_ref?: string | null;
   expense_category?: string | null;
   supplier_name?: string | null;
+  location?: string | null;
   items?: {
     name?: string | null;
     bottle_ml?: number | string | null;
     shot_ml?: number | string | null;
     units?: { code?: string | null } | null;
+    location?: string | null;
   } | null;
 };
 
@@ -443,35 +445,21 @@ export function summarizeStock(
     };
   }
 
-  const period = periodMovements
-    .filter((movement) => movement.item_id === item.id)
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  const ledger = ledgerMovements.filter((movement) => movement.item_id === item.id);
-  const periodNet = period.reduce((sum, movement) => sum + numeric(movement.qty), 0);
-  const ledgerNet = ledger.reduce((sum, movement) => sum + numeric(movement.qty), 0);
+  const periodNet = periodMovements.reduce((sum, movement) => sum + numeric(movement.qty), 0);
+  const ledgerNet = ledgerMovements.reduce((sum, movement) => sum + numeric(movement.qty), 0);
   const currentClosing = numeric(item.qty_on_hand);
-  let opening = currentClosing - ledgerNet;
-  const purchase = period.reduce(
+  const opening = currentClosing - ledgerNet;
+  const purchase = periodMovements.reduce(
     (sum, movement) => sum + (numeric(movement.qty) > 0 ? numeric(movement.qty) : 0),
     0,
   );
   const usage = Math.abs(
-    period.reduce(
+    periodMovements.reduce(
       (sum, movement) => sum + (numeric(movement.qty) < 0 ? numeric(movement.qty) : 0),
       0,
     ),
   );
-  let closing = opening + periodNet;
-
-  const firstBefore = period.find(
-    (movement) => movement.qty_before !== null && movement.qty_before !== undefined,
-  )?.qty_before;
-  const lastAfter = [...period]
-    .reverse()
-    .find((movement) => movement.qty_after !== null && movement.qty_after !== undefined)?.qty_after;
-
-  if (firstBefore !== null && firstBefore !== undefined) opening = numeric(firstBefore);
-  if (lastAfter !== null && lastAfter !== undefined) closing = numeric(lastAfter);
+  const closing = opening + periodNet;
 
   const expected = opening + purchase - usage;
   const missing = expected - closing;
@@ -484,7 +472,7 @@ export function summarizeStock(
     expected,
     closing,
     missing,
-    details: stockDetails(period.filter((movement) => numeric(movement.qty) < 0)),
+    details: "",
   };
 }
 
@@ -535,7 +523,35 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
     }
 
     const item = resolveItem(input.items, exact, row.label, row.aliases);
-    const summary = summarizeStock(item, input.movements, input.ledgerMovements);
+    if (!item) return [];
+
+    const periodMovements = input.movements.filter(mov => {
+      if (!mov.item_id) return false;
+      const matches = mov.item_id === item.id;
+      if (!matches) return false;
+      
+      const movementItem = mov.items?.name === item.name;
+      if (!movementItem) return matches;
+
+      const matchLocation = (mov.location || mov.items?.location) === item.location;
+      if (!matchLocation) return false;
+      return true;
+    });
+
+    const ledger = input.ledgerMovements.filter(mov => {
+      if (!mov.item_id) return false;
+      const matches = mov.item_id === item.id;
+      if (!matches) return false;
+      
+      const movementItem = mov.items?.name === item.name;
+      if (!movementItem) return matches;
+
+      const matchLocation = (mov.location || mov.items?.location) === item.location;
+      if (!matchLocation) return false;
+      return true;
+    });
+
+    const summary = summarizeStock(item, periodMovements, ledger);
     return [
       {
         Sheet: "OPEN-CLOSE FOOD",
