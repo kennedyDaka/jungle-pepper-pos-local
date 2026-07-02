@@ -15,6 +15,7 @@ type ItemRowWithRelations = Database["public"]["Tables"]["items"]["Row"] & {
   categories?: Pick<Category, "name"> | null;
   units?: Pick<Unit, "code" | "name"> | null;
   suppliers?: { name: string } | null;
+  location: string | null;
 };
 
 type MovementRowWithRelations = Database["public"]["Views"]["stock_movement_details"]["Row"];
@@ -190,7 +191,7 @@ export const inventoryService = {
     unitCost: number;
     note?: string;
   }) {
-    const { data, error } = await supabase.rpc("apply_stock_movement", {
+    const { data, error } = await (supabase as any).rpc("apply_stock_movement", {
       _item_id: input.itemId,
       _type: input.type,
       _qty: input.qty,
