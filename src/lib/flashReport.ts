@@ -537,7 +537,7 @@ function resolveAndSummarize(
   return {
     stores,
     kitchen,
-    soldAsItemId: stores.item?.id || kitchen.item?.id,
+    soldAsItemId: kitchen.item?.id || stores.item?.id,
   };
 }
 
