@@ -532,6 +532,7 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
+      if (mov.type === "transfer") return false;
 
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
@@ -545,6 +546,7 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
+      if (mov.type === "transfer") return false;
 
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;

@@ -351,22 +351,22 @@ const SHORT_ITEM_NAMES: Record<string, string> = {
   "FETTUCINE CREAMY TOMATO PRAWN": "FETT PRAWN",
 
   // Pizzas
-  "KATUNDU PIZZA": "KAT",
-  "MEXICANO PIZZA": "MEX",
-  "PORTUGUESE CHICKEN PIZZA": "CHICKEN",
-  "CHICKEN MUSHROOM PIZZA": "PORT MUSHROOM",
-  "SWEET SOUR SAFARI PIZZA": "SAFARI",
-  "MAFFIOSA PIZZA": "MAFF",
-  "PRAWN PIZZA": "FISH PRAWN",
-  "ANCHOVY PIZZA": "ANCHO",
-  "VEGETARIAN PIZZA": "VEG",
-  "VEGAN PIZZA": "VEGAN",
-  "MARGARITA PIZZA": "MARG",
-  "PICCANTI PIZZA": "PICC",
-  "JALAPENO PIZZA": "JALAPI",
-  "HUMMUS PIZZA": "HUMMUS",
-  "GODFATHER PIZZA": "GOD",
-  "MEDITERRANEAN PIZZA": "F. MED",
+  "KATUNDU PIZZA": "PIZZA",
+  "MEXICANO PIZZA": "PIZZA",
+  "PORTUGUESE CHICKEN PIZZA": "PIZZA",
+  "CHICKEN MUSHROOM PIZZA": "PIZZA",
+  "SWEET SOUR SAFARI PIZZA": "PIZZA",
+  "MAFFIOSA PIZZA": "PIZZA",
+  "PRAWN PIZZA": "PIZZA",
+  "ANCHOVY PIZZA": "PIZZA",
+  "VEGETARIAN PIZZA": "PIZZA",
+  "VEGAN PIZZA": "PIZZA",
+  "MARGARITA PIZZA": "PIZZA",
+  "PICCANTI PIZZA": "PIZZA",
+  "JALAPENO PIZZA": "PIZZA",
+  "HUMMUS PIZZA": "PIZZA",
+  "GODFATHER PIZZA": "PIZZA",
+  "MEDITERRANEAN PIZZA": "PIZZA",
 
   // Burgers
   "JUNGLE PEPPER BURGER": "J. BURGER",
@@ -493,6 +493,7 @@ function resolveAndSummarize(
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
+      if (mov.type === "transfer") return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
@@ -505,6 +506,7 @@ function resolveAndSummarize(
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
+      if (mov.type === "transfer") return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
