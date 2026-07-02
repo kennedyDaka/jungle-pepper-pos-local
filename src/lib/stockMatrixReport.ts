@@ -449,13 +449,16 @@ export function summarizeStock(
   const ledgerNet = ledgerMovements.reduce((sum, movement) => sum + numeric(movement.qty), 0);
   const currentClosing = numeric(item.qty_on_hand);
   const opening = currentClosing - ledgerNet;
+  const isTransfer = (m: MatrixMovement) => m.type === "transfer";
   const purchase = periodMovements.reduce(
-    (sum, movement) => sum + (numeric(movement.qty) > 0 ? numeric(movement.qty) : 0),
+    (sum, movement) =>
+      sum + (numeric(movement.qty) > 0 && !isTransfer(movement) ? numeric(movement.qty) : 0),
     0,
   );
   const usage = Math.abs(
     periodMovements.reduce(
-      (sum, movement) => sum + (numeric(movement.qty) < 0 ? numeric(movement.qty) : 0),
+      (sum, movement) =>
+        sum + (numeric(movement.qty) < 0 && !isTransfer(movement) ? numeric(movement.qty) : 0),
       0,
     ),
   );

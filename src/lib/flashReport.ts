@@ -416,6 +416,7 @@ function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
   for (const movement of movements) {
     if (movement.item_id !== itemId) continue;
     if ((movement.qty ?? 0) >= 0) continue;
+    if (movement.type === "transfer") continue;
     const names = (movement.menu_item_names ?? movement.destination ?? "")
       .split(",")
       .map((s) => s.trim())
