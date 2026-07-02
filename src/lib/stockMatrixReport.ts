@@ -525,29 +525,29 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
     const item = resolveItem(input.items, exact, row.label, row.aliases);
     if (!item) return [];
 
-    const periodMovements = input.movements.filter(mov => {
+    const periodMovements = input.movements.filter((mov) => {
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
-      
+
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
-      const matchLocation = (mov.location || mov.items?.location) === item.location;
-      if (!matchLocation) return false;
+      const movLocation = mov.location || mov.items?.location;
+      if (movLocation && movLocation !== item.location) return false;
       return true;
     });
 
-    const ledger = input.ledgerMovements.filter(mov => {
+    const ledger = input.ledgerMovements.filter((mov) => {
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
-      
+
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
-      const matchLocation = (mov.location || mov.items?.location) === item.location;
-      if (!matchLocation) return false;
+      const movLocation = mov.location || mov.items?.location;
+      if (movLocation && movLocation !== item.location) return false;
       return true;
     });
 

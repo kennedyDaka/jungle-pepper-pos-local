@@ -460,7 +460,13 @@ function resolveAndSummarize(
   isMenu: boolean | undefined,
 ): {
   stores: { item?: MatrixItem; opening: number; purchases: number; usage: number; closing: number };
-  kitchen: { item?: MatrixItem; opening: number; purchases: number; usage: number; closing: number };
+  kitchen: {
+    item?: MatrixItem;
+    opening: number;
+    purchases: number;
+    usage: number;
+    closing: number;
+  };
   soldAsItemId?: string;
 } {
   const defaultRow = { item: undefined, opening: 0, purchases: 0, usage: 0, closing: 0 };
@@ -476,42 +482,48 @@ function resolveAndSummarize(
   // Helper to compute a single location's summary
   const locSummary = (location: string) => {
     const locItems = items.filter(
-      (i) => i.location === location || (!i.location && location === 'stores')
+      (i) => i.location === location || (!i.location && location === "stores"),
     );
     const locExact = itemIndex(locItems);
     const item = resolveItem(locItems, locExact, label, aliases);
     if (!item) return { item: undefined, opening: 0, purchases: 0, usage: 0, closing: 0 };
 
-    const periodMovements = movements.filter(mov => {
+    const periodMovements = movements.filter((mov) => {
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
-      const matchLocation = (mov.location || mov.items?.location) === location;
-      if (!matchLocation) return false;
+      const movLocation = mov.location || mov.items?.location;
+      if (movLocation && movLocation !== location) return false;
       return true;
     });
 
-    const ledger = ledgerMovements.filter(mov => {
+    const ledger = ledgerMovements.filter((mov) => {
       if (!mov.item_id) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
-      const matchLocation = (mov.location || mov.items?.location) === location;
-      if (!matchLocation) return false;
+      const movLocation = mov.location || mov.items?.location;
+      if (movLocation && movLocation !== location) return false;
       return true;
     });
 
     const summary = summarizeStock(item, periodMovements, ledger);
-    return { item, opening: summary.opening, purchases: summary.purchase, usage: summary.usage, closing: summary.closing };
+    return {
+      item,
+      opening: summary.opening,
+      purchases: summary.purchase,
+      usage: summary.usage,
+      closing: summary.closing,
+    };
   };
 
-  const stores = locSummary('stores');
-  const kitchen = locSummary('kitchen');
+  const stores = locSummary("stores");
+  const kitchen = locSummary("kitchen");
 
   return {
     stores,
@@ -526,8 +538,14 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
   STOCK_SECTIONS.forEach(([sectionName, stockItems]) => {
     stockItems.forEach(({ label, aliases, isMenu, menuAliases }) => {
       const result = resolveAndSummarize(
-        input.items, label, aliases, input.sales,
-        input.movements, input.ledgerMovements, menuAliases, isMenu,
+        input.items,
+        label,
+        aliases,
+        input.sales,
+        input.movements,
+        input.ledgerMovements,
+        menuAliases,
+        isMenu,
       );
 
       const s = result.stores;
