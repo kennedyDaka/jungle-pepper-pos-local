@@ -293,7 +293,6 @@ select
   sm.ref_id,
   sm.created_by,
   sm.created_at,
-  sm.location,
   b.name as branch_name,
   p.username as user_username,
   p.full_name as user_full_name,
@@ -374,7 +373,8 @@ select
     else coalesce(nullif(sm.note, ''), sm.ref_type, sm.type::text)
   end as destination,
   order_item_ctx.modifier_names,
-  order_item_ctx.order_item_qty
+  order_item_ctx.order_item_qty,
+  sm.location
 from public.stock_movements sm
 join public.items i on i.id = sm.item_id
 left join public.units u on u.id = i.unit_id
