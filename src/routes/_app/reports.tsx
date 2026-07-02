@@ -1604,7 +1604,7 @@ function ReportsPage() {
             <thead>
               <tr className="text-left text-xs uppercase text-muted-foreground">
                 {Object.keys(currentRows[0] ?? { Message: "No records" })
-                  .slice(0, 10)
+                  .slice(0, 15)
                   .map((column) => (
                     <th key={column} className="p-1">
                       {column}
@@ -1623,7 +1623,7 @@ function ReportsPage() {
                   return (
                     <tr key={rowIndex} className="border-t border-border">
                       {Object.keys(currentRows[0] ?? reportRow)
-                        .slice(0, 10)
+                        .slice(0, 15)
                         .map((column) => (
                           <td key={column} className="p-1.5">
                             {typeof reportRow[column] === "number"

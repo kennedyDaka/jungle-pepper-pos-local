@@ -437,12 +437,6 @@ function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
 type FlashStockRow = {
   section: string;
   label: string;
-  opening: number;
-  purchases: number;
-  usage: number;
-  expected: number;
-  closing: number;
-  variance: number;
   soldAs: string;
   isMenu?: boolean;
   kitchenOpening: number;
@@ -552,22 +546,10 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
 
       const s = result.stores;
       const k = result.kitchen;
-      const totalOpening = s.opening + k.opening;
-      const totalPurchases = s.purchases + k.purchases;
-      const totalUsage = s.usage + k.usage;
-      const totalExpected = totalOpening + totalPurchases - totalUsage;
-      const totalClosing = s.closing + k.closing;
-      const totalVariance = totalClosing - totalExpected;
 
       rows.push({
         section: sectionName,
         label,
-        opening: totalOpening,
-        purchases: totalPurchases,
-        usage: totalUsage,
-        expected: totalExpected,
-        closing: totalClosing,
-        variance: totalVariance,
         soldAs: result.soldAsItemId ? buildSoldAs(result.soldAsItemId, input.movements) : "",
         isMenu,
         kitchenOpening: k.opening,
@@ -599,27 +581,18 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
   });
 
   flashStockRows(input).forEach((row) => {
-    const hasKitchen = row.kitchenOpening !== 0 || row.kitchenPurchases !== 0 || row.kitchenUsage !== 0 || row.kitchenClosing !== 0;
     rows.push({
       Section: row.section,
       Item: row.label,
-      opening: stockCell(row.opening),
-      purchases: stockCell(row.purchases),
-      sales: stockCell(row.usage),
-      closing: row.isMenu ? null : stockCell(row.expected),
-      actual: row.isMenu ? null : stockCell(row.closing),
-      difference: row.isMenu ? null : stockCell(row.variance),
+      "K Open": stockCell(row.kitchenOpening),
+      "K Pur": stockCell(row.kitchenPurchases),
+      "K Sale": stockCell(row.kitchenUsage),
+      "K Close": stockCell(row.kitchenClosing),
+      "S Open": stockCell(row.storesOpening),
+      "S Pur": stockCell(row.storesPurchases),
+      "S Sale": stockCell(row.storesUsage),
+      "S Close": stockCell(row.storesClosing),
       "sold as": row.soldAs,
-      ...(hasKitchen ? {
-        "K Opening": stockCell(row.kitchenOpening),
-        "K Purchases": stockCell(row.kitchenPurchases),
-        "K Usage": stockCell(row.kitchenUsage),
-        "K Closing": stockCell(row.kitchenClosing),
-        "S Opening": stockCell(row.storesOpening),
-        "S Purchases": stockCell(row.storesPurchases),
-        "S Usage": stockCell(row.storesUsage),
-        "S Closing": stockCell(row.storesClosing),
-      } : {}),
     });
   });
 
@@ -765,21 +738,15 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   const ws = wb.addWorksheet("Flash Report");
 
   ws.getColumn(1).width = 36;
-  ws.getColumn(2).width = 14;
-  ws.getColumn(3).width = 14;
-  ws.getColumn(4).width = 14;
-  ws.getColumn(5).width = 14;
-  ws.getColumn(6).width = 14;
-  ws.getColumn(7).width = 14;
-  ws.getColumn(8).width = 48;
-  ws.getColumn(9).width = 12;
-  ws.getColumn(10).width = 12;
-  ws.getColumn(11).width = 12;
-  ws.getColumn(12).width = 12;
-  ws.getColumn(13).width = 12;
-  ws.getColumn(14).width = 12;
-  ws.getColumn(15).width = 12;
-  ws.getColumn(16).width = 12;
+  ws.getColumn(2).width = 10;
+  ws.getColumn(3).width = 10;
+  ws.getColumn(4).width = 10;
+  ws.getColumn(5).width = 10;
+  ws.getColumn(6).width = 10;
+  ws.getColumn(7).width = 10;
+  ws.getColumn(8).width = 10;
+  ws.getColumn(9).width = 10;
+  ws.getColumn(10).width = 48;
 
   const titleRow = ws.addRow(["JUNGLE PEPPER - FLASH REPORT"]);
   titleRow.getCell(1).font = TITLE_FONT;
@@ -850,13 +817,6 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
 
   const stockHeader = ws.addRow([
     "Key Item",
-    "opening",
-    "purchases",
-    "sales",
-    "closing",
-    "actual",
-    "difference",
-    "sold as",
     "K Open",
     "K Pur",
     "K Sale",
@@ -865,6 +825,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     "S Pur",
     "S Sale",
     "S Close",
+    "sold as",
   ]);
   stockHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = HEADER_FILL;
@@ -883,36 +844,27 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       sectionRow.height = 20;
     }
 
-    const hasKitchen = stockRow.kitchenOpening !== 0 || stockRow.kitchenPurchases !== 0 || stockRow.kitchenUsage !== 0 || stockRow.kitchenClosing !== 0;
     const r = ws.addRow([
       stockRow.label,
-      stockCell(stockRow.opening),
-      stockCell(stockRow.purchases),
-      stockCell(stockRow.usage),
-      stockRow.isMenu ? null : stockCell(stockRow.expected),
-      stockRow.isMenu ? null : stockCell(stockRow.closing),
-      stockRow.isMenu ? null : stockCell(stockRow.variance),
+      stockCell(stockRow.kitchenOpening),
+      stockCell(stockRow.kitchenPurchases),
+      stockCell(stockRow.kitchenUsage),
+      stockCell(stockRow.kitchenClosing),
+      stockCell(stockRow.storesOpening),
+      stockCell(stockRow.storesPurchases),
+      stockCell(stockRow.storesUsage),
+      stockCell(stockRow.storesClosing),
       stockRow.soldAs || null,
-      ...(hasKitchen ? [
-        stockCell(stockRow.kitchenOpening),
-        stockCell(stockRow.kitchenPurchases),
-        stockCell(stockRow.kitchenUsage),
-        stockCell(stockRow.kitchenClosing),
-        stockCell(stockRow.storesOpening),
-        stockCell(stockRow.storesPurchases),
-        stockCell(stockRow.storesUsage),
-        stockCell(stockRow.storesClosing),
-      ] : []),
     ]);
 
-    for (let c = 1; c <= (hasKitchen ? 16 : 8); c++) {
+    for (let c = 1; c <= 10; c++) {
       r.getCell(c).border = BORDER_THIN;
     }
 
     const FMT_INT = "#,##0";
     const FMT_DEC = "#,##0.###";
 
-    const numCols = hasKitchen ? [2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16] : [2, 3, 4, 5, 6, 7];
+    const numCols = [2, 3, 4, 5, 6, 7, 8, 9];
     numCols.forEach((c) => {
       const val = r.getCell(c).value;
       r.getCell(c).numFmt = typeof val === "number" && val % 1 !== 0 ? FMT_DEC : FMT_INT;
