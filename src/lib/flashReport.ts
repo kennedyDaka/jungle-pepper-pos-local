@@ -115,12 +115,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
       { label: "SUGAR (Kg)", aliases: ["SUGAR"] },
     ],
   ],
-  [
-    "OILS / SAUCES",
-    [
-      { label: "COOKING OIL BULK (L)", aliases: ["COOKING OIL BULK"] },
-    ],
-  ],
+  ["OILS / SAUCES", [{ label: "COOKING OIL BULK (L)", aliases: ["COOKING OIL BULK"] }]],
   [
     "VEGETABLES",
     [
@@ -138,12 +133,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
       { label: "FOIL BOX", aliases: ["FOIL", "FOIL CUPS"] },
     ],
   ],
-  [
-    "CHARCOAL / FIREWOOD",
-    [
-      { label: "CHARCOAL (Kg)", aliases: ["CHARCOAL"] },
-    ],
-  ],
+  ["CHARCOAL / FIREWOOD", [{ label: "CHARCOAL (Kg)", aliases: ["CHARCOAL"] }]],
   [
     "HOT DRINKS",
     [
@@ -368,7 +358,7 @@ const SHORT_ITEM_NAMES: Record<string, string> = {
   "SODA WATER": "SODA",
   "SOBO ORANGE": "S. ORANGE",
   "BOX JUICES": "BOX J",
-  "COCOPINA": "COCO",
+  COCOPINA: "COCO",
 
   // Mocktails
   CHAPMAN: "CHAP",
@@ -433,12 +423,31 @@ function soldAsLabel(name: string, _movement: MatrixMovement) {
   return SHORT_ITEM_NAMES[key] ?? name;
 }
 
+function shortItemName(movement: MatrixMovement): string {
+  const raw = movement.items?.name;
+  if (!raw) return "";
+  const key = normalizeName(raw);
+  return SHORT_ITEM_NAMES[key] ?? raw;
+}
+
 function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
   const agg = new Map<string, number>();
   for (const movement of movements) {
     if (movement.item_id !== itemId) continue;
     if ((movement.qty ?? 0) >= 0) continue;
-    if (movement.type === "transfer") continue;
+
+    if (!movement.type) continue;
+    if (movement.type === "transfer") {
+      const name = shortItemName(movement) || "TRANSFER";
+      agg.set(`${name} (TRANSFER)`, (agg.get(`${name} (TRANSFER)`) ?? 0) + Math.abs(movement.qty));
+      continue;
+    }
+    if (movement.type !== "sale") {
+      const name = shortItemName(movement) || movement.type.toUpperCase();
+      agg.set(`${name} (${movement.type.toUpperCase()})`, (agg.get(`${name} (${movement.type.toUpperCase()})`) ?? 0) + Math.abs(movement.qty));
+      continue;
+    }
+
     const names = (movement.menu_item_names ?? movement.destination ?? "")
       .split(",")
       .map((s) => s.trim())
@@ -446,7 +455,7 @@ function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
     for (const rawName of names) {
       const parsed = parseDishQty(rawName, Number(movement.order_item_qty ?? 1) || 1);
       if (!parsed.name) continue;
-      const label = soldAsLabel(parsed.name, movement);
+      const label = soldAsLabel(parsed.name, movement) + " (POS)";
       agg.set(label, (agg.get(label) ?? 0) + parsed.qty);
     }
   }
@@ -520,7 +529,6 @@ function resolveAndSummarize(
       if (beforeFirstSale(mov)) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
-      if (mov.type === "transfer") return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
@@ -534,7 +542,6 @@ function resolveAndSummarize(
       if (beforeFirstSale(mov)) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
-      if (mov.type === "transfer") return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
 
