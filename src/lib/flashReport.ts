@@ -420,7 +420,7 @@ const SHORT_ITEM_NAMES: Record<string, string> = {
 
 function soldAsLabel(name: string, _movement: MatrixMovement) {
   const key = normalizeName(name);
-  return SHORT_ITEM_NAMES[key] ?? name;
+  return SHORT_ITEM_NAMES[key] ?? (key.includes("PIZZA") ? "PIZZA" : name);
 }
 
 function shortItemName(movement: MatrixMovement): string {
