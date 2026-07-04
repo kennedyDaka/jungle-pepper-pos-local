@@ -500,15 +500,6 @@ function previewValue(value: string | number) {
 }
 
 function foodRows(input: StockMatrixInput): ReportRow[] {
-  const firstSaleTs = input.movements
-    .filter((m) => m.type === "sale" && (m.qty ?? 0) < 0)
-    .reduce<
-      string | null
-    >((earliest, m) => (!earliest || m.created_at < earliest ? m.created_at : earliest), null);
-
-  const beforeFirstSale = (mov: MatrixMovement) =>
-    firstSaleTs && mov.created_at && mov.created_at < firstSaleTs;
-
   const exact = itemIndex(input.items);
   return FOOD_ROWS.flatMap((row): ReportRow[] => {
     if (row.kind === "section") {
@@ -536,7 +527,6 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
 
     const periodMovements = input.movements.filter((mov) => {
       if (!mov.item_id) return false;
-      if (beforeFirstSale(mov)) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
 
@@ -550,7 +540,6 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
 
     const ledger = input.ledgerMovements.filter((mov) => {
       if (!mov.item_id) return false;
-      if (beforeFirstSale(mov)) return false;
       const matches = mov.item_id === item.id;
       if (!matches) return false;
 
