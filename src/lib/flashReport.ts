@@ -359,11 +359,11 @@ const SHORT_ITEM_NAMES: Record<string, string> = {
   "SOBO ORANGE": "S. ORANGE",
   "BOX JUICES": "BOX J",
   COCOPINA: "COCO",
-
-  // Mocktails
   CHAPMAN: "CHAP",
   ROCKSHANDY: "ROCKY",
-  "LIME CORDIAL": "LIME",
+  "SWISS LEMONADE": "SWISS LEM",
+  LEMONADE: "LEMON",
+  "JUICE FRESH": "J FRESH",
 
   // Wine
   "RED DRY DROSTDY": "R. DRY D",

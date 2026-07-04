@@ -303,6 +303,11 @@ export const EXTRA_MENU: ExtraCategory[] = [
       E("sd-tonic", "Tonic", "TONIC", 3000, "Soft Drinks"),
       E("sd-soda", "Soda Water", "SODA WATER", 3000, "Soft Drinks"),
       E("sd-sobo-or", "Sobo Orange", "SOBO ORANGE", 3000, "Soft Drinks"),
+      E("sd-chapman", "Chapman", "CHAPMAN", 12000, "Soft Drinks"),
+      E("sd-rockshandy", "Rockshandy", "ROCKSHANDY", 12000, "Soft Drinks"),
+      E("sd-swiss-lemonade", "Swiss Lemonade", "SWISS LEMONADE", 5000, "Soft Drinks"),
+      E("sd-lemonade", "Lemonade", "LEMONADE", 5000, "Soft Drinks"),
+      E("sd-juice-fresh", "Juice Fresh", "JUICE FRESH", 8000, "Soft Drinks"),
     ],
   },
   {

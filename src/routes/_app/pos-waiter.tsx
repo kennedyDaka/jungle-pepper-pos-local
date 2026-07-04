@@ -71,19 +71,6 @@ function normalizeCategoryText(value: string | null | undefined) {
     .trim();
 }
 
-function isJuiceOrMocktailItem(item: any) {
-  const category = normalizeCategoryText(item.categories?.name);
-  const name = normalizeCategoryText(item.name);
-  return (
-    category === "MOCKTAILS" ||
-    name.includes("JUICE") ||
-    name.includes("CHAPMAN") ||
-    name.includes("ROCKSHANDY") ||
-    name.includes("LIME CORDIAL") ||
-    name.includes("LEMONADE")
-  );
-}
-
 function itemMatchesPosGroup(item: any, groupId: string) {
   const category = normalizeCategoryText(item.categories?.name);
 
@@ -98,7 +85,7 @@ function itemMatchesPosGroup(item: any, groupId: string) {
   if (groupId === "sweets") return category === "DESSERTS";
   if (groupId === "hot-drinks") return category === "COFFEE AND TEA";
   if (groupId === "beers") return category === "BEERS AND CIDERS";
-  if (groupId === "soft-drinks") return category === "SOFT DRINKS" && !isJuiceOrMocktailItem(item);
+  if (groupId === "soft-drinks") return category === "SOFT DRINKS";
   if (groupId === "liquor-wine") {
     return ["BRANDY", "GIN", "LIQUEURS", "RUM", "TEQUILA", "VODKA", "WHISKEY", "WINE"].includes(
       category,
