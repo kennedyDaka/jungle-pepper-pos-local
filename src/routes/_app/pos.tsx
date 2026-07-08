@@ -2099,18 +2099,38 @@ function PaymentDialog({
   onPay: (physicalOrderNo: string, saleAt: string, p: { method: string; amount: number }[]) => void;
   busy: boolean;
 }) {
-  const [method, setMethod] = useState("cash");
-  const [amount, setAmount] = useState(total);
+  const [payments, setPayments] = useState<{ method: string; amount: number }[]>([
+    { method: "cash", amount: total },
+  ]);
   const [physicalOrderNo, setPhysicalOrderNo] = useState(initialPhysicalOrderNo ?? "");
   const [saleAt, setSaleAt] = useState(() => dateTimeLocalValue());
   const cleanedOrderNo = physicalOrderNo.trim();
+
+  const sumPayments = payments.reduce((s, p) => s + p.amount, 0);
+  const remaining = Math.max(total - sumPayments, 0);
+  const nonCashTotal = payments.filter((p) => p.method !== "cash").reduce((s, p) => s + p.amount, 0);
+  const cashNeeded = Math.max(0, total - nonCashTotal);
+  const cashPayment = payments.find((p) => p.method === "cash");
+  const cashChange = cashPayment ? Math.max(0, cashPayment.amount - cashNeeded) : 0;
+
+  const canConfirm = sumPayments >= total && cleanedOrderNo.length > 0 && saleAt.length > 0;
+
+  function updatePayment(index: number, field: "method" | "amount", value: string | number) {
+    setPayments((prev) => {
+      const next = prev.map((p) => ({ ...p }));
+      if (field === "method") next[index].method = value as string;
+      else next[index].amount = value as number;
+      return next;
+    });
+  }
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Payment - {MWK(total)}</DialogTitle>
           <DialogDescription>
-            Enter the physical order number, then confirm payment.
+            Split the bill across one or more payment methods.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -2135,35 +2155,75 @@ function PaymentDialog({
               onChange={(e) => setSaleAt(e.target.value)}
             />
           </div>
-          <div>
-            <Label>Method</Label>
-            <Select value={method} onValueChange={setMethod}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="airtel_money">Airtel Money</SelectItem>
-                <SelectItem value="mpamba">Mpamba</SelectItem>
-                <SelectItem value="national_bank">National Bank</SelectItem>
-                <SelectItem value="standard_bank">Standard Bank</SelectItem>
-                <SelectItem value="capital_bank">Capital Bank</SelectItem>
-                <SelectItem value="eco_bank">Eco Bank</SelectItem>
-                <SelectItem value="bank_card">Bank Card</SelectItem>
-              </SelectContent>
-            </Select>
+
+          <div className="flex items-center justify-between text-sm font-medium">
+            <span>Payments</span>
+            <span className={sumPayments >= total ? "text-success" : "text-muted-foreground"}>
+              {MWK(sumPayments)} / {MWK(total)}
+            </span>
           </div>
-          <div>
-            <Label>Amount</Label>
-            <Input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-            />
-          </div>
-          {method === "cash" && amount > total && (
+
+          {payments.map((pmt, i) => (
+            <div key={i} className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Label className={i > 0 ? "sr-only" : ""}>Method</Label>
+                <Select value={pmt.method} onValueChange={(v) => updatePayment(i, "method", v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="airtel_money">Airtel Money</SelectItem>
+                    <SelectItem value="mpamba">Mpamba</SelectItem>
+                    <SelectItem value="national_bank">National Bank</SelectItem>
+                    <SelectItem value="standard_bank">Standard Bank</SelectItem>
+                    <SelectItem value="capital_bank">Capital Bank</SelectItem>
+                    <SelectItem value="eco_bank">Eco Bank</SelectItem>
+                    <SelectItem value="bank_card">Bank Card</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1">
+                <Label className={i > 0 ? "sr-only" : ""}>Amount</Label>
+                <Input
+                  type="number"
+                  value={pmt.amount}
+                  onChange={(e) => updatePayment(i, "amount", Number(e.target.value))}
+                />
+              </div>
+              {payments.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
+                  onClick={() => setPayments((prev) => prev.filter((_, j) => j !== i))}
+                >
+                  ×
+                </Button>
+              )}
+            </div>
+          ))}
+
+          {payments.length < 8 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setPayments((prev) => [...prev, { method: "cash", amount: remaining }])}
+            >
+              Add Payment
+            </Button>
+          )}
+
+          {remaining > 0 && (
+            <div className="text-sm text-muted-foreground">
+              Remaining: <span className="font-semibold">{MWK(remaining)}</span>
+            </div>
+          )}
+
+          {cashChange > 0 && (
             <div className="text-sm">
-              Change due: <span className="font-semibold text-success">{MWK(amount - total)}</span>
+              Change due: <span className="font-semibold text-success">{MWK(cashChange)}</span>
             </div>
           )}
         </div>
@@ -2172,14 +2232,10 @@ function PaymentDialog({
             Cancel
           </Button>
           <Button
-            onClick={() =>
-              onPay(cleanedOrderNo, dateTimeLocalToIso(saleAt), [
-                { method, amount: Math.min(amount, total) },
-              ])
-            }
-            disabled={busy || amount < total || cleanedOrderNo.length === 0 || saleAt.length === 0}
+            onClick={() => onPay(cleanedOrderNo, dateTimeLocalToIso(saleAt), payments)}
+            disabled={busy || !canConfirm}
           >
-            Confirm
+            Confirm ({payments.length} payment{payments.length > 1 ? "s" : ""})
           </Button>
         </DialogFooter>
       </DialogContent>
