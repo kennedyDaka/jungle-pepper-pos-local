@@ -773,166 +773,164 @@ function addExpensesWorksheet(wb: ExcelJS.Workbook, input: FlashReportInput) {
 
 function addExecutiveSummary(wb: ExcelJS.Workbook, input: FlashReportInput) {
   const ws = wb.addWorksheet("Executive Summary");
-  ws.getColumn(1).width = 36;
-  ws.getColumn(2).width = 14;
-  ws.getColumn(3).width = 16;
+  ws.getColumn(1).width = 38;
+  ws.getColumn(2).width = 10;
+  ws.getColumn(3).width = 12;
+  ws.getColumn(4).width = 18;
 
   const titleRow = ws.addRow(["JUNGLE PEPPER — EXECUTIVE SUMMARY"]);
   titleRow.getCell(1).font = TITLE_FONT;
   ws.addRow([`Period: ${input.rangeLabel ?? input.reportDate}`]).getCell(1).font = SUBTITLE_FONT;
   ws.addRow([]);
 
-  const expenses = input.expenses ?? [];
   const movements = input.movements ?? [];
   const sales = input.sales ?? [];
 
-  function sumExpense(itemKeywords: string[]): { qty: number; cost: number } {
-    let qty = 0;
-    let cost = 0;
-    const upperKeywords = itemKeywords.map((k) => k.toUpperCase());
-    expenses.forEach((row: any) => {
-      const itemName = String(row.Item ?? "").toUpperCase();
-      if (upperKeywords.some((kw) => itemName.includes(kw))) {
-        qty += Number(row["Stock Qty"] ?? 0);
-        cost += Number(row["Line Total"] ?? 0);
-      }
-    });
-    return { qty, cost };
-  }
-
   function addSectionHeader(title: string) {
     ws.addRow([]);
-    const r = ws.addRow([title]);
+    const r = ws.addRow([title, "", "", ""]);
     r.getCell(1).font = { bold: true, size: 11, underline: "single" };
   }
 
-  function addDataRow(label: string, val1: string | number, val2?: string | number) {
-    const r = ws.addRow([label, val1 ?? "", val2 ?? ""]);
-    for (let c = 1; c <= 3; c++) r.getCell(c).border = BORDER_THIN;
+  function addHeaderRow() {
+    const r = ws.addRow(["Item", "Weight", "Sales", "Purchases Bulk"]);
+    r.eachCell({ includeEmpty: true }, (cell) => {
+      cell.fill = HEADER_FILL;
+      cell.font = HEADER_FONT;
+      cell.border = BORDER_THIN;
+    });
   }
 
-  // ── 1. KEY PURCHASES ──
-  addSectionHeader("1. KEY PURCHASES");
-  const header = ws.addRow(["Item", "Qty", "Cost"]);
-  header.eachCell({ includeEmpty: true }, (cell) => {
-    cell.fill = HEADER_FILL;
-    cell.font = HEADER_FONT;
-    cell.border = BORDER_THIN;
-  });
+  function addRow(label: string, salesVal: string | number, bulkVal: string | number) {
+    const r = ws.addRow([label, "", salesVal ?? "", bulkVal ?? ""]);
+    for (let c = 1; c <= 4; c++) r.getCell(c).border = BORDER_THIN;
+  }
 
-  const purchaseDefs: { label: string; keywords: string[] }[] = [
-    { label: "Potatoes", keywords: ["POTATOES"] },
-    { label: "Flour", keywords: ["FLOUR"] },
-    { label: "Oil", keywords: ["OIL"] },
-    { label: "Rice", keywords: ["RICE"] },
-    { label: "Frango (chicken)", keywords: ["FRANGO", "CHICKEN"] },
-    { label: "Mince", keywords: ["MINCE"] },
-    { label: "Prego (rump sliced 120g)", keywords: ["SLICED 120G"] },
-    { label: "Fillets", keywords: ["FILLET"] },
-    { label: "Milk", keywords: ["MILK"] },
-  ];
+  function sumPurchase(keywords: string[]): { qty: number; unit: string } {
+    let qty = 0;
+    let unit = "";
+    movements.forEach((m) => {
+      if (m.type !== "purchase_in") return;
+      const name = (m.items?.name ?? "").toUpperCase();
+      if (keywords.some((k) => name.includes(k))) {
+        qty += Number(m.qty);
+        if (!unit && m.items?.units?.code) unit = m.items.units.code;
+      }
+    });
+    return { qty, unit };
+  }
 
-  purchaseDefs.forEach((def) => {
-    const { qty, cost } = sumExpense(def.keywords);
-    addDataRow(def.label, qty || "", cost || "");
-  });
+  function sumDoughSales(keyword: string): number {
+    let total = 0;
+    movements.forEach((m) => {
+      if (m.type !== "sale") return;
+      const name = (m.items?.name ?? "").toUpperCase();
+      if (name.includes(keyword)) total += Math.abs(Number(m.qty));
+    });
+    return total;
+  }
 
-  // ── 2. PIZZA SALES ──
-  addSectionHeader("2. PIZZA SALES");
+  function sumOutbound(keywords: string[]): number {
+    let total = 0;
+    movements.forEach((m) => {
+      if (m.type !== "production_out" && m.type !== "sale" && m.type !== "wastage") return;
+      const name = (m.items?.name ?? "").toUpperCase();
+      if (keywords.some((k) => name.includes(k))) total += Math.abs(Number(m.qty));
+    });
+    return total;
+  }
 
-  // Dough counts from stock movements
-  let thinDough = 0;
-  let thickDough = 0;
-  movements.forEach((m) => {
-    if (m.type !== "sale") return;
-    const name = (m.items?.name ?? "").toUpperCase();
-    if (name.includes("DOUGH PIZZA BASES THIN")) thinDough += Math.abs(Number(m.qty));
-    if (name.includes("DOUGH PIZZA BASES THICK")) thickDough += Math.abs(Number(m.qty));
-  });
-  addDataRow("Thin Crust Total", thinDough || "");
-  addDataRow("Thick Crust Total", thickDough || "");
+  function fmtPurchase(qty: number, unit: string): string {
+    if (!qty) return "";
+    const display = Number.isInteger(qty) ? String(qty) : qty.toFixed(2);
+    return unit ? `${display} ${unit}` : display;
+  }
 
+  // ── 1. FLOUR ──
+  addSectionHeader("1. FLOUR");
+  addHeaderRow();
+  const flour = sumPurchase(["FLOUR BAG"]);
+  addRow("Flour", "", fmtPurchase(flour.qty, flour.unit));
+  addRow("Thin Crust Total", sumDoughSales("DOUGH PIZZA BASES THIN") || "", "");
+  addRow("Thick Crust Total", sumDoughSales("DOUGH PIZZA BASES THICK") || "", "");
   const pizzaTypes = [
-    "Katundu Pizza",
-    "Mexicano Pizza",
-    "Portuguese Chicken Pizza",
-    "Chicken Mushroom Pizza",
-    "Sweet and Sour Safari Pizza",
-    "Maffiosa Pizza",
-    "Prawn Pizza",
-    "Anchovy Pizza",
-    "Vegetarian Pizza",
-    "Vegan Pizza",
-    "Margarita Pizza",
-    "Piccanti Pizza",
-    "Jalapeno Pizza",
-    "Hummus Pizza",
-    "Godfather Pizza",
-    "Mediterranean Pizza",
+    "Katundu Pizza", "Mexicano Pizza", "Portuguese Chicken Pizza",
+    "Chicken Mushroom Pizza", "Sweet and Sour Safari Pizza", "Maffiosa Pizza",
+    "Prawn Pizza", "Anchovy Pizza", "Vegetarian Pizza", "Vegan Pizza",
+    "Margarita Pizza", "Piccanti Pizza", "Jalapeno Pizza", "Hummus Pizza",
+    "Godfather Pizza", "Mediterranean Pizza",
   ];
-  pizzaTypes.forEach((name) => {
-    const q = countMenuSales(name, sales);
-    addDataRow(name, q || "");
-  });
+  pizzaTypes.forEach((name) => addRow(name, countMenuSales(name, sales) || "", ""));
 
-  // ── 3. FRANGO SALES ──
-  addSectionHeader("3. FRANGO SALES");
-  addDataRow("Half Churrasco Chicken", countMenuSales("Half Churrasco Chicken", sales) || "");
-  addDataRow("Full Churrasco Chicken", countMenuSales("Full Churrasco Chicken", sales) || "");
+  // ── 2. FRANGO ──
+  addSectionHeader("2. FRANGO");
+  addHeaderRow();
+  const frango = sumPurchase(["FRANGO FULL", "FRANGO HALF"]);
+  addRow("Frango", "", fmtPurchase(frango.qty, frango.unit));
+  addRow("Half Churrasco Chicken", countMenuSales("Half Churrasco Chicken", sales) || "", "");
+  addRow("Full Churrasco Chicken", countMenuSales("Full Churrasco Chicken", sales) || "", "");
 
-  // ── 4. PREGO / BITOQUE SALES ──
-  addSectionHeader("4. PREGO / BITOQUE SALES");
-  const pregoItems = [
-    "Plain Prego",
-    "Prego Pimento",
-    "Beef Bitoque",
-    "Chicken Bitoque",
-    "Beef Prego",
-  ];
-  pregoItems.forEach((name) => {
-    addDataRow(name, countMenuSales(name, sales) || "");
-  });
+  // ── 3. FILLETS ──
+  addSectionHeader("3. FILLETS");
+  addHeaderRow();
+  const fillets = sumPurchase(["FILLET TRAYS"]);
+  addRow("Fillets", "", fmtPurchase(fillets.qty, fillets.unit));
+  addRow("Portuguese Chicken Pizza", countMenuSales("Portuguese Chicken Pizza", sales) || "", "");
+  addRow("Chicken Mushroom Pizza", countMenuSales("Chicken Mushroom Pizza", sales) || "", "");
+  addRow("Chicken Bitoque", countMenuSales("Chicken Bitoque", sales) || "", "");
+  addRow("Spaghetti Creamy Chicken & Mushroom", countMenuSales("Spaghetti Creamy Chicken and Mushroom", sales) || "", "");
+  addRow("Penne Creamy Chicken & Mushroom", countMenuSales("Penne Creamy Chicken and Mushroom", sales) || "", "");
 
-  // ── 5. CHIPS SALES ──
-  addSectionHeader("5. CHIPS SALES");
-  const chipItems = [
-    "Plain Chips Small",
-    "Plain Chips Large",
-    "Masala Chips Small",
-    "Masala Chips Large",
-  ];
-  chipItems.forEach((name) => {
-    addDataRow(name, countMenuSales(name, sales) || "");
-  });
+  // ── 4. MINCE ──
+  addSectionHeader("4. MINCE");
+  addHeaderRow();
+  const mince = sumPurchase(["MINCE BULK"]);
+  addRow("Mince", "", fmtPurchase(mince.qty, mince.unit));
+  addRow("Spaghetti Bolognese", countMenuSales("Spaghetti Bolognese", sales) || "", "");
+  addRow("Penne Bolognese", countMenuSales("Penne Bolognese", sales) || "", "");
 
-  // ── 6. HOT DRINKS SALES ──
-  addSectionHeader("6. HOT DRINKS SALES");
-  const drinkItems = [
-    "Italian Cappuccino",
-    "Hot Chocolate",
-    "Brazilian Cappuccino",
-    "Chocachino",
-  ];
-  drinkItems.forEach((name) => {
-    addDataRow(name, countMenuSales(name, sales) || "");
-  });
+  // ── 5. RUMP ──
+  addSectionHeader("5. RUMP");
+  addHeaderRow();
+  const rump = sumPurchase(["RUMP SLICED (1KG)"]);
+  addRow("Rump Sliced 1kg", "", fmtPurchase(rump.qty, rump.unit));
+  addRow("Plain Prego", countMenuSales("Plain Prego", sales) || "", "");
+  addRow("Prego Pimento", countMenuSales("Prego Pimento", sales) || "", "");
+  addRow("Beef Bitoque", countMenuSales("Beef Bitoque", sales) || "", "");
+  addRow("Beef Prego", countMenuSales("Beef Prego", sales) || "", "");
 
-  // ── 7. PASTA SALES ──
-  addSectionHeader("7. PASTA SALES");
-  const pastaItems = [
-    "Spaghetti Creamy Tomato and Prawn",
-    "Spaghetti Bolognese",
-    "Penne Creamy Chicken and Mushroom",
-    "Penne Creamy Tomato and Prawn",
-    "Penne Picanti",
-    "Penne Pomodoro",
-    "Penne Bolognese",
-    "Spaghetti Picanti",
-    "Spaghetti Creamy Chicken and Mushroom",
-  ];
-  pastaItems.forEach((name) => {
-    addDataRow(name, countMenuSales(name, sales) || "");
-  });
+  // ── 6. POTATOES ──
+  addSectionHeader("6. POTATOES");
+  addHeaderRow();
+  const potatoes = sumPurchase(["POTATOES BULK"]);
+  addRow("Potatoes", "", fmtPurchase(potatoes.qty, potatoes.unit));
+  addRow("Plain Chips Small", countMenuSales("Plain Chips Small", sales) || "", "");
+  addRow("Plain Chips Large", countMenuSales("Plain Chips Large", sales) || "", "");
+  addRow("Masala Chips Small", countMenuSales("Masala Chips Small", sales) || "", "");
+  addRow("Masala Chips Large", countMenuSales("Masala Chips Large", sales) || "", "");
+
+  // ── 7. MILK ──
+  addSectionHeader("7. MILK");
+  addHeaderRow();
+  const milk = sumPurchase(["MILK"]);
+  addRow("Milk", "", fmtPurchase(milk.qty, milk.unit));
+  addRow("Italian Cappuccino", countMenuSales("Italian Cappuccino", sales) || "", "");
+  addRow("Brazilian Cappuccino", countMenuSales("Brazilian Cappuccino", sales) || "", "");
+  addRow("Hot Chocolate", countMenuSales("Hot Chocolate", sales) || "", "");
+  addRow("Chocachino", countMenuSales("Chocachino", sales) || "", "");
+
+  // ── 8. RICE ──
+  addSectionHeader("8. RICE");
+  addHeaderRow();
+  const rice = sumPurchase(["RICE BULK"]);
+  addRow("Rice", "", fmtPurchase(rice.qty, rice.unit));
+  addRow("Arroz de Marisco", countMenuSales("Arroz de Marisco", sales) || "", "");
+
+  // ── 9. OIL ──
+  addSectionHeader("9. OIL");
+  addHeaderRow();
+  const oilPurchase = sumPurchase(["COOKING OIL BULK"]);
+  addRow("Cooking Oil", sumOutbound(["COOKING OIL BULK"]) || "", fmtPurchase(oilPurchase.qty, oilPurchase.unit));
 }
 
 export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
