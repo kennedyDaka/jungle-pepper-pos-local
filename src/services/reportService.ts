@@ -374,7 +374,11 @@ function toRawMovement(movement: RawMovementWithRelations, order?: MovementOrder
     invoice_no: reference,
     order_type: orderType,
     menu_item_names: parsed.menuItem,
-    menu_categories: parsed.itemName?.toLowerCase().includes("pizza") ? "Pizza" : null,
+    menu_categories: parsed.itemName?.toLowerCase().includes("pizza")
+      ? "Pizza"
+      : parsed.itemName && /^(spaghetti|penne|fettuccine)/i.test(parsed.itemName)
+        ? "Pastas"
+        : null,
     modifier_names: parsed.modifierName,
     order_item_qty: parsed.itemQty,
     production_ref:

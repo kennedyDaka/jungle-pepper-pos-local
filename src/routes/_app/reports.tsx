@@ -864,6 +864,9 @@ function ReportsPage() {
     "RICE",
     "EGGS",
     "MILK",
+    "SPAGHETTI",
+    "PENNE",
+    "FETTUCCINE",
   ];
 
   const ingredientLifecycleRows = (): ReportRow[] => {
@@ -1161,6 +1164,14 @@ function ReportsPage() {
       "Category Mix",
       [...catAgg.entries()].map(([category, amount]) => ({ Category: category, Revenue: amount })),
       { title: "Category Mix", rangeLabel },
+    );
+    appendReportSheet(
+      wb,
+      "Item Totals",
+      [...itemAgg.entries()]
+        .sort((a, b) => b[1].qty - a[1].qty)
+        .map(([name, value]) => ({ Item: name, "Qty Sold": value.qty, Revenue: value.revenue })),
+      { title: "Item Totals (All Items)", rangeLabel },
     );
     void writeReportWorkbook(wb, `sales-${reportDateRange(from, to)}.xlsx`);
   };

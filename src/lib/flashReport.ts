@@ -115,6 +115,11 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
       { label: "SUGAR (Kg)", aliases: ["SUGAR"] },
     ],
   ],
+  ["PASTA", [
+    { label: "SPAGHETTI (Kg)", aliases: ["SPAGHETTI"] },
+    { label: "PENNE (Kg)", aliases: ["PENNE"] },
+    { label: "FETTUCCINE (Kg)", aliases: ["FETTUCCINE"] },
+  ]],
   ["OILS / SAUCES", [{ label: "COOKING OIL BULK (L)", aliases: ["COOKING OIL BULK"] }]],
   [
     "VEGETABLES",
@@ -766,6 +771,170 @@ function addExpensesWorksheet(wb: ExcelJS.Workbook, input: FlashReportInput) {
   });
 }
 
+function addExecutiveSummary(wb: ExcelJS.Workbook, input: FlashReportInput) {
+  const ws = wb.addWorksheet("Executive Summary");
+  ws.getColumn(1).width = 36;
+  ws.getColumn(2).width = 14;
+  ws.getColumn(3).width = 16;
+
+  const titleRow = ws.addRow(["JUNGLE PEPPER — EXECUTIVE SUMMARY"]);
+  titleRow.getCell(1).font = TITLE_FONT;
+  ws.addRow([`Period: ${input.rangeLabel ?? input.reportDate}`]).getCell(1).font = SUBTITLE_FONT;
+  ws.addRow([]);
+
+  const expenses = input.expenses ?? [];
+  const movements = input.movements ?? [];
+  const sales = input.sales ?? [];
+
+  function sumExpense(itemKeywords: string[]): { qty: number; cost: number } {
+    let qty = 0;
+    let cost = 0;
+    const upperKeywords = itemKeywords.map((k) => k.toUpperCase());
+    expenses.forEach((row: any) => {
+      const itemName = String(row.Item ?? "").toUpperCase();
+      if (upperKeywords.some((kw) => itemName.includes(kw))) {
+        qty += Number(row["Stock Qty"] ?? 0);
+        cost += Number(row["Line Total"] ?? 0);
+      }
+    });
+    return { qty, cost };
+  }
+
+  function addSectionHeader(title: string) {
+    ws.addRow([]);
+    const r = ws.addRow([title]);
+    r.getCell(1).font = { bold: true, size: 11, underline: "single" };
+  }
+
+  function addDataRow(label: string, val1: string | number, val2?: string | number) {
+    const r = ws.addRow([label, val1 ?? "", val2 ?? ""]);
+    for (let c = 1; c <= 3; c++) r.getCell(c).border = BORDER_THIN;
+  }
+
+  // ── 1. KEY PURCHASES ──
+  addSectionHeader("1. KEY PURCHASES");
+  const header = ws.addRow(["Item", "Qty", "Cost"]);
+  header.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = HEADER_FILL;
+    cell.font = HEADER_FONT;
+    cell.border = BORDER_THIN;
+  });
+
+  const purchaseDefs: { label: string; keywords: string[] }[] = [
+    { label: "Potatoes", keywords: ["POTATOES"] },
+    { label: "Flour", keywords: ["FLOUR"] },
+    { label: "Oil", keywords: ["OIL"] },
+    { label: "Rice", keywords: ["RICE"] },
+    { label: "Frango (chicken)", keywords: ["FRANGO", "CHICKEN"] },
+    { label: "Mince", keywords: ["MINCE"] },
+    { label: "Prego (rump sliced 120g)", keywords: ["SLICED 120G"] },
+    { label: "Fillets", keywords: ["FILLET"] },
+    { label: "Milk", keywords: ["MILK"] },
+  ];
+
+  purchaseDefs.forEach((def) => {
+    const { qty, cost } = sumExpense(def.keywords);
+    addDataRow(def.label, qty || "", cost || "");
+  });
+
+  // ── 2. PIZZA SALES ──
+  addSectionHeader("2. PIZZA SALES");
+
+  // Dough counts from stock movements
+  let thinDough = 0;
+  let thickDough = 0;
+  movements.forEach((m) => {
+    if (m.type !== "sale") return;
+    const name = (m.items?.name ?? "").toUpperCase();
+    if (name.includes("DOUGH PIZZA BASES THIN")) thinDough += Math.abs(Number(m.qty));
+    if (name.includes("DOUGH PIZZA BASES THICK")) thickDough += Math.abs(Number(m.qty));
+  });
+  addDataRow("Thin Crust Total", thinDough || "");
+  addDataRow("Thick Crust Total", thickDough || "");
+
+  const pizzaTypes = [
+    "Katundu Pizza",
+    "Mexicano Pizza",
+    "Portuguese Chicken Pizza",
+    "Chicken Mushroom Pizza",
+    "Sweet and Sour Safari Pizza",
+    "Maffiosa Pizza",
+    "Prawn Pizza",
+    "Anchovy Pizza",
+    "Vegetarian Pizza",
+    "Vegan Pizza",
+    "Margarita Pizza",
+    "Piccanti Pizza",
+    "Jalapeno Pizza",
+    "Hummus Pizza",
+    "Godfather Pizza",
+    "Mediterranean Pizza",
+  ];
+  pizzaTypes.forEach((name) => {
+    const q = countMenuSales(name, sales);
+    addDataRow(name, q || "");
+  });
+
+  // ── 3. FRANGO SALES ──
+  addSectionHeader("3. FRANGO SALES");
+  addDataRow("Half Churrasco Chicken", countMenuSales("Half Churrasco Chicken", sales) || "");
+  addDataRow("Full Churrasco Chicken", countMenuSales("Full Churrasco Chicken", sales) || "");
+
+  // ── 4. PREGO / BITOQUE SALES ──
+  addSectionHeader("4. PREGO / BITOQUE SALES");
+  const pregoItems = [
+    "Plain Prego",
+    "Prego Pimento",
+    "Beef Bitoque",
+    "Chicken Bitoque",
+    "Beef Prego",
+  ];
+  pregoItems.forEach((name) => {
+    addDataRow(name, countMenuSales(name, sales) || "");
+  });
+
+  // ── 5. CHIPS SALES ──
+  addSectionHeader("5. CHIPS SALES");
+  const chipItems = [
+    "Plain Chips Small",
+    "Plain Chips Large",
+    "Masala Chips Small",
+    "Masala Chips Large",
+  ];
+  chipItems.forEach((name) => {
+    addDataRow(name, countMenuSales(name, sales) || "");
+  });
+
+  // ── 6. HOT DRINKS SALES ──
+  addSectionHeader("6. HOT DRINKS SALES");
+  const drinkItems = [
+    "Italian Cappuccino",
+    "Hot Chocolate",
+    "Brazilian Cappuccino",
+    "Chocachino",
+  ];
+  drinkItems.forEach((name) => {
+    addDataRow(name, countMenuSales(name, sales) || "");
+  });
+
+  // ── 7. PASTA SALES ──
+  addSectionHeader("7. PASTA SALES");
+  const pastaItems = [
+    "Spaghetti Creamy Tomato and Prawn",
+    "Spaghetti Bolognese",
+    "Penne Creamy Chicken and Mushroom",
+    "Penne Creamy Tomato and Prawn",
+    "Penne Picanti",
+    "Penne Pomodoro",
+    "Penne Bolognese",
+    "Spaghetti Picanti",
+    "Spaghetti Creamy Chicken and Mushroom",
+  ];
+  pastaItems.forEach((name) => {
+    addDataRow(name, countMenuSales(name, sales) || "");
+  });
+}
+
 export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Jungle Pepper POS";
@@ -933,6 +1102,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   missingByDate.forEach((audit) => ws.addRow([audit.date, audit.missing.join(", ")]));
 
   addExpensesWorksheet(wb, input);
+  addExecutiveSummary(wb, input);
 
   return wb;
 }
