@@ -853,14 +853,7 @@ function addExecutiveSummary(wb: ExcelJS.Workbook, input: FlashReportInput) {
   addRow("Flour", "", fmtPurchase(flour.qty, flour.unit));
   addRow("Thin Crust Total", sumDoughSales("DOUGH PIZZA BASES THIN") || "", "");
   addRow("Thick Crust Total", sumDoughSales("DOUGH PIZZA BASES THICK") || "", "");
-  const pizzaTypes = [
-    "Katundu Pizza", "Mexicano Pizza", "Portuguese Chicken Pizza",
-    "Chicken Mushroom Pizza", "Sweet and Sour Safari Pizza", "Maffiosa Pizza",
-    "Prawn Pizza", "Anchovy Pizza", "Vegetarian Pizza", "Vegan Pizza",
-    "Margarita Pizza", "Piccanti Pizza", "Jalapeno Pizza", "Hummus Pizza",
-    "Godfather Pizza", "Mediterranean Pizza",
-  ];
-  pizzaTypes.forEach((name) => addRow(name, countMenuSales(name, sales) || "", ""));
+  // individual pizza types listed under their respective ingredients below
 
   // ── 2. FRANGO ──
   addSectionHeader("2. FRANGO");
@@ -875,8 +868,11 @@ function addExecutiveSummary(wb: ExcelJS.Workbook, input: FlashReportInput) {
   addHeaderRow();
   const fillets = sumPurchase(["FILLET TRAYS"]);
   addRow("Fillets", "", fmtPurchase(fillets.qty, fillets.unit));
+  addRow("Katundu Pizza", countMenuSales("Katundu Pizza", sales) || "", "");
   addRow("Portuguese Chicken Pizza", countMenuSales("Portuguese Chicken Pizza", sales) || "", "");
   addRow("Chicken Mushroom Pizza", countMenuSales("Chicken Mushroom Pizza", sales) || "", "");
+  addRow("Sweet and Sour Safari Pizza", countMenuSales("Sweet and Sour Safari Pizza", sales) || "", "");
+  addRow("Maffiosa Pizza", countMenuSales("Maffiosa Pizza", sales) || "", "");
   addRow("Chicken Bitoque", countMenuSales("Chicken Bitoque", sales) || "", "");
   addRow("Spaghetti Creamy Chicken & Mushroom", countMenuSales("Spaghetti Creamy Chicken and Mushroom", sales) || "", "");
   addRow("Penne Creamy Chicken & Mushroom", countMenuSales("Penne Creamy Chicken and Mushroom", sales) || "", "");
@@ -886,8 +882,11 @@ function addExecutiveSummary(wb: ExcelJS.Workbook, input: FlashReportInput) {
   addHeaderRow();
   const mince = sumPurchase(["MINCE BULK"]);
   addRow("Mince", "", fmtPurchase(mince.qty, mince.unit));
+  addRow("Katundu Pizza", countMenuSales("Katundu Pizza", sales) || "", "");
+  addRow("Mexicano Pizza", countMenuSales("Mexicano Pizza", sales) || "", "");
   addRow("Spaghetti Bolognese", countMenuSales("Spaghetti Bolognese", sales) || "", "");
   addRow("Penne Bolognese", countMenuSales("Penne Bolognese", sales) || "", "");
+  addRow("Fettucine Bolognese", countMenuSales("Fettucine Bolognese", sales) || "", "");
 
   // ── 5. RUMP ──
   addSectionHeader("5. RUMP");
@@ -925,6 +924,12 @@ function addExecutiveSummary(wb: ExcelJS.Workbook, input: FlashReportInput) {
   const rice = sumPurchase(["RICE BULK"]);
   addRow("Rice", "", fmtPurchase(rice.qty, rice.unit));
   addRow("Arroz de Marisco", countMenuSales("Arroz de Marisco", sales) || "", "");
+  addRow("Beef Bitoque", countMenuSales("Beef Bitoque", sales) || "", "");
+  addRow("Chicken Bitoque", countMenuSales("Chicken Bitoque", sales) || "", "");
+  addRow("Half Churrasco Chicken", countMenuSales("Half Churrasco Chicken", sales) || "", "");
+  addRow("Full Churrasco Chicken", countMenuSales("Full Churrasco Chicken", sales) || "", "");
+  addRow("Camarao 6 Prawns", countMenuSales("Camarao 6 Prawns", sales) || "", "");
+  addRow("Camarao 12 Prawns", countMenuSales("Camarao 12 Prawns", sales) || "", "");
 
   // ── 9. OIL ──
   addSectionHeader("9. OIL");
