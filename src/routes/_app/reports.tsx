@@ -29,6 +29,8 @@ import {
   buildStockMatrixPreviewRows,
   buildStockMatrixWorkbook,
   stockMatrixFilename,
+  buildStockSalesWorkbook,
+  stockSalesFilename,
 } from "@/lib/stockMatrixReport";
 import {
   appendMatrixReportSheet,
@@ -1227,6 +1229,14 @@ function ReportsPage() {
     void writeReportWorkbook(wb, stockMatrixFilename(from, to), { logo: false });
   };
 
+  const exportStockSalesXlsx = () => {
+    const wb = buildStockSalesWorkbook({
+      ...stockMatrixInput,
+      generatedAt: new Date(),
+    });
+    void writeReportWorkbook(wb, stockSalesFilename(from, to), { logo: false });
+  };
+
   const exportStockLedgerXlsx = () => {
     const wb = createReportWorkbook("Jungle Pepper Stock Ledger");
     const ledgerRows = stockMovementRows();
@@ -1574,6 +1584,10 @@ function ReportsPage() {
           <Button onClick={exportStockMatrixXlsx} variant="secondary">
             <Download className="h-4 w-4 mr-1" />
             Stock Matrix
+          </Button>
+          <Button onClick={exportStockSalesXlsx} variant="secondary">
+            <Download className="h-4 w-4 mr-1" />
+            Stock Sales
           </Button>
           <Button onClick={exportStockLedgerXlsx} variant="secondary">
             <Download className="h-4 w-4 mr-1" />

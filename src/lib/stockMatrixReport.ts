@@ -762,6 +762,106 @@ export function buildStockMatrixPreviewRows(input: StockMatrixInput): ReportRow[
   return [...foodRows(input), ...drinkRows(input)];
 }
 
+function salesBreakdown(movements: MatrixMovement[]): Map<string, number> {
+  const breakdown = new Map<string, number>();
+  movements
+    .filter((m) => m.type === "sale" && m.menu_item_names)
+    .forEach((m) => {
+      (m.menu_item_names ?? "").split(",").forEach((part) => {
+        const trimmed = part.trim();
+        if (!trimmed) return;
+        const match = trimmed.match(/^(.+?)\s*x(\d+(?:\.\d+)?)$/i);
+        if (match) {
+          const dish = match[1].trim();
+          const qty = Number(match[2]);
+          breakdown.set(dish, (breakdown.get(dish) ?? 0) + qty);
+        }
+      });
+    });
+  return breakdown;
+}
+
+export function buildStockSalesWorkbook(input: StockMatrixInput) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Jungle Pepper POS";
+  workbook.company = "Jungle Pepper";
+  workbook.subject = "Stock sales breakdown";
+  workbook.title = `Jungle Pepper Stock Sales ${input.date}`;
+  workbook.created = input.generatedAt ?? new Date();
+
+  const worksheet = workbook.addWorksheet("STOCK SALES BREAKDOWN");
+  worksheet.addRow([dateTitle(input.date), "Opening", "Sold", "Closing"]);
+  styleHeader(worksheet.getRow(1));
+
+  const exact = itemIndex(input.items);
+
+  FOOD_ROWS.forEach((row) => {
+    if (row.kind === "section") {
+      const sectionRow = worksheet.addRow([row.label, "", "", ""]);
+      styleSection(sectionRow, 4);
+      return;
+    }
+
+    if (row.kind === "menu") {
+      const sales = menuSalesSummary(row, input.sales);
+      worksheet.addRow([row.label, "", asNumberOrBlank(sales.qty), ""]);
+      return;
+    }
+
+    const item = resolveItem(input.items, exact, row.label, row.aliases);
+    if (!item) return;
+
+    const periodMovements = input.movements.filter((mov) => {
+      if (!mov.item_id) return false;
+      if (mov.item_id !== item.id) return false;
+      const movementItem = mov.items?.name === item.name;
+      if (!movementItem) return false;
+      const movLocation = mov.location || mov.items?.location;
+      if (movLocation && movLocation !== item.location) return false;
+      return true;
+    });
+
+    const ledger = input.ledgerMovements.filter((mov) => {
+      if (!mov.item_id) return false;
+      if (mov.item_id !== item.id) return false;
+      const movementItem = mov.items?.name === item.name;
+      if (!movementItem) return false;
+      const movLocation = mov.location || mov.items?.location;
+      if (movLocation && movLocation !== item.location) return false;
+      return true;
+    });
+
+    const summary = summarizeStock(item, periodMovements, ledger);
+    const breakdown = salesBreakdown(periodMovements);
+
+    if (breakdown.size === 0) return;
+
+    const soldTotal = Array.from(breakdown.values()).reduce((s, q) => s + q, 0);
+
+    const dataRow = worksheet.addRow([
+      row.label,
+      metricCell(summary.opening),
+      metricCell(soldTotal),
+      metricCell(summary.closing),
+    ]);
+    if (row.highlight)
+      dataRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+
+    breakdown.forEach((qty, dish) => {
+      worksheet.addRow([`  ${dish}`, "", metricCell(qty), ""]);
+    });
+  });
+
+  worksheet.columns = [
+    { width: 36.7 },
+    { width: 8.5 },
+    { width: 10.5 },
+    { width: 10.5 },
+  ];
+  applyBaseSheetStyle(worksheet, 4);
+  return workbook;
+}
+
 export function buildStockMatrixWorkbook(input: StockMatrixInput) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Jungle Pepper POS";
@@ -776,4 +876,8 @@ export function buildStockMatrixWorkbook(input: StockMatrixInput) {
 
 export function stockMatrixFilename(from: string, to?: string) {
   return `stock-matrix-${to && to !== from ? `${from}_to_${to}` : from}.xlsx`;
+}
+
+export function stockSalesFilename(from: string, to?: string) {
+  return `stock-sales-${to && to !== from ? `${from}_to_${to}` : from}.xlsx`;
 }
