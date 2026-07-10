@@ -762,7 +762,58 @@ export function buildStockMatrixPreviewRows(input: StockMatrixInput): ReportRow[
   return [...foodRows(input), ...drinkRows(input)];
 }
 
-function salesBreakdown(movements: MatrixMovement[]): Map<string, number> {
+function countMenuSales(label: string, sales: MatrixOrder[]) {
+  const normalized = normalizeName(label);
+  let qty = 0;
+  sales.forEach((order) => {
+    order.order_items?.forEach((line) => {
+      const itemName = line.menu_items?.name ?? "";
+      if (normalizeName(itemName) === normalized) {
+        qty += Number(line.qty) || 0;
+      }
+    });
+  });
+  return qty;
+}
+
+const STOCK_TO_MENU: Record<string, string[]> = {
+  "FRANGO HALF (600G)": ["Half Churrasco Chicken", "Full Churrasco Chicken"],
+  "FRANGO FULL 1.2 (KG)": ["Half Churrasco Chicken", "Full Churrasco Chicken"],
+  "FILLET TRAYS (500G)": [
+    "Katundu Pizza", "Portuguese Chicken Pizza", "Chicken Mushroom Pizza",
+    "Sweet and Sour Safari Pizza", "Maffiosa Pizza", "Chicken Bitoque",
+    "Spaghetti Creamy Chicken and Mushroom", "Penne Creamy Chicken and Mushroom",
+  ],
+  "PIZZA PKTS (80G)": [
+    "Katundu Pizza", "Portuguese Chicken Pizza", "Chicken Mushroom Pizza",
+    "Sweet and Sour Safari Pizza", "Maffiosa Pizza",
+  ],
+  "BURGER (120G)": ["Chicken Bitoque", "Chicken Burger"],
+  "RUMP SLICED (1KG)": ["Plain Prego", "Prego Pimento", "Beef Bitoque", "Beef Prego"],
+  "SLICED 120G": ["Plain Prego", "Prego Pimento", "Beef Bitoque", "Beef Prego"],
+  "MINCE BULK (1KG)": ["Katundu Pizza", "Mexicano Pizza", "Spaghetti Bolognese", "Penne Bolognese", "Fettucine Bolognese"],
+  "POTATOES BULK (KG)": ["Plain Chips Small", "Plain Chips Large", "Masala Chips Small", "Masala Chips Large"],
+  "MILK": [
+    "Italian Cappuccino", "Brazilian Cappuccino", "Hot Chocolate", "Chocachino",
+    "Kiddoccino", "Macchiato", "Pingo", "Babychino", "Galao Caffe Latte",
+    "Submarine", "Filter Coffee",
+  ],
+  "PIZZA PKTS & BOLOG (80G)": ["Katundu Pizza", "Mexicano Pizza"],
+};
+
+function findMenuNames(stockLabel: string): string[] | undefined {
+  const key = normalizeName(stockLabel);
+  for (const [mapKey, names] of Object.entries(STOCK_TO_MENU)) {
+    if (normalizeName(mapKey) === key) return names;
+  }
+  return undefined;
+}
+
+function salesBreakdown(
+  movements: MatrixMovement[],
+  stockLabel: string,
+  sales: MatrixOrder[],
+): Map<string, number> {
   const breakdown = new Map<string, number>();
   movements
     .filter((m) => m.type === "sale" && m.menu_item_names)
@@ -778,8 +829,34 @@ function salesBreakdown(movements: MatrixMovement[]): Map<string, number> {
         }
       });
     });
+
+  if (breakdown.size > 0) return breakdown;
+
+  const menuNames = findMenuNames(stockLabel);
+  if (menuNames) {
+    menuNames.forEach((menuLabel) => {
+      const qty = countMenuSales(menuLabel, sales);
+      if (qty > 0) breakdown.set(menuLabel, qty);
+    });
+  }
+
   return breakdown;
 }
+
+const ALLOWED_SECTIONS = new Set([
+  "C H I C K E N",
+  "R U M P",
+  "M I N C E ",
+  "C A M A R A O",
+  "C H E E S E",
+  "F L O U R  /  D O U G H",
+  "HOT DRINKS",
+]);
+
+const ALLOWED_ITEMS = new Set([
+  "BURGER (6 each pkt)",
+  "POTATOES BULK (Kg)",
+]);
 
 export function buildStockSalesWorkbook(input: StockMatrixInput) {
   const workbook = new ExcelJS.Workbook();
@@ -794,19 +871,26 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
   styleHeader(worksheet.getRow(1));
 
   const exact = itemIndex(input.items);
+  let currentSection: string | null = null;
 
   FOOD_ROWS.forEach((row) => {
     if (row.kind === "section") {
-      const sectionRow = worksheet.addRow([row.label, "", "", ""]);
-      styleSection(sectionRow, 4);
+      currentSection = row.label;
+      if (ALLOWED_SECTIONS.has(row.label)) {
+        const sectionRow = worksheet.addRow([row.label, "", "", ""]);
+        styleSection(sectionRow, 4);
+      }
       return;
     }
 
     if (row.kind === "menu") {
+      if (!ALLOWED_SECTIONS.has(currentSection ?? "")) return;
       const sales = menuSalesSummary(row, input.sales);
       worksheet.addRow([row.label, "", asNumberOrBlank(sales.qty), ""]);
       return;
     }
+
+    if (!ALLOWED_SECTIONS.has(currentSection ?? "") && !ALLOWED_ITEMS.has(row.label)) return;
 
     const item = resolveItem(input.items, exact, row.label, row.aliases);
     if (!item) return;
@@ -832,7 +916,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
     });
 
     const summary = summarizeStock(item, periodMovements, ledger);
-    const breakdown = salesBreakdown(periodMovements);
+    const breakdown = salesBreakdown(periodMovements, row.label, input.sales);
 
     if (breakdown.size === 0) return;
 
