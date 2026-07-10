@@ -776,9 +776,12 @@ function countMenuSales(label: string, sales: MatrixOrder[]) {
   return qty;
 }
 
+const STOCK_DISH_MULTIPLIERS: Record<string, Record<string, number>> = {
+  "FRANGO HALF (600G)": { "Full Churrasco Chicken": 2 },
+};
+
 const STOCK_TO_MENU: Record<string, string[]> = {
   "FRANGO HALF (600G)": ["Half Churrasco Chicken", "Full Churrasco Chicken"],
-  "FRANGO FULL 1.2 (KG)": ["Half Churrasco Chicken", "Full Churrasco Chicken"],
   "FILLET TRAYS (500G)": [
     "Katundu Pizza", "Portuguese Chicken Pizza", "Chicken Mushroom Pizza",
     "Sweet and Sour Safari Pizza", "Maffiosa Pizza", "Chicken Bitoque",
@@ -815,6 +818,7 @@ function salesBreakdown(
   sales: MatrixOrder[],
 ): Map<string, number> {
   const breakdown = new Map<string, number>();
+  const multipliers = findMenuMultipliers(stockLabel);
   movements
     .filter((m) => m.type === "sale" && m.menu_item_names)
     .forEach((m) => {
@@ -824,7 +828,7 @@ function salesBreakdown(
         const match = trimmed.match(/^(.+?)\s*x(\d+(?:\.\d+)?)$/i);
         if (match) {
           const dish = match[1].trim();
-          const qty = Number(match[2]);
+          const qty = Number(match[2]) * (multipliers?.[dish] ?? 1);
           breakdown.set(dish, (breakdown.get(dish) ?? 0) + qty);
         }
       });
@@ -835,12 +839,20 @@ function salesBreakdown(
   const menuNames = findMenuNames(stockLabel);
   if (menuNames) {
     menuNames.forEach((menuLabel) => {
-      const qty = countMenuSales(menuLabel, sales);
+      const qty = countMenuSales(menuLabel, sales) * (multipliers?.[menuLabel] ?? 1);
       if (qty > 0) breakdown.set(menuLabel, qty);
     });
   }
 
   return breakdown;
+}
+
+function findMenuMultipliers(stockLabel: string): Record<string, number> | undefined {
+  const key = normalizeName(stockLabel);
+  for (const [mapKey, mults] of Object.entries(STOCK_DISH_MULTIPLIERS)) {
+    if (normalizeName(mapKey) === key) return mults;
+  }
+  return undefined;
 }
 
 const ALLOWED_SECTIONS = new Set([
@@ -850,7 +862,6 @@ const ALLOWED_SECTIONS = new Set([
   "C A M A R A O",
   "C H E E S E",
   "F L O U R  /  D O U G H",
-  "HOT DRINKS",
 ]);
 
 const ALLOWED_ITEMS = new Set([
