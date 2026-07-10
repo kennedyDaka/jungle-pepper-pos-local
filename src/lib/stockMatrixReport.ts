@@ -935,9 +935,9 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
 
     const dataRow = worksheet.addRow([
       row.label,
-      metricCell(summary.opening),
+      metricCell(Math.max(0, summary.opening)),
       metricCell(soldTotal),
-      metricCell(summary.closing),
+      metricCell(Math.max(0, summary.closing)),
     ]);
     if (row.highlight)
       dataRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
