@@ -778,6 +778,7 @@ function countMenuSales(label: string, sales: MatrixOrder[]) {
 
 const STOCK_DISH_MULTIPLIERS: Record<string, Record<string, number>> = {
   "FRANGO HALF (600G)": { "Full Churrasco Chicken": 2 },
+  "CAMARAO HALF (PKT 6)": { "Camarao 12 Prawns": 2 },
 };
 
 const STOCK_TO_MENU: Record<string, string[]> = {
@@ -802,6 +803,25 @@ const STOCK_TO_MENU: Record<string, string[]> = {
     "Submarine", "Filter Coffee",
   ],
   "PIZZA PKTS & BOLOG (80G)": ["Katundu Pizza", "Mexicano Pizza"],
+  "DOUGH PIZZA BASES (THIN)": [
+    "Katundu Pizza", "Mexicano Pizza", "Portuguese Chicken Pizza",
+    "Chicken Mushroom Pizza", "Sweet and Sour Safari Pizza", "Maffiosa Pizza",
+    "Prawn Pizza", "Anchovy Pizza", "Vegetarian Pizza", "Vegan Pizza",
+    "Margarita Pizza", "Piccanti Pizza", "Jalapeno Pizza", "Hummus Pizza",
+    "Godfather Pizza", "Mediterranean Pizza", "Foccacia", "Foccacia and Cheese",
+  ],
+  "DOUGH PIZZA BASES (THICK)": [
+    "Katundu Pizza", "Mexicano Pizza", "Portuguese Chicken Pizza",
+    "Chicken Mushroom Pizza", "Sweet and Sour Safari Pizza", "Maffiosa Pizza",
+    "Prawn Pizza", "Anchovy Pizza", "Vegetarian Pizza", "Vegan Pizza",
+    "Margarita Pizza", "Piccanti Pizza", "Jalapeno Pizza", "Hummus Pizza",
+    "Godfather Pizza", "Mediterranean Pizza",
+  ],
+  "CAMARAO HALF (PKT 6)": ["Camarao 6 Prawns", "Camarao 12 Prawns"],
+  "CAMARAO PASTA PKTS (80G)": [
+    "Spaghetti Creamy Tomato and Prawn", "Penne Creamy Tomato and Prawn",
+    "Fettucine Creamy Tomato and Prawn", "Prawn Pizza", "Prawn Burger",
+  ],
 };
 
 function findMenuNames(stockLabel: string): string[] | undefined {
@@ -878,7 +898,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
   workbook.created = input.generatedAt ?? new Date();
 
   const worksheet = workbook.addWorksheet("STOCK SALES BREAKDOWN");
-  worksheet.addRow([dateTitle(input.date), "Opening", "Sold", "Closing"]);
+  worksheet.addRow([dateTitle(input.date), "Opening", "Purchases", "Sold", "Closing"]);
   styleHeader(worksheet.getRow(1));
 
   const exact = itemIndex(input.items);
@@ -888,8 +908,8 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
     if (row.kind === "section") {
       currentSection = row.label;
       if (ALLOWED_SECTIONS.has(row.label)) {
-        const sectionRow = worksheet.addRow([row.label, "", "", ""]);
-        styleSection(sectionRow, 4);
+        const sectionRow = worksheet.addRow([row.label, "", "", "", ""]);
+        styleSection(sectionRow, 5);
       }
       return;
     }
@@ -897,7 +917,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
     if (row.kind === "menu") {
       if (!ALLOWED_SECTIONS.has(currentSection ?? "")) return;
       const sales = menuSalesSummary(row, input.sales);
-      worksheet.addRow([row.label, "", asNumberOrBlank(sales.qty), ""]);
+      worksheet.addRow([row.label, "", "", asNumberOrBlank(sales.qty), ""]);
       return;
     }
 
@@ -936,6 +956,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
     const dataRow = worksheet.addRow([
       row.label,
       metricCell(Math.max(0, summary.opening)),
+      metricCell(summary.purchase),
       metricCell(soldTotal),
       metricCell(Math.max(0, summary.closing)),
     ]);
@@ -943,7 +964,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
       dataRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
 
     breakdown.forEach((qty, dish) => {
-      worksheet.addRow([`  ${dish}`, "", metricCell(qty), ""]);
+      worksheet.addRow([`  ${dish}`, "", "", metricCell(qty), ""]);
     });
   });
 
@@ -952,8 +973,9 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
     { width: 8.5 },
     { width: 10.5 },
     { width: 10.5 },
+    { width: 10.5 },
   ];
-  applyBaseSheetStyle(worksheet, 4);
+  applyBaseSheetStyle(worksheet, 5);
   return workbook;
 }
 
