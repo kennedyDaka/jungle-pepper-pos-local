@@ -901,7 +901,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
   worksheet.addRow([dateTitle(input.date), "Opening", "Purchases", "Sold", "Closing"]);
   styleHeader(worksheet.getRow(1));
 
-  const exact = itemIndex(input.items);
+  const exact = itemIndex(input.items.filter((i) => i.location !== "kitchen"));
   let currentSection: string | null = null;
 
   FOOD_ROWS.forEach((row) => {
