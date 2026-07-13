@@ -37,7 +37,6 @@ function InventoryPage() {
   const { roles } = useAuth();
   const isAdmin = roles.includes("admin");
   const [search, setSearch] = useState("");
-  const [locationFilter, setLocationFilter] = useState("all");
   const [stockOpen, setStockOpen] = useState<any | null>(null);
   const [binOpen, setBinOpen] = useState<any | null>(null);
   const [adjOpen, setAdjOpen] = useState<any | null>(null);
@@ -49,7 +48,6 @@ function InventoryPage() {
   } | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState<any | null>(null);
-  const [transferOpen, setTransferOpen] = useState<any | null>(null);
 
   const items = useQuery({
     queryKey: ["inv", "items"],
@@ -64,8 +62,7 @@ function InventoryPage() {
   };
 
   const filtered = (items.data ?? []).filter((i: any) =>
-    i.name.toLowerCase().includes(search.toLowerCase()) &&
-    (locationFilter === "all" || i.location === locationFilter),
+    i.name.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -73,16 +70,6 @@ function InventoryPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Inventory</h1>
         <div className="flex gap-2">
-          <Select value={locationFilter} onValueChange={setLocationFilter}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="kitchen">Kitchen</SelectItem>
-              <SelectItem value="stores">Stores</SelectItem>
-            </SelectContent>
-          </Select>
           <Input
             placeholder="Search items…"
             value={search}
@@ -104,7 +91,6 @@ function InventoryPage() {
           <thead className="bg-secondary/50">
             <tr className="text-left">
               <th className="p-2">Item</th>
-              <th className="p-2">Location</th>
               <th className="p-2">Category</th>
               <th className="p-2">Type</th>
               <th className="p-2 text-right">On hand</th>
@@ -120,7 +106,6 @@ function InventoryPage() {
               return (
                 <tr key={i.id} className="border-t border-border hover:bg-secondary/30">
                   <td className="p-2 font-medium">{i.name}</td>
-                  <td className="p-2 text-xs uppercase text-muted-foreground">{i.location ?? "—"}</td>
                   <td className="p-2 text-muted-foreground">{i.categories?.name}</td>
                   <td className="p-2 text-xs uppercase text-muted-foreground">{i.stock_type}</td>
                   <td
@@ -210,11 +195,6 @@ function InventoryPage() {
                         </Button>
                       </>
                     )}
-                    {i.location && (
-                      <Button size="sm" variant="ghost" onClick={() => setTransferOpen(i)}>
-                        Transfer
-                      </Button>
-                    )}
                     <Button size="sm" variant="ghost" onClick={() => setBinOpen(i)}>
                       Bin card
                     </Button>
@@ -275,17 +255,6 @@ function InventoryPage() {
         />
       )}
       {binOpen && <BinCardDialog item={binOpen} onClose={() => setBinOpen(null)} />}
-      {transferOpen && (
-        <TransferDialog
-          item={transferOpen}
-          allItems={items.data ?? []}
-          onClose={() => setTransferOpen(null)}
-          onDone={() => {
-            qc.invalidateQueries({ queryKey: ["inv"] });
-            setTransferOpen(null);
-          }}
-        />
-      )}
       {newOpen && (
         <NewItemDialog
           onClose={() => setNewOpen(false)}
@@ -733,104 +702,6 @@ function MovementDialog({
           </Button>
           <Button onClick={submit} disabled={busy}>
             Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function TransferDialog({
-  item,
-  allItems,
-  onClose,
-  onDone,
-}: {
-  item: any;
-  allItems: any[];
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const destLocation = item.location === "kitchen" ? "stores" : "kitchen";
-  const destItem = allItems.find(
-    (i: any) => i.name === item.name && i.location === destLocation && i.id !== item.id,
-  );
-  const [qty, setQty] = useState<number>(0);
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    if (qty <= 0) {
-      toast.error("Enter a positive quantity to transfer");
-      return;
-    }
-    if (!destItem) {
-      toast.error(`No ${destLocation} item found for "${item.name}". Create one first.`);
-      return;
-    }
-    setBusy(true);
-    try {
-      const date = new Date().toISOString().slice(0, 10);
-      await inventoryService.applyStockMovementWithDate({
-        itemId: item.id,
-        type: "transfer",
-        qty: -qty,
-        unitCost: Number(item.avg_cost) || 0,
-        note: `Transfer out to ${destLocation}`,
-        createdAt: date,
-      });
-      await inventoryService.applyStockMovementWithDate({
-        itemId: destItem.id,
-        type: "transfer",
-        qty: qty,
-        unitCost: Number(destItem.avg_cost) || 0,
-        note: `Transfer in from ${item.location}`,
-        createdAt: date,
-      });
-      toast.success(`Transferred ${fmtQty(qty)} ${item.units?.code ?? ""} to ${destLocation}`);
-      onDone();
-    } catch (e: any) {
-      toast.error(e.message ?? "Transfer failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            Transfer stock — {item.name}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="text-sm text-muted-foreground space-y-1">
-            <p>From: <span className="font-medium uppercase">{item.location}</span></p>
-            <p>To: <span className="font-medium uppercase">{destItem ? destLocation : "—"}</span></p>
-            {destItem && <p>On hand: <span className="font-medium">{fmtQty(item.qty_on_hand)} {item.units?.code}</span></p>}
-          </div>
-          {!destItem && (
-            <p className="text-sm text-destructive">
-              No {destLocation} item found. Go to {destLocation} location filter and add the item there first.
-            </p>
-          )}
-          <div>
-            <Label>Quantity to transfer ({item.units?.code})</Label>
-            <Input
-              type="number"
-              step="0.001"
-              value={qty}
-              onChange={(e) => setQty(Number(e.target.value))}
-              disabled={!destItem}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={busy || !destItem || qty <= 0}>
-            {busy ? "Transferring..." : "Transfer"}
           </Button>
         </DialogFooter>
       </DialogContent>

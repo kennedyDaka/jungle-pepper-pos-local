@@ -88,7 +88,6 @@ export interface InventoryItem {
   active: boolean;
   bottle_ml?: number | null;
   shot_ml?: number | null;
-  location?: string | null;
 }
 
 export interface InventoryItemView extends InventoryItem {

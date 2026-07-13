@@ -11,7 +11,6 @@ export type MatrixItem = {
   bottle_ml?: number | string | null;
   shot_ml?: number | string | null;
   units?: { code?: string | null } | null;
-  location?: string | null;
 };
 
 export type MatrixMovement = {
@@ -32,13 +31,11 @@ export type MatrixMovement = {
   expense_ref?: string | null;
   expense_category?: string | null;
   supplier_name?: string | null;
-  location?: string | null;
   items?: {
     name?: string | null;
     bottle_ml?: number | string | null;
     shot_ml?: number | string | null;
     units?: { code?: string | null } | null;
-    location?: string | null;
   } | null;
 };
 
@@ -536,9 +533,6 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
 
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
-
-      const movLocation = mov.location || mov.items?.location;
-      if (movLocation && movLocation !== item.location) return false;
       return true;
     });
 
@@ -549,9 +543,6 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
 
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return matches;
-
-      const movLocation = mov.location || mov.items?.location;
-      if (movLocation && movLocation !== item.location) return false;
       return true;
     });
 
@@ -901,7 +892,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
   worksheet.addRow([dateTitle(input.date), "Opening", "Purchases", "Sold", "Closing"]);
   styleHeader(worksheet.getRow(1));
 
-  const exact = itemIndex(input.items.filter((i) => i.location !== "kitchen"));
+  const exact = itemIndex(input.items);
   let currentSection: string | null = null;
 
   FOOD_ROWS.forEach((row) => {
@@ -931,8 +922,6 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
       if (mov.item_id !== item.id) return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return false;
-      const movLocation = mov.location || mov.items?.location;
-      if (movLocation && movLocation !== item.location) return false;
       return true;
     });
 
@@ -941,8 +930,6 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
       if (mov.item_id !== item.id) return false;
       const movementItem = mov.items?.name === item.name;
       if (!movementItem) return false;
-      const movLocation = mov.location || mov.items?.location;
-      if (movLocation && movLocation !== item.location) return false;
       return true;
     });
 
