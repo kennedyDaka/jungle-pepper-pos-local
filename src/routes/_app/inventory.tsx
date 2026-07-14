@@ -61,9 +61,9 @@ function InventoryPage() {
     qc.invalidateQueries({ queryKey: ["inv"] });
   };
 
-  const filtered = (items.data ?? []).filter((i: any) =>
-    i.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = (items.data ?? [])
+    .filter((i: any) => i.name.toLowerCase().includes(search.toLowerCase()))
+    .filter((i: any, idx: number, arr: any[]) => arr.findIndex((x: any) => x.name === i.name) === idx);
 
   return (
     <div className="space-y-4">
