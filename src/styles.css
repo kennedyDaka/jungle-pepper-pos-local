@@ -100,27 +100,6 @@
   }
 }
 
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  .receipt-print,
-  .receipt-print * {
-    visibility: visible;
-  }
-  .receipt-print {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 80mm;
-    padding: 4mm;
-    color: black;
-    background: white;
-    font-family: ui-monospace, monospace;
-    font-size: 11px;
-  }
-}
-
 /* ============================================================
    Website customer portal — light theme overrides
    Scoped to .website-layout so POS dark theme is unaffected.

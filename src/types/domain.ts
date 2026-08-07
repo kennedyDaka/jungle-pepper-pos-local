@@ -28,8 +28,7 @@ export type StockMovementType =
   | "wastage"
   | "issue_out"
   | "complimentary"
-  | "breakage"
-  | "transfer";
+  | "breakage";
 
 export interface AuthUser {
   id: string;

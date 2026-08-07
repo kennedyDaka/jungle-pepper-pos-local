@@ -51,7 +51,7 @@ function MenuPage() {
     if (item.kind === "pizza")
       return mods.filter((m: any) => /^(thin|thick)\s*crust$/i.test(m.name));
     if (item.kind === "pasta")
-      return mods.filter((m: any) => /^(spaghetti|penne|fettucine)$/i.test(m.name));
+      return mods.filter((m: any) => /^(spaghetti|penne)$/i.test(m.name));
     return mods;
   }, []);
 

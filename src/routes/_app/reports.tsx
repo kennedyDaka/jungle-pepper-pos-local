@@ -73,8 +73,8 @@ function ReportsPage() {
   const [search, setSearch] = useState("");
   const [selectedReport, setSelectedReport] = useState("stock-ledger");
 
-  const fromIso = new Date(from + "T00:00:00").toISOString();
-  const toIso = new Date(to + "T23:59:59").toISOString();
+  const fromIso = from + "T00:00:00Z";
+  const toIso = to + "T23:59:59Z";
   const reportPeriodLabel = from === to ? from : `${from} to ${to}`;
 
   const branches = useQuery({

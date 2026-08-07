@@ -105,9 +105,9 @@ function printReceiptElement(elementId: string, title: string) {
           .kitchen-ticket .order-number { font-size: 30px; line-height: 1.1; margin-bottom: 8px; }
           .kitchen-ticket .ticket-line { padding: 7px 0; border-top: 1px solid #000; }
           .kitchen-ticket .line-note, .kitchen-ticket .order-note { font-size: 15px; font-weight: 700; margin-top: 3px; }
-          .customer-ticket { font-size: 12px; line-height: 1.35; }
+          .customer-ticket { font-size: 14px; line-height: 1.35; }
           .ticket-row { display: flex; justify-content: space-between; gap: 8px; }
-          .muted { font-size: 11px; color: #333; }
+          .muted { font-size: 13px; color: #333; }
           hr { border: 0; border-top: 1px solid #000; margin: 6px 0; }
         </style>
       </head>

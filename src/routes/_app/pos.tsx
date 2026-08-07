@@ -59,6 +59,145 @@ export const Route = createFileRoute("/_app/pos")({
   component: PosPage,
 });
 
+const PRINT_CSS = `
+@page { size: 80mm auto; margin: 4mm; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px; color: #000; background: #fff;
+  width: 72mm; line-height: 1.4;
+}
+.center { text-align: center; }
+.bold { font-weight: 700; }
+.row { display: flex; justify-content: space-between; }
+.small { font-size: 10px; }
+.sub { padding-left: 2mm; font-size: 10px; }
+hr { border: 0; border-top: 1px solid #000; margin: 2mm 0; }
+.total-bold { font-weight: 700; font-size: 14px; }
+.mt { margin-top: 2mm; }
+.note { font-style: italic; }
+.warn { color: #e53e3e; font-weight: 700; }
+.site-order { color: #d69e2e; font-weight: 700; margin-top: 2mm; }
+`;
+
+function buildReceiptHtml(receipt: any): string {
+  const ref = receipt.physicalOrderNo || String(receipt.id).slice(0, 8).toUpperCase();
+  const tax = vatBreakdownFromInclusive(receipt.total);
+  let items = "";
+  for (const l of receipt.lines) {
+    items += `<div class="row"><span>${l.qty}x ${l.name}${l.takeaway ? " (takeaway)" : ""}</span><span>MK${l.total.toLocaleString()}</span></div>`;
+    if (l.modifiers?.length)
+      items += `<div class="sub">${l.modifiers.map((m: any) => m.name).join(", ")}</div>`;
+    if (l.omissions?.length)
+      items += `<div class="sub">No ${l.omissions.map((o: any) => o.name).join(", ")}</div>`;
+    if (l.takeaway && l.packaging?.length) {
+      for (const p of l.packaging) {
+        const qty = receiptPackagingQty(l, p);
+        items += `<div class="row small sub"><span>Packaging: ${p.name} x${fmtQty(qty)}</span><span>MK${(p.unit_price * qty).toLocaleString()}</span></div>`;
+      }
+    }
+  }
+  return `
+<div style="padding: 2mm;">
+  <div class="center">
+    <div class="bold">JUNGLE PEPPER</div>
+    <div>Kidney Crescent, Blantyre</div>
+    <div>${fmtDateTime(receipt.at)}</div>
+    <div>Order: ${ref}</div>
+    ${receipt.saleType === "staff_meal" ? '<div class="bold">STAFF MEAL</div>' : ""}
+  </div>
+  <hr />
+  ${items}
+  <hr />
+  <div class="row"><span>Subtotal</span><span>MK${receipt.subtotal.toLocaleString()}</span></div>
+  ${receipt.discount > 0 ? `<div class="row"><span>${receipt.saleType === "staff_meal" ? "Staff meal discount" : "Discount"}</span><span>-MK${receipt.discount.toLocaleString()}</span></div>` : ""}
+  <div class="row"><span>Net excl. VAT</span><span>MK${tax.net.toLocaleString()}</span></div>
+  <div class="row"><span>VAT ${(VAT_RATE * 100).toFixed(1)}% included</span><span>MK${tax.vat.toLocaleString()}</span></div>
+  <div class="row total-bold"><span>TOTAL INCL. VAT</span><span>MK${receipt.total.toLocaleString()}</span></div>
+  ${receipt.staffMealReason ? `<div class="small mt">Approval: ${receipt.staffMealReason}</div>` : ""}
+  <div class="center mt">Obrigado!</div>
+</div>`;
+}
+
+function buildKitchenHtml(order: any): string {
+  const table = order.tables?.label ?? order.table_label ?? "Takeaway";
+  const ref = order.physical_order_no || String(order.id).slice(0, 8).toUpperCase();
+  let items = "";
+  for (const line of order.order_items ?? []) {
+    items += `<div style="margin-bottom:1mm;"><div class="row bold"><span>${line.qty}x ${line.menu_items?.name ?? "Item"}</span></div>`;
+    if ((line.order_item_modifiers ?? []).length)
+      items += `<div class="sub">${line.order_item_modifiers.map((m: any) => m.modifiers?.name).join(", ")}</div>`;
+    if (line.takeaway) items += `<div class="sub" style="color:#3182ce;">TAKEAWAY</div>`;
+    if (line.note) items += `<div class="sub" style="color:#dd6b20;">Note: ${line.note}</div>`;
+    items += `</div>`;
+  }
+  return `
+<div style="padding: 2mm;">
+  <div class="center bold" style="font-size:18px;">JUNGLE PEPPER</div>
+  <div class="center" style="font-size:18px;">Kidney Crescent, Blantyre</div>
+  <div class="center bold" style="font-size:22px; margin-top:2mm;">${table}</div>
+  <div class="center bold" style="font-size:22px; margin-top:2mm;">Order: ${ref}</div>
+  <div class="center" style="font-size:18px;">${fmtDateTime(order.created_at)}</div>
+  ${order.source === "website" ? '<div class="site-order">WEBSITE ORDER</div>' : ""}
+  <hr />
+  ${items}
+  ${order.note ? `<hr /><div class="note">${order.note}</div>` : ""}
+  <hr />
+  <div class="center bold">Obrigado!</div>
+</div>`;
+}
+
+function buildBillHtml(
+  cart: CartLine[],
+  subtotal: number,
+  discount: number,
+  total: number,
+  note: string,
+  lineTotal: (l: CartLine) => number,
+): string {
+  let items = "";
+  for (const l of cart) {
+    items += `<div class="row"><span>${l.qty}x ${l.name}${l.takeaway ? " (takeaway)" : ""}</span><span>MK${lineTotal(l).toLocaleString()}</span></div>`;
+    if (l.modifiers.length)
+      items += `<div class="sub">${l.modifiers.map((m) => m.name).join(", ")}</div>`;
+    if (l.omissions.length)
+      items += `<div class="sub">No ${l.omissions.map((o) => o.name).join(", ")}</div>`;
+  }
+  return `
+<div style="padding: 2mm;">
+  <div class="center">
+    <div class="bold">JUNGLE PEPPER</div>
+    <div>Kidney Crescent, Blantyre</div>
+    <div>${fmtDateTime(new Date())}</div>
+    <div class="warn">BILL — NOT A RECEIPT</div>
+    ${note ? `<div class="mt">Note: ${note}</div>` : ""}
+  </div>
+  <hr />
+  ${items}
+  <hr />
+  <div class="row"><span>Subtotal</span><span>MK${subtotal.toLocaleString()}</span></div>
+  ${discount > 0 ? `<div class="row"><span>Discount</span><span>-MK${discount.toLocaleString()}</span></div>` : ""}
+  <div class="row total-bold"><span>TOTAL</span><span>MK${total.toLocaleString()}</span></div>
+  <div class="center mt" style="font-size:12px;">Please proceed to payment.</div>
+</div>`;
+}
+
+function printThermalPopup(html: string, title: string, copies = 1) {
+  const w = window.open("", "_blank", "noopener,noreferrer,width=420,height=700");
+  if (!w) return;
+  const breakStyle = copies > 1 ? ".copy{page-break-after:always}.copy:last-child{page-break-after:auto}" : "";
+  const content = copies > 1
+    ? Array.from({ length: copies }, () => `<div class="copy">${html}</div>`).join("")
+    : html;
+  w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>${PRINT_CSS}${breakStyle}</style></head><body>${content}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => {
+    w.print();
+    w.close();
+  }, 150);
+}
+
 type CartLine = {
   key: string;
   kind: "menu" | "packaging";
@@ -506,7 +645,7 @@ function KitchenOrderPrintDialog({ order, onClose }: { order: any; onClose: () =
           <DialogTitle>Kitchen Order</DialogTitle>
           <DialogDescription>Show this to the kitchen staff.</DialogDescription>
         </DialogHeader>
-        <div className="bg-white text-black p-4 rounded text-xs font-mono" id="kitchen-receipt">
+        <div className="bg-white text-black p-4 rounded text-sm font-mono" id="kitchen-receipt">
           <div className="text-center mb-2">
             <div className="font-bold text-sm">JUNGLE PEPPER</div>
             <div>Kidney Crescent, Blantyre</div>
@@ -546,7 +685,10 @@ function KitchenOrderPrintDialog({ order, onClose }: { order: any; onClose: () =
           <div className="text-center font-bold">Obrigado!</div>
         </div>
         <DialogFooter>
-          <Button variant="secondary" onClick={() => window.print()}>
+          <Button
+            variant="secondary"
+            onClick={() => printThermalPopup(buildKitchenHtml(order), "Kitchen Order")}
+          >
             <Printer className="h-4 w-4 mr-1" /> Print
           </Button>
           <Button onClick={onClose}>Done</Button>
@@ -1307,6 +1449,20 @@ function PosPage() {
               Staff meal
             </Button>
           </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={cart.length === 0}
+            onClick={() =>
+              printThermalPopup(
+                buildBillHtml(cart, subtotal, discount, total, note, lineTotal),
+                "Bill",
+              )
+            }
+          >
+            <Printer className="h-4 w-4 mr-1" />
+            Print Bill
+          </Button>
         </div>
       </Card>
 
@@ -2363,6 +2519,7 @@ function StaffMealDialog({
 }
 
 function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void }) {
+  const [copies, setCopies] = useState(1);
   const tax = vatBreakdownFromInclusive(receipt.total);
   const receiptRef = receipt.physicalOrderNo || receipt.id.slice(0, 8).toUpperCase();
   const receiptFileRef = String(receiptRef).replace(/[^a-z0-9_-]+/gi, "-");
@@ -2374,7 +2531,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
     doc.text("JUNGLE PEPPER", 40, y, { align: "center" });
     y += 5;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.text("Kidney Crescent, Blantyre", 40, y, { align: "center" });
     y += 4;
     doc.text(fmtDateTime(receipt.at), 40, y, { align: "center" });
@@ -2431,7 +2588,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
     doc.text(`MK${receipt.total.toLocaleString()}`, 76, y, { align: "right" });
     y += 6;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(10);
     doc.text("Obrigado! Thank you.", 40, y, { align: "center" });
     doc.save(`receipt-${receiptFileRef}.pdf`);
   };
@@ -2442,7 +2599,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
           <DialogTitle>Receipt</DialogTitle>
           <DialogDescription>Print or download the completed order receipt.</DialogDescription>
         </DialogHeader>
-        <div className="receipt-print bg-white text-black p-4 rounded text-xs font-mono">
+        <div className="receipt-print bg-white text-black p-4 rounded text-sm font-mono" id="receipt-print">
           <div className="text-center">
             <img src={logo} alt="" width={50} height={50} className="mx-auto" />
             <div className="font-bold">JUNGLE PEPPER</div>
@@ -2516,16 +2673,41 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
           )}
           <div className="text-center mt-3">Obrigado!</div>
         </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => window.print()}>
-            <Printer className="h-4 w-4 mr-1" />
-            Print
-          </Button>
-          <Button variant="secondary" onClick={downloadPdf}>
-            <Download className="h-4 w-4 mr-1" />
-            PDF
-          </Button>
-          <Button onClick={onClose}>Done</Button>
+        <DialogFooter className="items-center">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={copies <= 1}
+              onClick={() => setCopies((c) => Math.max(1, c - 1))}
+              aria-label="Decrease receipt copies"
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+            <span className="text-sm">
+              Receipts: <b>{copies}</b>
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={copies >= 10}
+              onClick={() => setCopies((c) => Math.min(10, c + 1))}
+              aria-label="Increase receipt copies"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={() => printThermalPopup(buildReceiptHtml(receipt), "Receipt", copies)}>
+              <Printer className="h-4 w-4 mr-1" />
+              Print
+            </Button>
+            <Button variant="secondary" onClick={downloadPdf}>
+              <Download className="h-4 w-4 mr-1" />
+              PDF
+            </Button>
+            <Button onClick={onClose}>Done</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

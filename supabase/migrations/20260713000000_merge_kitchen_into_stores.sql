@@ -47,6 +47,11 @@ begin
     -- Re-point recipes from kitchen to stores
     update public.recipes set item_id = sto.id where item_id = kit.id;
     -- Re-point modifier_recipes from kitchen to stores
+    -- First delete rows where stores already has the same modifier (avoid PK violation)
+    delete from public.modifier_recipes
+      where item_id = kit.id
+        and modifier_id in (select modifier_id from public.modifier_recipes where item_id = sto.id);
+    -- Then re-point remaining kitchen modifier_recipes to stores
     update public.modifier_recipes set item_id = sto.id where item_id = kit.id;
     -- Re-point historical stock movements from kitchen to stores
     update public.stock_movements set item_id = sto.id where item_id = kit.id;

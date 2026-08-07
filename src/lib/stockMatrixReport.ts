@@ -202,7 +202,7 @@ const FOOD_ROWS: MatrixRowDef[] = [
   { kind: "stock", label: "WHITE SMALL BOX", aliases: ["WHITE SMALL BOX"] },
   { kind: "stock", label: "WHITE LARGE BOX", aliases: ["WHITE LARGE BOX"] },
   { kind: "stock", label: "FOIL", aliases: ["FOIL CUPS"] },
-  { kind: "stock", label: "CUPS", aliases: ["FOIL CUPS"] },
+  { kind: "stock", label: "CUPS", aliases: ["CUPS"] },
   { kind: "stock", label: "BLACK JUMBOS", aliases: ["BLACK JUMBOS PKTS"] },
   { kind: "section", label: "C H A R C O A L / F I R E W O O D" },
   { kind: "stock", label: "CHARCOAL Kg", aliases: ["CHARCOAL"] },
@@ -463,7 +463,7 @@ export function summarizeStock(
   const closing = opening + periodNet;
 
   const expected = opening + purchase - usage;
-  const missing = expected - closing;
+  const missing = expected - currentClosing;
 
   return {
     item,
@@ -475,10 +475,6 @@ export function summarizeStock(
     missing,
     details: "",
   };
-}
-
-export function asNumberOrBlank(value: number) {
-  return Math.abs(value) <= 0.000001 ? "" : Number(value.toFixed(3));
 }
 
 export function metricCell(value: number) {
@@ -514,7 +510,7 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
           Item: row.label,
           Open: "",
           Purchase: "",
-          Sales: asNumberOrBlank(sales.qty),
+          Sales: metricCell(sales.qty),
           Expected: "",
           Close: "",
           Missing: "",
@@ -556,7 +552,7 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
         Sales: previewValue(metricCell(summary.usage)),
         Expected: previewValue(metricCell(summary.expected)),
         Close: previewValue(metricCell(summary.closing)),
-        Missing: previewValue(asNumberOrBlank(summary.missing)),
+        Missing: previewValue(metricCell(summary.missing)),
         Details: summary.details,
       },
     ];
@@ -654,7 +650,7 @@ function addFoodSheet(workbook: ExcelJS.Workbook, input: StockMatrixInput) {
     "EXPECTED",
     "CLOSE",
     "MISSING",
-    "detailes",
+    "details",
   ]);
   styleHeader(worksheet.getRow(1));
 
@@ -681,7 +677,7 @@ function addFoodSheet(workbook: ExcelJS.Workbook, input: StockMatrixInput) {
         row.label,
         "",
         "",
-        asNumberOrBlank(sales.qty),
+        metricCell(sales.qty),
         "",
         "",
         "",
@@ -705,7 +701,7 @@ function addFoodSheet(workbook: ExcelJS.Workbook, input: StockMatrixInput) {
       metricCell(summary.usage),
       metricCell(summary.expected),
       metricCell(summary.closing),
-      asNumberOrBlank(summary.missing),
+      metricCell(summary.missing),
       summary.details,
     ]);
     if (row.highlight)
@@ -786,7 +782,7 @@ const STOCK_TO_MENU: Record<string, string[]> = {
   "BURGER (120G)": ["Chicken Bitoque", "Chicken Burger"],
   "RUMP SLICED (1KG)": ["Plain Prego", "Prego Pimento", "Beef Bitoque", "Beef Prego"],
   "SLICED 120G": ["Plain Prego", "Prego Pimento", "Beef Bitoque", "Beef Prego"],
-  "MINCE BULK (1KG)": ["Katundu Pizza", "Mexicano Pizza", "Spaghetti Bolognese", "Penne Bolognese", "Fettucine Bolognese"],
+  "MINCE BULK (1KG)": ["Katundu Pizza", "Mexicano Pizza", "Spaghetti Bolognese", "Penne Bolognese"],
   "POTATOES BULK (KG)": ["Plain Chips Small", "Plain Chips Large", "Masala Chips Small", "Masala Chips Large"],
   "MILK": [
     "Italian Cappuccino", "Brazilian Cappuccino", "Hot Chocolate", "Chocachino",
@@ -811,7 +807,7 @@ const STOCK_TO_MENU: Record<string, string[]> = {
   "CAMARAO HALF (PKT 6)": ["Camarao 6 Prawns", "Camarao 12 Prawns"],
   "CAMARAO PASTA PKTS (80G)": [
     "Spaghetti Creamy Tomato and Prawn", "Penne Creamy Tomato and Prawn",
-    "Fettucine Creamy Tomato and Prawn", "Prawn Pizza", "Prawn Burger",
+    "Prawn Pizza", "Prawn Burger",
   ],
 };
 
@@ -908,7 +904,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
     if (row.kind === "menu") {
       if (!ALLOWED_SECTIONS.has(currentSection ?? "")) return;
       const sales = menuSalesSummary(row, input.sales);
-      worksheet.addRow([row.label, "", "", asNumberOrBlank(sales.qty), ""]);
+      worksheet.addRow([row.label, "", "", metricCell(sales.qty), ""]);
       return;
     }
 

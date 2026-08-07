@@ -442,11 +442,6 @@ function buildSoldAs(itemId: string, movements: MatrixMovement[]): string {
     if ((movement.qty ?? 0) >= 0) continue;
 
     if (!movement.type) continue;
-    if (movement.type === "transfer") {
-      const name = shortItemName(movement) || "TRANSFER";
-      agg.set(`${name} (TRANSFER)`, (agg.get(`${name} (TRANSFER)`) ?? 0) + Math.abs(movement.qty));
-      continue;
-    }
     if (movement.type !== "sale") {
       const name = shortItemName(movement) || movement.type.toUpperCase();
       agg.set(`${name} (${movement.type.toUpperCase()})`, (agg.get(`${name} (${movement.type.toUpperCase()})`) ?? 0) + Math.abs(movement.qty));
@@ -845,7 +840,6 @@ function addExecutiveSummary(wb: ExcelJS.Workbook, input: FlashReportInput) {
   addRow("Mexicano Pizza", countMenuSales("Mexicano Pizza", sales) || "", "");
   addRow("Spaghetti Bolognese", countMenuSales("Spaghetti Bolognese", sales) || "", "");
   addRow("Penne Bolognese", countMenuSales("Penne Bolognese", sales) || "", "");
-  addRow("Fettucine Bolognese", countMenuSales("Fettucine Bolognese", sales) || "", "");
 
   // ── 5. RUMP ──
   addSectionHeader("5. RUMP");
