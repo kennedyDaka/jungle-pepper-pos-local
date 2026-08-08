@@ -101,19 +101,45 @@ function itemMatchesPosGroup(item: any, groupId: string) {
 function printReceiptElement(elementId: string, title: string) {
   const element = document.getElementById(elementId);
   if (!element) return;
-  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=420,height=700");
-  if (!printWindow) {
-    window.print();
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.setAttribute("title", title);
+  iframe.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
+  document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  };
+
+  let printed = false;
+  const doPrint = () => {
+    if (printed) return;
+    printed = true;
+    const win = iframe.contentWindow;
+    if (win) {
+      win.focus();
+      win.print();
+      win.addEventListener("afterprint", cleanup, { once: true });
+    }
+    window.setTimeout(cleanup, 10000);
+  };
+
+  const doc = iframe.contentDocument;
+  if (!doc) {
+    cleanup();
     return;
   }
-  printWindow.document.write(`
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
     <html>
       <head>
         <title>${title}</title>
         <style>
-          @page { size: 80mm auto; margin: 4mm; }
+          @page { size: 80mm auto; margin: 0; }
           * { box-sizing: border-box; }
-          body { margin: 0; color: #000; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+          body { margin: 0; padding: 0; color: #000; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
           .kitchen-ticket { width: 72mm; font-size: 18px; line-height: 1.35; font-weight: 700; }
           .kitchen-ticket .order-number { font-size: 30px; line-height: 1.1; margin-bottom: 8px; }
           .kitchen-ticket .ticket-line { padding: 7px 0; border-top: 1px solid #000; }
@@ -123,12 +149,14 @@ function printReceiptElement(elementId: string, title: string) {
       <body>${element.outerHTML}</body>
     </html>
   `);
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-    printWindow.close();
-  }, 100);
+  doc.close();
+
+  iframe.onload = () => {
+    window.setTimeout(doPrint, 100);
+  };
+  window.setTimeout(() => {
+    if (!printed) doPrint();
+  }, 2000);
 }
 
 function WaiterPage() {

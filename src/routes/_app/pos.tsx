@@ -60,16 +60,18 @@ export const Route = createFileRoute("/_app/pos")({
 });
 
 const PRINT_CSS = `
-@page { size: 80mm auto; margin: 4mm; }
+@page { size: 80mm auto; margin: 0; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 14px; color: #000; background: #fff;
+  font-size: 13px; color: #000; background: #fff;
   width: 72mm; line-height: 1.4;
 }
 .center { text-align: center; }
 .bold { font-weight: 700; }
-.row { display: flex; justify-content: space-between; }
+.row { display: flex; justify-content: space-between; flex-wrap: wrap; }
+.row > span:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+.row > span:last-child { white-space: nowrap; }
 .small { font-size: 10px; }
 .sub { padding-left: 2mm; font-size: 10px; }
 hr { border: 0; border-top: 1px solid #000; margin: 2mm 0; }
@@ -182,20 +184,57 @@ function buildBillHtml(
 </div>`;
 }
 
-function printThermalPopup(html: string, title: string, copies = 1) {
-  const w = window.open("", "_blank", "noopener,noreferrer,width=420,height=700");
-  if (!w) return;
-  const breakStyle = copies > 1 ? ".copy{page-break-after:always}.copy:last-child{page-break-after:auto}" : "";
-  const content = copies > 1
-    ? Array.from({ length: copies }, () => `<div class="copy">${html}</div>`).join("")
-    : html;
-  w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>${PRINT_CSS}${breakStyle}</style></head><body>${content}</body></html>`);
-  w.document.close();
-  w.focus();
-  setTimeout(() => {
-    w.print();
-    w.close();
-  }, 150);
+function printThermalDocument(html: string, title: string, copies = 1) {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.setAttribute("title", title);
+  iframe.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
+  document.body.appendChild(iframe);
+
+  const breakStyle =
+    copies > 1
+      ? ".copy{page-break-after:always}.copy:last-child{page-break-after:auto}"
+      : "";
+  const content =
+    copies > 1
+      ? Array.from({ length: copies }, () => `<div class="copy">${html}</div>`).join("")
+      : html;
+
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  };
+
+  let printed = false;
+  const doPrint = () => {
+    if (printed) return;
+    printed = true;
+    const win = iframe.contentWindow;
+    if (win) {
+      win.focus();
+      win.print();
+      win.addEventListener("afterprint", cleanup, { once: true });
+    }
+    window.setTimeout(cleanup, 10000);
+  };
+
+  const doc = iframe.contentDocument;
+  if (!doc) {
+    cleanup();
+    return;
+  }
+  doc.open();
+  doc.write(
+    `<!DOCTYPE html><html><head><title>${title}</title><style>${PRINT_CSS}${breakStyle}</style></head><body>${content}</body></html>`,
+  );
+  doc.close();
+
+  iframe.onload = () => {
+    window.setTimeout(doPrint, 100);
+  };
+  window.setTimeout(() => {
+    if (!printed) doPrint();
+  }, 2000);
 }
 
 type CartLine = {
@@ -687,7 +726,7 @@ function KitchenOrderPrintDialog({ order, onClose }: { order: any; onClose: () =
         <DialogFooter>
           <Button
             variant="secondary"
-            onClick={() => printThermalPopup(buildKitchenHtml(order), "Kitchen Order")}
+            onClick={() => printThermalDocument(buildKitchenHtml(order), "Kitchen Order")}
           >
             <Printer className="h-4 w-4 mr-1" /> Print
           </Button>
@@ -1454,7 +1493,7 @@ function PosPage() {
             className="w-full"
             disabled={cart.length === 0}
             onClick={() =>
-              printThermalPopup(
+              printThermalDocument(
                 buildBillHtml(cart, subtotal, discount, total, note, lineTotal),
                 "Bill",
               )
@@ -2698,7 +2737,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => printThermalPopup(buildReceiptHtml(receipt), "Receipt", copies)}>
+            <Button variant="ghost" onClick={() => printThermalDocument(buildReceiptHtml(receipt), "Receipt", copies)}>
               <Printer className="h-4 w-4 mr-1" />
               Print
             </Button>
