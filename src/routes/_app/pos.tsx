@@ -36,6 +36,8 @@ import {
   Ban,
   CalendarClock,
   ClipboardList,
+  Save,
+  Pencil,
 } from "lucide-react";
 import { MWK, fmtDateTime, fmtQty, paymentMethodLabel } from "@/lib/format";
 import { missingOrderNumbersSummary } from "@/lib/orderSequence";
@@ -188,14 +190,11 @@ function printThermalDocument(html: string, title: string, copies = 1) {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.setAttribute("title", title);
-  iframe.style.cssText =
-    "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
+  iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
   document.body.appendChild(iframe);
 
   const breakStyle =
-    copies > 1
-      ? ".copy{page-break-after:always}.copy:last-child{page-break-after:auto}"
-      : "";
+    copies > 1 ? ".copy{page-break-after:always}.copy:last-child{page-break-after:auto}" : "";
   const content =
     copies > 1
       ? Array.from({ length: copies }, () => `<div class="copy">${html}</div>`).join("")
@@ -411,9 +410,11 @@ function orderCashier(order: any) {
 function PendingOrdersDialog({
   onClose,
   onSelectOrder,
+  onEditOrder,
 }: {
   onClose: () => void;
   onSelectOrder: (order: any) => void;
+  onEditOrder: (order: any) => void;
 }) {
   const qc = useQueryClient();
   const branchMemberships = useQuery({
@@ -531,6 +532,7 @@ function PendingOrdersDialog({
                 "Waiter";
               const total = Number(order.total);
               const isWebsite = order.source === "website";
+              const isSaved = order.source === "pos";
               return (
                 <div
                   key={order.id}
@@ -545,11 +547,20 @@ function PendingOrdersDialog({
                             Web
                           </span>
                         )}
+                        {isSaved && (
+                          <span className="text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 px-1.5 py-0.5 rounded uppercase font-bold">
+                            Saved
+                          </span>
+                        )}
                         <span className="text-xs bg-secondary px-2 py-0.5 rounded-full uppercase">
                           {order.status}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(order.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                          {new Date(order.created_at).toLocaleTimeString("en-GB", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false,
+                          })}
                         </span>
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
@@ -591,6 +602,17 @@ function PendingOrdersDialog({
                         >
                           <Printer className="h-3.5 w-3.5" />
                         </Button>
+                        {isSaved && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => onEditOrder(order)}
+                            disabled={order.status === "cancelled" || order.status === "paid"}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="destructive"
@@ -807,6 +829,47 @@ function receiptFromOrder(order: any) {
     staffMealReason: order.staff_meal_reason ?? null,
     at: new Date(order.created_at),
   };
+}
+
+function restoreCartFromOrder(order: any): CartLine[] {
+  return (order.order_items ?? []).map((line: any) => {
+    const qty = Number(line.qty ?? 0);
+    const modifierTotal = (line.order_item_modifiers ?? []).reduce(
+      (sum: number, modifier: any) => sum + Number(modifier.price_delta ?? 0),
+      0,
+    );
+    const packRows = (line.order_item_packaging ?? []).map((pack: any) => ({
+      option_id: pack.packaging_option_id,
+      name: pack.packaging_options?.name ?? pack.items?.name ?? "Packaging",
+      item_id: pack.item_id,
+      unit_price: Number(pack.unit_price),
+      qty_per_item: qty > 0 ? Math.max(1, Number(pack.qty) / qty) : 1,
+      total_qty: Number(pack.qty),
+    }));
+    return {
+      key: crypto.randomUUID(),
+      kind: "menu",
+      menu_item_id: line.menu_item_id,
+      name: line.menu_items?.name ?? "Item",
+      price: Math.max(0, Number(line.unit_price) - modifierTotal),
+      qty,
+      takeaway: Boolean(line.takeaway),
+      note: line.note,
+      modifiers: (line.order_item_modifiers ?? []).map((modifier: any) => ({
+        id: modifier.modifier_id,
+        name: modifier.modifiers?.name ?? "Extra",
+        price_delta: Number(modifier.price_delta ?? 0),
+      })),
+      omissions: (line.order_item_omissions ?? []).map((omission: any) => ({
+        recipe_id: omission.recipe_id,
+        item_id: omission.item_id,
+        name: omission.items?.name ?? "Removed item",
+        qty: Number(omission.qty),
+        unit: omission.items?.units?.code,
+      })),
+      packaging: packRows,
+    };
+  });
 }
 
 function isMenuLine(line: CartLine): line is CartLine & { menu_item_id: string } {
@@ -1135,6 +1198,78 @@ function PosPage() {
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const saveBill = useMutation({
+    mutationFn: async () => {
+      if (!branchId) throw new Error("No branch assigned");
+      const menuLines = cart.filter(isMenuLine);
+      const packagingLines = cart.filter(isPackagingSaleLine);
+      const payload = {
+        discount,
+        note: note || null,
+        items: menuLines.map((l) => ({
+          menu_item_id: l.menu_item_id,
+          qty: l.qty,
+          takeaway: l.takeaway,
+          note: l.note ?? null,
+          unit_price: l.price,
+          modifiers: l.modifiers.map((m) => ({ modifier_id: m.id })),
+          omissions: l.omissions.map((omission) => ({
+            recipe_id: omission.recipe_id,
+            item_id: omission.item_id,
+          })),
+          packaging: l.takeaway
+            ? l.packaging.map((pack) => ({
+                option_id: pack.option_id,
+                unit_price: Number(pack.unit_price),
+                qty_per_item: Math.max(1, Number(pack.qty_per_item) || 1),
+              }))
+            : null,
+        })),
+        packaging_sales: packagingLines.map((line) => ({
+          option_id: line.packaging_option_id,
+          qty: line.qty,
+          unit_price: Number(line.price),
+        })),
+      };
+      return orderService.createSavedBill(payload, branchId);
+    },
+    onSuccess: () => {
+      toast.success("Bill saved to pending");
+      setCart([]);
+      setDiscount(0);
+      setNote("");
+      qc.invalidateQueries({ queryKey: ["pos", "pending-orders"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const [editConfirm, setEditConfirm] = useState<any>(null);
+
+  const reopenBill = useMutation({
+    mutationFn: async (order: any) => {
+      await orderService.updateOrderStatus(order.id, "cancelled", "Bill reopened for editing");
+      return order;
+    },
+    onSuccess: (order) => {
+      setPendingOpen(false);
+      setCart(restoreCartFromOrder(order));
+      setDiscount(Number(order.discount) || 0);
+      setNote(order.note || "");
+      setEditConfirm(null);
+      void qc.invalidateQueries({ queryKey: ["pos", "pending-orders"] });
+      toast.success("Bill loaded — edit it, then pay or save again");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const requestEdit = (order: any) => {
+    if (cart.length > 0) {
+      setEditConfirm(order);
+    } else {
+      reopenBill.mutate(order);
+    }
+  };
 
   const omitLine = omitOpen ? cart.find((line) => line.key === omitOpen.lineKey) : null;
 
@@ -1502,6 +1637,21 @@ function PosPage() {
             <Printer className="h-4 w-4 mr-1" />
             Print Bill
           </Button>
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={
+              branch.isLoading ||
+              cart.length === 0 ||
+              hasMissingPackaging ||
+              hasMissingCrust ||
+              saveBill.isPending
+            }
+            onClick={() => saveBill.mutate()}
+          >
+            <Save className="h-4 w-4 mr-1" />
+            Save bill
+          </Button>
         </div>
       </Card>
 
@@ -1640,7 +1790,33 @@ function PosPage() {
             setPendingOpen(false);
             setLastReceipt(receiptFromOrder(order));
           }}
+          onEditOrder={requestEdit}
         />
+      )}
+
+      {editConfirm && (
+        <Dialog open onOpenChange={() => setEditConfirm(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Replace current cart?</DialogTitle>
+              <DialogDescription>
+                The current cart will be cleared and replaced with the saved bill before it is
+                cancelled from Pending.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setEditConfirm(null)}>
+                Keep current cart
+              </Button>
+              <Button
+                onClick={() => reopenBill.mutate(editConfirm)}
+                disabled={reopenBill.isPending}
+              >
+                Replace cart
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {lastReceipt && <ReceiptDialog receipt={lastReceipt} onClose={() => setLastReceipt(null)} />}
@@ -1759,9 +1935,7 @@ function SalesHistoryDialog({
                 )}
                 {filteredOrders.map((order) => (
                   <tr key={order.id} className="border-t border-border align-top">
-                    <td className="p-2 whitespace-nowrap">
-                      {fmtDateTime(order.created_at)}
-                    </td>
+                    <td className="p-2 whitespace-nowrap">{fmtDateTime(order.created_at)}</td>
                     <td className="p-2 font-medium">{orderReference(order)}</td>
                     <td className="p-2 min-w-72">{orderSummary(order)}</td>
                     <td className="p-2">{orderCashier(order)}</td>
@@ -2303,7 +2477,9 @@ function PaymentDialog({
 
   const sumPayments = payments.reduce((s, p) => s + p.amount, 0);
   const remaining = Math.max(total - sumPayments, 0);
-  const nonCashTotal = payments.filter((p) => p.method !== "cash").reduce((s, p) => s + p.amount, 0);
+  const nonCashTotal = payments
+    .filter((p) => p.method !== "cash")
+    .reduce((s, p) => s + p.amount, 0);
   const cashNeeded = Math.max(0, total - nonCashTotal);
   const cashPayment = payments.find((p) => p.method === "cash");
   const cashChange = cashPayment ? Math.max(0, cashPayment.amount - cashNeeded) : 0;
@@ -2324,9 +2500,7 @@ function PaymentDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Payment - {MWK(total)}</DialogTitle>
-          <DialogDescription>
-            Split the bill across one or more payment methods.
-          </DialogDescription>
+          <DialogDescription>Split the bill across one or more payment methods.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
@@ -2404,7 +2578,9 @@ function PaymentDialog({
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => setPayments((prev) => [...prev, { method: "cash", amount: remaining }])}
+              onClick={() =>
+                setPayments((prev) => [...prev, { method: "cash", amount: remaining }])
+              }
             >
               Add Payment
             </Button>
@@ -2638,7 +2814,10 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
           <DialogTitle>Receipt</DialogTitle>
           <DialogDescription>Print or download the completed order receipt.</DialogDescription>
         </DialogHeader>
-        <div className="receipt-print bg-white text-black p-4 rounded text-sm font-mono" id="receipt-print">
+        <div
+          className="receipt-print bg-white text-black p-4 rounded text-sm font-mono"
+          id="receipt-print"
+        >
           <div className="text-center">
             <img src={logo} alt="" width={50} height={50} className="mx-auto" />
             <div className="font-bold">JUNGLE PEPPER</div>
@@ -2737,7 +2916,10 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => printThermalDocument(buildReceiptHtml(receipt), "Receipt", copies)}>
+            <Button
+              variant="ghost"
+              onClick={() => printThermalDocument(buildReceiptHtml(receipt), "Receipt", copies)}
+            >
               <Printer className="h-4 w-4 mr-1" />
               Print
             </Button>

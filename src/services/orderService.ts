@@ -78,6 +78,16 @@ export const orderService = {
     return data;
   },
 
+  async createSavedBill(payload: WaiterOrderPayload, branchId: string) {
+    const { data, error } = await (supabase as any).rpc("create_saved_bill", {
+      _payload: payload as unknown as Json,
+      _branch_id: branchId,
+    });
+    raiseIfError(error, "Could not save bill");
+    if (!data) throw new Error("Supabase did not return an order id");
+    return data;
+  },
+
   async createWebsiteOrder(
     payload: WebsiteOrderPayload,
     branchId: string,
@@ -160,7 +170,13 @@ export const orderService = {
         `
         *,
         menu_items(name, categories(name)),
-        order_item_modifiers(modifiers(name, price_delta))
+        order_item_modifiers(modifier_id, modifiers(name, price_delta)),
+        order_item_omissions(recipe_id, item_id, qty, items(name, units(code))),
+        order_item_packaging(
+          order_item_id, packaging_option_id, item_id, qty, unit_price,
+          packaging_options(name),
+          items(name)
+        )
       `,
       )
       .in("order_id", orderIds);
