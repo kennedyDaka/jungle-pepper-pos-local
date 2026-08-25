@@ -698,6 +698,15 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
       "Expected Deposits": paymentTotal(input.paymentTotals, dbMethods),
       "Statement Deposited": 0,
       "Delayed Deposits": 0,
+      "OPEN": null,
+      "IN/PURCHASE": null,
+      "kg/IN": null,
+      "SALES": null,
+      "UNCOOK": null,
+      "COOK kg": null,
+      "PRODUCED": null,
+      "WASTE": null,
+      "CLOSE": null,
     });
   });
 
@@ -705,6 +714,9 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
     rows.push({
       Section: row.section,
       Item: row.label,
+      "Expected Deposits": null,
+      "Statement Deposited": null,
+      "Delayed Deposits": null,
       "OPEN": stockCell(row.opening),
       "IN/PURCHASE": stockCell(row.purchaseKg),
       "kg/IN": stockCell(row.purchases),
@@ -1121,6 +1133,14 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     cell.border = BORDER_THIN;
   });
   stockHeader.height = 30;
+
+  // Sub-header row (PURCHASE under IN/PURCHASE, kg under UNCOOK)
+  const subHeader = ws.addRow(["", "", "PURCHASE", "", "", "kg", "", "", "", ""]);
+  subHeader.eachCell({ includeEmpty: true }, (cell) => {
+    cell.font = { bold: true, size: 9, italic: true };
+    cell.border = BORDER_THIN;
+    cell.alignment = { horizontal: "center" };
+  });
 
   let currentSection = "";
   flashStockRows(input).forEach((stockRow) => {

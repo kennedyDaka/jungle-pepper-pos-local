@@ -404,6 +404,7 @@ function toProductionLine(line: ProductionLineWithRelations) {
     qty: Number(line.qty),
     qty_count: line.qty_count === null ? null : Number(line.qty_count),
     weight_kg: line.weight_kg === null ? null : Number(line.weight_kg),
+    cook_kg: (line as any).cook_kg === null || (line as any).cook_kg === undefined ? null : Number((line as any).cook_kg),
     unit_cost: line.unit_cost === null ? null : Number(line.unit_cost),
     created_at: line.created_at,
     items: line.items
