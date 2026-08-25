@@ -36,7 +36,7 @@ import {
   Minus,
 } from "lucide-react";
 
-export const Route = createFileRoute("/_app/reconciliation" as never)({
+export const Route = createFileRoute("/_app/reconciliation")({
   component: ReconciliationPage,
 });
 

@@ -21,7 +21,7 @@ import { supabase } from "@/services/repositories/supabaseClient";
 import { toast } from "sonner";
 import { Save, Check, AlertTriangle, RotateCcw } from "lucide-react";
 
-export const Route = createFileRoute("/_app/stock-count" as never)({
+export const Route = createFileRoute("/_app/stock-count")({
   component: StockCountPage,
 });
 
