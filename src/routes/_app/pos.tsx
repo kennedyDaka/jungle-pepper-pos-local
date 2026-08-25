@@ -42,6 +42,13 @@ import {
 import { MWK, fmtDateTime, fmtQty, paymentMethodLabel } from "@/lib/format";
 import { missingOrderNumbersSummary } from "@/lib/orderSequence";
 import { VAT_RATE, vatBreakdownFromInclusive } from "@/lib/vat";
+import { useAuth } from "@/lib/auth";
+import { mraEisConfigured, type MraEisSubmitResult } from "@/lib/mraEis";
+import {
+  submitPaidCartToMra,
+  submitPaidPendingOrderToMra,
+  syncMenuToMra,
+} from "@/services/mraEisService";
 import { authService } from "@/services/authService";
 import { menuService } from "@/services/menuService";
 import {
@@ -417,6 +424,7 @@ function PendingOrdersDialog({
   onEditOrder: (order: any) => void;
 }) {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const branchMemberships = useQuery({
     queryKey: ["auth", "branch-memberships"],
     queryFn: async () => {
@@ -485,10 +493,19 @@ function PendingOrdersDialog({
     }) => {
       return orderService.processPayment(order.id, payments, { physicalOrderNo, saleAt });
     },
-    onSuccess: (_, { order }) => {
+    onSuccess: (_, { order, physicalOrderNo, saleAt, payments }) => {
       toast.success(`Order ${order.physical_order_no || order.id.slice(0, 8).toUpperCase()} paid`);
       onSelectOrder(order);
       setPendingPayOrder(null);
+      if (mraEisConfigured()) {
+        void submitPaidPendingOrderToMra(order, {
+          physicalOrderNo,
+          saleAt,
+          payments,
+          discount: Number(order.discount) || 0,
+          cashierId: user?.id ?? null,
+        }).then((r) => mraSubmitFeedback(r, physicalOrderNo.trim() || "order"));
+      }
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -882,8 +899,34 @@ function isPackagingSaleLine(
   return line.kind === "packaging" && Boolean(line.packaging_option_id) && Boolean(line.item_id);
 }
 
+function mraSubmitFeedback(result: MraEisSubmitResult, invoice: string) {
+  if (result.ok) {
+    if (result.queued)
+      toast.info(`MRA: invoice ${invoice} queued for sync (${result.reason ?? "offline"})`);
+    else if (result.duplicate) toast.info(`MRA: invoice ${invoice} already submitted`);
+    else
+      toast.success(
+        `MRA: invoice ${invoice} submitted${result.mra_invoice_number ? ` as ${result.mra_invoice_number}` : ""}`,
+      );
+    return;
+  }
+  if (result.errorCode === "unmapped_compliance_sku") {
+    const skus = (result.details as any)?.unmapped_skus ?? [];
+    const shown = Array.isArray(skus) ? skus.slice(0, 3).join(", ") : "";
+    toast.warning(
+      `MRA: invoice ${invoice} not submitted - unmapped items${shown ? `: ${shown}${skus.length > 3 ? "..." : ""}` : ""}. Map them in the ops console catalogue.`,
+      { duration: 8000 },
+    );
+    return;
+  }
+  if (result.errorCode !== "skipped" && result.errorCode !== "not_configured") {
+    toast.error(`MRA: ${result.message}`, { duration: 8000 });
+  }
+}
+
 function PosPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -940,6 +983,15 @@ function PosPage() {
     queryKey: ["pos", "items"],
     queryFn: () => menuService.listMenuItems({ activeOnly: true }),
   });
+
+  const menuSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!mraEisConfigured() || menuSyncedRef.current || !items.data?.length) return;
+    menuSyncedRef.current = true;
+    void syncMenuToMra(items.data as any).then((r) => {
+      if (!r.ok) console.error("[MRA] menu sync failed:", r.message);
+    });
+  }, [items.data]);
 
   const mods = useQuery({
     queryKey: ["pos", "mods"],
@@ -1195,6 +1247,16 @@ function PosPage() {
       toast.success(isStaffMeal ? "Staff meal recorded" : "Order completed");
       qc.invalidateQueries({ queryKey: ["dash"] });
       qc.invalidateQueries({ queryKey: ["pos", "sales-history"] });
+      if (mraEisConfigured()) {
+        void submitPaidCartToMra(cart, {
+          physicalOrderNo: request.physicalOrderNo.trim(),
+          saleAt: request.saleAt,
+          payments: request.payments,
+          discount: isStaffMeal ? subtotal : discount,
+          isStaffMeal,
+          cashierId: user?.id ?? null,
+        }).then((r) => mraSubmitFeedback(r, request.physicalOrderNo.trim() || "order"));
+      }
     },
     onError: (e: any) => toast.error(e.message),
   });

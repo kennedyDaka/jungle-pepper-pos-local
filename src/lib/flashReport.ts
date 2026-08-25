@@ -1111,7 +1111,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   ws.addRow([]);
 
   const s2Title = ws.addRow(["2. HIGH-VALUE PHYSICAL STOCK COUNT"]);
-  s2Title.getCell(1).font = { bold: true, size: 12, underline: "single" };
+  s2Title.getCell(1).font = { bold: true, size: 12 };
   ws.addRow([]);
 
   const stockHeader = ws.addRow([
@@ -1126,29 +1126,26 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     "WASTE",
     "CLOSE",
   ]);
+  const STOCK_BOLD: Partial<ExcelJS.Font> = { bold: true, size: 11 };
   stockHeader.eachCell({ includeEmpty: true }, (cell) => {
-    cell.fill = HEADER_FILL;
-    cell.font = HEADER_FONT;
-    cell.alignment = { vertical: "middle", wrapText: true };
-    cell.border = BORDER_THIN;
+    cell.font = STOCK_BOLD;
   });
-  stockHeader.height = 30;
 
   // Sub-header row (PURCHASE under IN/PURCHASE, kg under UNCOOK)
-  const subHeader = ws.addRow(["", "", "PURCHASE", "", "", "kg", "", "", "", ""]);
+  const subHeader = ws.addRow([null, null, "PURCHASE", null, null, "kg", null, null, null, null]);
   subHeader.eachCell({ includeEmpty: true }, (cell) => {
-    cell.font = { bold: true, size: 9, italic: true };
-    cell.border = BORDER_THIN;
-    cell.alignment = { horizontal: "center" };
+    cell.font = STOCK_BOLD;
   });
 
   let currentSection = "";
   flashStockRows(input).forEach((stockRow) => {
     if (stockRow.section !== currentSection) {
       currentSection = stockRow.section;
-      const sectionRow = ws.addRow([currentSection]);
-      sectionRow.getCell(1).font = SECTION_FONT;
-      sectionRow.height = 20;
+      const sectionRow = ws.addRow([currentSection, null, null, null, null, null, null, null, null, null]);
+      sectionRow.eachCell({ includeEmpty: true }, (cell) => {
+        cell.font = STOCK_BOLD;
+        cell.alignment = { horizontal: "center" };
+      });
     }
 
     const r = ws.addRow([
@@ -1167,9 +1164,13 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     const rowNum = r.number;
     r.getCell(10).value = { formula: `SUM(B${rowNum}+C${rowNum}+D${rowNum}+H${rowNum}-E${rowNum})` };
 
+    // No borders on stock data rows — matching manual Excel
     for (let c = 1; c <= 10; c++) {
-      r.getCell(c).border = BORDER_THIN;
+      r.getCell(c).font = { size: 11 };
     }
+    [2, 3, 4, 5, 6, 7, 8, 9, 10].forEach((c) => {
+      r.getCell(c).alignment = { horizontal: "center" };
+    });
 
     const FMT_INT = "#,##0";
     const FMT_DEC = "#,##0.###";

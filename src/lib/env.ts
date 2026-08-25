@@ -3,6 +3,10 @@ export const env = {
   enableSupabase: import.meta.env.VITE_ENABLE_SUPABASE !== "false",
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? "",
   supabasePublishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "",
+  mraEisEnabled: import.meta.env.VITE_MRA_EIS_ENABLED === "true",
+  mraEisUrl: import.meta.env.VITE_MRA_EIS_URL ?? "",
+  mraEisToken: import.meta.env.VITE_MRA_EIS_TOKEN ?? "",
+  mraEisSyncMenu: import.meta.env.VITE_MRA_EIS_SYNC_MENU === "true",
 } as const;
 
 export function assertSupabaseEnv() {

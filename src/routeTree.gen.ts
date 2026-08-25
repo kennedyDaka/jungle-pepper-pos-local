@@ -20,8 +20,10 @@ import { Route as WebsiteReservationsRouteImport } from './routes/website/reserv
 import { Route as WebsiteMenuRouteImport } from './routes/website/menu'
 import { Route as WebsiteContactRouteImport } from './routes/website/contact'
 import { Route as WebsiteAboutRouteImport } from './routes/website/about'
+import { Route as AppStockCountRouteImport } from './routes/_app/stock-count'
 import { Route as AppReservationsRouteImport } from './routes/_app/reservations'
 import { Route as AppReportsRouteImport } from './routes/_app/reports'
+import { Route as AppReconciliationRouteImport } from './routes/_app/reconciliation'
 import { Route as AppRecipesRouteImport } from './routes/_app/recipes'
 import { Route as AppProductionRouteImport } from './routes/_app/production'
 import { Route as AppPosWaiterRouteImport } from './routes/_app/pos-waiter'
@@ -33,8 +35,6 @@ import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as WebsiteMenuSlugRouteImport } from './routes/website/menu.$slug'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
 import { Route as AppAdminTablesRouteImport } from './routes/_app/admin.tables'
-import { Route as AppStockCountRouteImport } from './routes/_app/stock-count'
-import { Route as AppReconciliationRouteImport } from './routes/_app/reconciliation'
 
 const WebsiteRoute = WebsiteRouteImport.update({
   id: '/website',
@@ -90,6 +90,11 @@ const WebsiteAboutRoute = WebsiteAboutRouteImport.update({
   path: '/about',
   getParentRoute: () => WebsiteRoute,
 } as any)
+const AppStockCountRoute = AppStockCountRouteImport.update({
+  id: '/stock-count',
+  path: '/stock-count',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppReservationsRoute = AppReservationsRouteImport.update({
   id: '/reservations',
   path: '/reservations',
@@ -98,6 +103,11 @@ const AppReservationsRoute = AppReservationsRouteImport.update({
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReconciliationRoute = AppReconciliationRouteImport.update({
+  id: '/reconciliation',
+  path: '/reconciliation',
   getParentRoute: () => AppRoute,
 } as any)
 const AppRecipesRoute = AppRecipesRouteImport.update({
@@ -155,16 +165,6 @@ const AppAdminTablesRoute = AppAdminTablesRouteImport.update({
   path: '/admin/tables',
   getParentRoute: () => AppRoute,
 } as any)
-const AppStockCountRoute = AppStockCountRouteImport.update({
-  id: '/stock-count',
-  path: '/stock-count',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReconciliationRoute = AppReconciliationRouteImport.update({
-  id: '/reconciliation',
-  path: '/reconciliation',
-  getParentRoute: () => AppRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -180,8 +180,10 @@ export interface FileRoutesByFullPath {
   '/pos-waiter': typeof AppPosWaiterRoute
   '/production': typeof AppProductionRoute
   '/recipes': typeof AppRecipesRoute
+  '/reconciliation': typeof AppReconciliationRoute
   '/reports': typeof AppReportsRoute
   '/reservations': typeof AppReservationsRoute
+  '/stock-count': typeof AppStockCountRoute
   '/website/about': typeof WebsiteAboutRoute
   '/website/contact': typeof WebsiteContactRoute
   '/website/menu': typeof WebsiteMenuRouteWithChildren
@@ -189,8 +191,6 @@ export interface FileRoutesByFullPath {
   '/website/': typeof WebsiteIndexRoute
   '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
-  '/stock-count': typeof AppStockCountRoute
-  '/reconciliation': typeof AppReconciliationRoute
   '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRoutesByTo {
@@ -206,8 +206,10 @@ export interface FileRoutesByTo {
   '/pos-waiter': typeof AppPosWaiterRoute
   '/production': typeof AppProductionRoute
   '/recipes': typeof AppRecipesRoute
+  '/reconciliation': typeof AppReconciliationRoute
   '/reports': typeof AppReportsRoute
   '/reservations': typeof AppReservationsRoute
+  '/stock-count': typeof AppStockCountRoute
   '/website/about': typeof WebsiteAboutRoute
   '/website/contact': typeof WebsiteContactRoute
   '/website/menu': typeof WebsiteMenuRouteWithChildren
@@ -215,8 +217,6 @@ export interface FileRoutesByTo {
   '/website': typeof WebsiteIndexRoute
   '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
-  '/stock-count': typeof AppStockCountRoute
-  '/reconciliation': typeof AppReconciliationRoute
   '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRoutesById {
@@ -235,8 +235,10 @@ export interface FileRoutesById {
   '/_app/pos-waiter': typeof AppPosWaiterRoute
   '/_app/production': typeof AppProductionRoute
   '/_app/recipes': typeof AppRecipesRoute
+  '/_app/reconciliation': typeof AppReconciliationRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/reservations': typeof AppReservationsRoute
+  '/_app/stock-count': typeof AppStockCountRoute
   '/website/about': typeof WebsiteAboutRoute
   '/website/contact': typeof WebsiteContactRoute
   '/website/menu': typeof WebsiteMenuRouteWithChildren
@@ -244,8 +246,6 @@ export interface FileRoutesById {
   '/website/': typeof WebsiteIndexRoute
   '/_app/admin/tables': typeof AppAdminTablesRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
-  '/_app/stock-count': typeof AppStockCountRoute
-  '/_app/reconciliation': typeof AppReconciliationRoute
   '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRouteTypes {
@@ -264,8 +264,10 @@ export interface FileRouteTypes {
     | '/pos-waiter'
     | '/production'
     | '/recipes'
+    | '/reconciliation'
     | '/reports'
     | '/reservations'
+    | '/stock-count'
     | '/website/about'
     | '/website/contact'
     | '/website/menu'
@@ -273,8 +275,6 @@ export interface FileRouteTypes {
     | '/website/'
     | '/admin/tables'
     | '/admin/users'
-    | '/stock-count'
-    | '/reconciliation'
     | '/website/menu/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -290,8 +290,10 @@ export interface FileRouteTypes {
     | '/pos-waiter'
     | '/production'
     | '/recipes'
+    | '/reconciliation'
     | '/reports'
     | '/reservations'
+    | '/stock-count'
     | '/website/about'
     | '/website/contact'
     | '/website/menu'
@@ -299,8 +301,6 @@ export interface FileRouteTypes {
     | '/website'
     | '/admin/tables'
     | '/admin/users'
-    | '/stock-count'
-    | '/reconciliation'
     | '/website/menu/$slug'
   id:
     | '__root__'
@@ -318,8 +318,10 @@ export interface FileRouteTypes {
     | '/_app/pos-waiter'
     | '/_app/production'
     | '/_app/recipes'
+    | '/_app/reconciliation'
     | '/_app/reports'
     | '/_app/reservations'
+    | '/_app/stock-count'
     | '/website/about'
     | '/website/contact'
     | '/website/menu'
@@ -327,8 +329,6 @@ export interface FileRouteTypes {
     | '/website/'
     | '/_app/admin/tables'
     | '/_app/admin/users'
-    | '/_app/stock-count'
-    | '/_app/reconciliation'
     | '/website/menu/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -420,6 +420,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WebsiteAboutRouteImport
       parentRoute: typeof WebsiteRoute
     }
+    '/_app/stock-count': {
+      id: '/_app/stock-count'
+      path: '/stock-count'
+      fullPath: '/stock-count'
+      preLoaderRoute: typeof AppStockCountRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/reservations': {
       id: '/_app/reservations'
       path: '/reservations'
@@ -432,6 +439,13 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reconciliation': {
+      id: '/_app/reconciliation'
+      path: '/reconciliation'
+      fullPath: '/reconciliation'
+      preLoaderRoute: typeof AppReconciliationRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/recipes': {
@@ -511,20 +525,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminTablesRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/stock-count': {
-      id: '/_app/stock-count'
-      path: '/stock-count'
-      fullPath: '/stock-count'
-      preLoaderRoute: typeof AppStockCountRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/reconciliation': {
-      id: '/_app/reconciliation'
-      path: '/reconciliation'
-      fullPath: '/reconciliation'
-      preLoaderRoute: typeof AppReconciliationRouteImport
-      parentRoute: typeof AppRoute
-    }
   }
 }
 
@@ -537,12 +537,12 @@ interface AppRouteChildren {
   AppPosWaiterRoute: typeof AppPosWaiterRoute
   AppProductionRoute: typeof AppProductionRoute
   AppRecipesRoute: typeof AppRecipesRoute
+  AppReconciliationRoute: typeof AppReconciliationRoute
   AppReportsRoute: typeof AppReportsRoute
   AppReservationsRoute: typeof AppReservationsRoute
+  AppStockCountRoute: typeof AppStockCountRoute
   AppAdminTablesRoute: typeof AppAdminTablesRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
-  AppStockCountRoute: typeof AppStockCountRoute
-  AppReconciliationRoute: typeof AppReconciliationRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -554,12 +554,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppPosWaiterRoute: AppPosWaiterRoute,
   AppProductionRoute: AppProductionRoute,
   AppRecipesRoute: AppRecipesRoute,
+  AppReconciliationRoute: AppReconciliationRoute,
   AppReportsRoute: AppReportsRoute,
   AppReservationsRoute: AppReservationsRoute,
+  AppStockCountRoute: AppStockCountRoute,
   AppAdminTablesRoute: AppAdminTablesRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
-  AppStockCountRoute: AppStockCountRoute,
-  AppReconciliationRoute: AppReconciliationRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
