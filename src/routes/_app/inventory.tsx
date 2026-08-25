@@ -251,7 +251,8 @@ function ItemsTab() {
                       }
                     >
                       Issue
-                    </Button>                    <Button size="sm" variant="ghost" onClick={() => setPurchaseOpen(i)}>
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPurchaseOpen(i)}>
                       <Plus className="h-3 w-3 mr-1" />
                       Purchases
                     </Button>
