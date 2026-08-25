@@ -92,28 +92,28 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
   [
     "CHICKEN",
     [
-      { label: "CHICKEN FRANGO FULL 1.2KG", aliases: ["FRANGO FULL (1.2KG)"] },
+      { label: "FRANGO FULL 1.2kg", aliases: ["CHICKEN FRANGO FULL 1.2KG", "FRANGO FULL (1.2KG)"] },
       { label: "FRANGO HALF (600g)", aliases: ["FRANGO HALF (600G)"] },
-      { label: "FILLET TRAYS (400/500g)", aliases: ["FILLET TRAYS (500G)"] },
-      { label: "CHICK PIZZA PKTS (80g)", aliases: ["PIZZA PKTS (80G)"] },
-      { label: "CHICK BURGERS/BITOQUES (120g)", aliases: ["BURGER (120G)"] },
+      { label: "FILLET TRAYS (500G)", aliases: ["FILLET TRAYS (400/500g)"] },
+      { label: "PIZZA PKTS (80G)", aliases: ["CHICK PIZZA PKTS (80G)", "PIZZA PKTS (80G)"] },
+      { label: "BURGER (120g)", aliases: ["CHICK BURGERS/BITOQUES (120g)", "BURGER (120G)"] },
     ],
   ],
   [
     "RUMP",
     [
-      { label: "RUMP SLICED BULK (1Kg)", aliases: ["RUMP SLICED (1KG)", "SLICED (1KG)"] },
-      { label: "PREGOS/BITOQUES (120g)", aliases: ["SLICED 120G"] },
+      { label: "SLICED (1kg)", aliases: ["RUMP SLICED BULK (1Kg)", "RUMP SLICED (1KG)"] },
+      { label: "PREGOS/BITOQUES (80)", aliases: ["PREGOS/BITOQUES (120g)", "SLICED 120G"] },
     ],
   ],
   [
     "MINCE",
     [
-      { label: "MINCE BULK (1Kg)", aliases: ["MINCE BULK (1KG)", "BULK (1KG)"] },
-      { label: "MINCE BURGERS (120g)", aliases: ["MINCE BURGERS (120G)", "BURGERS (120G)"] },
+      { label: "BULK (1kg)", aliases: ["MINCE BULK (1Kg)", "MINCE BULK (1KG)", "BULK (1KG)"] },
+      { label: "BURGERS (120g)", aliases: ["MINCE BURGERS (120g)", "MINCE BURGERS (120G)"] },
       {
-        label: "MINCE PIZZA PKTS & BOLOG (80g)",
-        aliases: ["MINCE PIZZA PKTS & BOLOG (80G)", "PIZZA PKTS & BOLOG (80G)"],
+        label: "PIZZA PKTS & BOLOG (80g)",
+        aliases: ["MINCE PIZZA PKTS & BOLOG (80g)", "MINCE PIZZA PKTS & BOLOG (80G)"],
       },
     ],
   ],
@@ -140,7 +140,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
   [
     "FLOUR / DOUGH",
     [
-      { label: "FLOUR BAG (Kg)", aliases: ["FLOUR BAG"] },
+      { label: "FLOUR BAG (kg)", aliases: ["FLOUR BAG"] },
       { label: "DOUGH PIZZA BASES (Thin)", aliases: ["DOUGH PIZZA BASES THIN"] },
       { label: "DOUGH PIZZA BASES (Thick)", aliases: ["DOUGH PIZZA BASES THICK"] },
       { label: "MAIZE FLOUR (kg)", aliases: ["MAIZE FLOUR"] },
@@ -1141,8 +1141,11 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       stockCell(stockRow.cookKg),
       stockCell(stockRow.produced),
       stockCell(stockRow.waste),
-      stockCell(stockRow.closing),
+      null, // CLOSE formula added below
     ]);
+    // CLOSE = OPEN + IN/PURCHASE + kg/IN + PRODUCED - SALES
+    const rowNum = r.number;
+    r.getCell(10).value = { formula: `SUM(B${rowNum}+C${rowNum}+D${rowNum}+H${rowNum}-E${rowNum})` };
 
     for (let c = 1; c <= 10; c++) {
       r.getCell(c).border = BORDER_THIN;
