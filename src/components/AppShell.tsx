@@ -12,16 +12,11 @@ const NAV: { to: string; label: string; roles: Role[] }[] = [
   { to: "/pos", label: "POS", roles: ["admin", "cashier"] },
   { to: "/waiter", label: "Waiter", roles: ["admin", "cashier"] },
   { to: "/inventory", label: "Inventory", roles: ["admin", "storekeeper"] },
-  { to: "/production", label: "Production", roles: ["admin", "storekeeper"] },
   { to: "/expenses", label: "Expenses", roles: ["admin", "storekeeper"] },
   { to: "/recipes", label: "Recipes", roles: ["admin"] },
-  { to: "/stock-count", label: "Stock Count", roles: ["admin", "storekeeper"] },
-  { to: "/reconciliation", label: "Reconciliation", roles: ["admin", "storekeeper"] },
   { to: "/menu", label: "Menu", roles: ["admin"] },
-  { to: "/reservations", label: "Reservations", roles: ["admin", "cashier"] },
   { to: "/reports", label: "Reports", roles: ["admin", "storekeeper"] },
   { to: "/admin/users", label: "Users", roles: ["admin"] },
-  { to: "/admin/tables", label: "Tables", roles: ["admin"] },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
