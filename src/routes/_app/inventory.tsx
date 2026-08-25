@@ -147,6 +147,7 @@ function ItemsTab() {
     title: string;
     notePlaceholder: string;
   } | null>(null);
+  const [purchaseOpen, setPurchaseOpen] = useState<any | null>(null);
   const [producedOpen, setProducedOpen] = useState<any | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState<any | null>(null);
@@ -250,12 +251,11 @@ function ItemsTab() {
                       }
                     >
                       Issue
+                    </Button>                    <Button size="sm" variant="ghost" onClick={() => setPurchaseOpen(i)}>
+                      <Plus className="h-3 w-3 mr-1" />
+                      Purchases
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setProducedOpen(i)}
-                    >
+                    <Button size="sm" variant="ghost" onClick={() => setProducedOpen(i)}>
                       <FlaskConical className="h-3 w-3 mr-1" />
                       Produced
                     </Button>
@@ -364,6 +364,15 @@ function ItemsTab() {
           }}
         />
       )}
+      {purchaseOpen && (
+        <PurchaseDialog
+          item={purchaseOpen}
+          onClose={() => setPurchaseOpen(null)}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: ["inv"] });
+          }}
+        />
+      )}
       {producedOpen && (
         <ProducedDialog
           onClose={() => setProducedOpen(null)}
@@ -400,6 +409,102 @@ function ItemsTab() {
 // ═══════════════════════════════════════════════════════════════
 // PRODUCED DIALOG (production batch — from inventory)
 // ═══════════════════════════════════════════════════════════════
+function PurchaseDialog({
+  item,
+  onClose,
+  onDone,
+}: {
+  item: any;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [qty, setQty] = useState<number>(0);
+  const [cost, setCost] = useState<number>(Number(item.avg_cost) || 0);
+  const [supplier, setSupplier] = useState(item.suppliers?.name ?? "");
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [note, setNote] = useState("");
+  const [createdAt, setCreatedAt] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (qty <= 0) {
+      toast.error("Enter a quantity greater than 0");
+      return;
+    }
+    if (cost <= 0) {
+      toast.error("Unit cost is required");
+      return;
+    }
+    setBusy(true);
+    try {
+      const noteParts = [note];
+      if (supplier) noteParts.unshift(`Supplier: ${supplier}`);
+      if (invoiceNo) noteParts.unshift(`Invoice: ${invoiceNo}`);
+      await inventoryService.applyStockMovementWithDate({
+        itemId: item.id,
+        type: "purchase_in",
+        qty,
+        unitCost: cost,
+        note: noteParts.filter(Boolean).join(" | "),
+        createdAt,
+      });
+      toast.success(`Purchased ${fmtQty(qty)} ${item.units?.code} of ${item.name}`);
+      onDone();
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message ?? "Could not record purchase");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Purchase — {item.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Quantity ({item.units?.code})</Label>
+            <Input type="number" step="0.001" value={qty || ""} placeholder="0" onChange={(e) => setQty(Number(e.target.value))} />
+          </div>
+          <div>
+            <Label>Unit cost (MWK) *</Label>
+            <Input type="number" step="0.01" value={cost} onChange={(e) => setCost(Number(e.target.value))} />
+          </div>
+          <div>
+            <Label>Supplier</Label>
+            <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Local Market" />
+          </div>
+          <div>
+            <Label>Invoice number</Label>
+            <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="e.g. INV-00123" />
+          </div>
+          <div>
+            <Label>Date</Label>
+            <Input type="date" value={createdAt} onChange={(e) => setCreatedAt(e.target.value)} />
+          </div>
+          <div>
+            <Label>Note</Label>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional notes" />
+          </div>
+          {qty > 0 && cost > 0 && (
+            <div className="rounded border border-border bg-secondary/30 px-3 py-2 text-sm">
+              Total: <span className="font-bold">{MWK(qty * cost)}</span>
+              ({fmtQty(qty)} × {MWK(cost)}/unit)
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} disabled={busy}>Save purchase</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProducedDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [inputs, setInputs] = useState<ProdLine[]>([blankProdLine()]);
   const [outputs, setOutputs] = useState<ProdLine[]>([blankProdLine()]);
