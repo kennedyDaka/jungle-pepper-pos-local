@@ -33,6 +33,8 @@ import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as WebsiteMenuSlugRouteImport } from './routes/website/menu.$slug'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
 import { Route as AppAdminTablesRouteImport } from './routes/_app/admin.tables'
+import { Route as AppStockCountRouteImport } from './routes/_app/stock-count'
+import { Route as AppReconciliationRouteImport } from './routes/_app/reconciliation'
 
 const WebsiteRoute = WebsiteRouteImport.update({
   id: '/website',
@@ -153,6 +155,16 @@ const AppAdminTablesRoute = AppAdminTablesRouteImport.update({
   path: '/admin/tables',
   getParentRoute: () => AppRoute,
 } as any)
+const AppStockCountRoute = AppStockCountRouteImport.update({
+  id: '/stock-count',
+  path: '/stock-count',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReconciliationRoute = AppReconciliationRouteImport.update({
+  id: '/reconciliation',
+  path: '/reconciliation',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -177,6 +189,8 @@ export interface FileRoutesByFullPath {
   '/website/': typeof WebsiteIndexRoute
   '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
+  '/stock-count': typeof AppStockCountRoute
+  '/reconciliation': typeof AppReconciliationRoute
   '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRoutesByTo {
@@ -201,6 +215,8 @@ export interface FileRoutesByTo {
   '/website': typeof WebsiteIndexRoute
   '/admin/tables': typeof AppAdminTablesRoute
   '/admin/users': typeof AppAdminUsersRoute
+  '/stock-count': typeof AppStockCountRoute
+  '/reconciliation': typeof AppReconciliationRoute
   '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRoutesById {
@@ -228,6 +244,8 @@ export interface FileRoutesById {
   '/website/': typeof WebsiteIndexRoute
   '/_app/admin/tables': typeof AppAdminTablesRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
+  '/_app/stock-count': typeof AppStockCountRoute
+  '/_app/reconciliation': typeof AppReconciliationRoute
   '/website/menu/$slug': typeof WebsiteMenuSlugRoute
 }
 export interface FileRouteTypes {
@@ -255,6 +273,8 @@ export interface FileRouteTypes {
     | '/website/'
     | '/admin/tables'
     | '/admin/users'
+    | '/stock-count'
+    | '/reconciliation'
     | '/website/menu/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -279,6 +299,8 @@ export interface FileRouteTypes {
     | '/website'
     | '/admin/tables'
     | '/admin/users'
+    | '/stock-count'
+    | '/reconciliation'
     | '/website/menu/$slug'
   id:
     | '__root__'
@@ -305,6 +327,8 @@ export interface FileRouteTypes {
     | '/website/'
     | '/_app/admin/tables'
     | '/_app/admin/users'
+    | '/_app/stock-count'
+    | '/_app/reconciliation'
     | '/website/menu/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -487,6 +511,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminTablesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/stock-count': {
+      id: '/_app/stock-count'
+      path: '/stock-count'
+      fullPath: '/stock-count'
+      preLoaderRoute: typeof AppStockCountRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reconciliation': {
+      id: '/_app/reconciliation'
+      path: '/reconciliation'
+      fullPath: '/reconciliation'
+      preLoaderRoute: typeof AppReconciliationRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -503,6 +541,8 @@ interface AppRouteChildren {
   AppReservationsRoute: typeof AppReservationsRoute
   AppAdminTablesRoute: typeof AppAdminTablesRoute
   AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppStockCountRoute: typeof AppStockCountRoute
+  AppReconciliationRoute: typeof AppReconciliationRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -518,6 +558,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppReservationsRoute: AppReservationsRoute,
   AppAdminTablesRoute: AppAdminTablesRoute,
   AppAdminUsersRoute: AppAdminUsersRoute,
+  AppStockCountRoute: AppStockCountRoute,
+  AppReconciliationRoute: AppReconciliationRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

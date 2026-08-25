@@ -22,10 +22,10 @@ export const Route = createFileRoute("/_app/production")({
   component: ProductionPage,
 });
 
-type Line = { item_id: string; qty_count: number; weight_kg: number };
+type Line = { item_id: string; qty_count: number; weight_kg: number; cook_kg: number };
 type Waste = { item_id: string; qty: number; reason: string };
 
-const blankLine = (): Line => ({ item_id: "", qty_count: 0, weight_kg: 0 });
+const blankLine = (): Line => ({ item_id: "", qty_count: 0, weight_kg: 0, cook_kg: 0 });
 
 function ProductionPage() {
   const qc = useQueryClient();
@@ -69,6 +69,7 @@ function ProductionPage() {
           qty: effectiveQty(l),
           qty_count: Number(l.qty_count) || null,
           weight_kg: Number(l.weight_kg) || null,
+          cook_kg: Number(l.cook_kg) || null,
         }));
     const cleanIn = buildPayload(inputs);
     const cleanOut = buildPayload(outputs);
@@ -121,11 +122,13 @@ function ProductionPage() {
     idx,
     lines,
     setLines,
+    showCookKg,
   }: {
     l: Line;
     idx: number;
     lines: Line[];
     setLines: (x: Line[]) => void;
+    showCookKg?: boolean;
   }) => {
     const u = unitOf(l.item_id);
     const eff = effectiveQty(l);
@@ -182,6 +185,26 @@ function ProductionPage() {
             />
           </div>
         </div>
+        {showCookKg && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs">Cook kg (post-cooking weight)</Label>
+              <Input
+                type="number"
+                step="0.001"
+                value={l.cook_kg || ""}
+                placeholder="0.000"
+                onChange={(e) =>
+                  setLines(
+                    lines.map((x, i) =>
+                      i === idx ? { ...x, cook_kg: Number(e.target.value) } : x,
+                    ),
+                  )
+                }
+              />
+            </div>
+          </div>
+        )}
         {l.item_id && (
           <div className="text-xs text-muted-foreground">
             Stock will move by{" "}
@@ -200,17 +223,19 @@ function ProductionPage() {
     lines,
     setLines,
     hint,
+    showCookKg,
   }: {
     title: string;
     lines: Line[];
     setLines: (x: Line[]) => void;
     hint?: string;
+    showCookKg?: boolean;
   }) => (
     <div className="space-y-2">
       <h3 className="font-semibold">{title}</h3>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       {lines.map((l, idx) => (
-        <LineRow key={idx} l={l} idx={idx} lines={lines} setLines={setLines} />
+        <LineRow key={idx} l={l} idx={idx} lines={lines} setLines={setLines} showCookKg={showCookKg} />
       ))}
       <Button size="sm" variant="secondary" onClick={() => setLines([...lines, blankLine()])}>
         <Plus className="h-3 w-3 mr-1" />
@@ -240,6 +265,7 @@ function ProductionPage() {
             lines={outputs}
             setLines={setOutputs}
             hint="Cost auto-rolled from inputs"
+            showCookKg
           />
         </div>
         <div>

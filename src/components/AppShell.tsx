@@ -15,6 +15,8 @@ const NAV: { to: string; label: string; roles: Role[] }[] = [
   { to: "/production", label: "Production", roles: ["admin", "storekeeper"] },
   { to: "/expenses", label: "Expenses", roles: ["admin", "storekeeper"] },
   { to: "/recipes", label: "Recipes", roles: ["admin"] },
+  { to: "/stock-count", label: "Stock Count", roles: ["admin", "storekeeper"] },
+  { to: "/reconciliation", label: "Reconciliation", roles: ["admin", "storekeeper"] },
   { to: "/menu", label: "Menu", roles: ["admin"] },
   { to: "/reservations", label: "Reservations", roles: ["admin", "cashier"] },
   { to: "/reports", label: "Reports", roles: ["admin", "storekeeper"] },
@@ -43,6 +45,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={n.to}
                 to={n.to}
+                params={{} as any}
+                search={{} as any}
                 className="px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                 activeProps={{ className: "bg-primary text-primary-foreground hover:bg-primary" }}
                 activeOptions={{ exact: n.to === "/" }}

@@ -10,12 +10,14 @@ export interface ProductionPayload {
     qty: number;
     qty_count?: number | null;
     weight_kg?: number | null;
+    cook_kg?: number | null;
   }>;
   outputs: Array<{
     item_id: string;
     qty: number;
     qty_count?: number | null;
     weight_kg?: number | null;
+    cook_kg?: number | null;
   }>;
   wastage: Array<{ item_id: string; qty: number; reason: string }>;
   note?: string;

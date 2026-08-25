@@ -139,6 +139,8 @@ function SiteHeader() {
               <Link
                 key={to}
                 to={to}
+                params={{} as any}
+                search={{} as any}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-2.5 hover:bg-[color:var(--brand-yellow)]/30"
                 activeProps={{

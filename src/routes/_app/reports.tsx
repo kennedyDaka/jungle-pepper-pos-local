@@ -43,6 +43,8 @@ import {
 import { buildFlashReport, buildFlashReportRows } from "@/lib/flashReport";
 import { missingOrderNumbersSummary } from "@/lib/orderSequence";
 import { reportService } from "@/services/reportService";
+import { stockCountsService } from "@/services/stockCountsService";
+import type { FlashStockCount } from "@/lib/flashReport";
 import { Download, FileText, Printer, Search } from "lucide-react";
 
 export const Route = createFileRoute("/_app/reports")({ component: ReportsPage });
@@ -116,6 +118,52 @@ function ReportsPage() {
     queryFn: () => reportService.listExpenses(from, to, branchId),
   });
 
+  // Stock counts for flash report OPEN/CLOSE accuracy
+  const stockCountsRaw = useQuery({
+    queryKey: ["rep", "stock-counts", from, to, branchId],
+    queryFn: async () => {
+      // For stock counts we need a specific branch - use first active if "all"
+      let bid = branchId;
+      if (bid === "all") {
+        const branchList = await reportService.listBranches();
+        bid = branchList[0]?.id ?? "";
+      }
+      if (!bid) return [];
+      const counts = await stockCountsService.listCountsRange(bid, from, to);
+      return counts;
+    },
+    enabled: !!branchId,
+  });
+
+  // Transform stock counts into flash report format: opening and closing per item
+  const stockCountsForFlash = (() => {
+    const counts = stockCountsRaw.data ?? [];
+    if (counts.length === 0) return undefined;
+
+    const byItem = new Map<string, { opening: number; closing: number }>();
+    for (const count of counts) {
+      const existing = byItem.get(count.item_id);
+      if (!existing || count.count_date === from) {
+        byItem.set(count.item_id, {
+          opening: existing?.opening ?? Number(count.qty),
+          closing: Number(count.qty),
+        });
+      }
+      if (count.count_date === to) {
+        byItem.set(count.item_id, {
+          opening: existing?.opening ?? Number(count.qty),
+          closing: Number(count.qty),
+        });
+      }
+    }
+
+    return Array.from(byItem.entries()).map(([item_id, vals]) => ({
+      item_id,
+      opening: vals.opening,
+      closing: vals.closing,
+    }));
+  })();
+
   const totalSales = sumBy(sales.data ?? [], (order: any) => Number(order.total));
   const totalExpenses = sumBy(expenses.data ?? [], (expense: any) => Number(expense.amount));
   const movements = stockMovements.data ?? [];
@@ -132,6 +180,7 @@ function ReportsPage() {
     movements: stockMatrixMovements.data ?? [],
     ledgerMovements: stockMatrixLedgerMovements.data ?? [],
     sales: sales.data ?? [],
+    stockCounts: stockCountsForFlash,
   };
 
   const itemAgg = new Map<string, { qty: number; revenue: number }>();
@@ -1009,6 +1058,8 @@ function ReportsPage() {
         ledgerMovements: stockMatrixLedgerMovements.data ?? [],
         sales: sales.data ?? [],
         expenses: expenseLineRows(),
+        stockCounts: stockCountsForFlash,
+        productionBatches: productionRows,
       }),
     },
     {
@@ -1435,6 +1486,8 @@ function ReportsPage() {
       ledgerMovements: stockMatrixLedgerMovements.data ?? [],
       sales: sales.data ?? [],
       expenses: expenseLineRows(),
+      stockCounts: stockCountsForFlash,
+      productionBatches: productionRows,
     });
     void writeReportWorkbook(wb, `flash-report-${reportDateRange(from, to)}.xlsx`, { logo: false });
   };

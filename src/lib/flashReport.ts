@@ -38,6 +38,35 @@ const BORDER_THIN: Partial<ExcelJS.Borders> = {
   right: { style: "thin" },
 };
 
+export type FlashStockCount = {
+  item_id: string;
+  opening: number;
+  closing: number;
+};
+
+export type FlashProductionBatch = {
+  created_at: string;
+  production_inputs?: Array<{
+    item_id: string;
+    qty: number;
+    weight_kg?: number | null;
+    cook_kg?: number | null;
+    items?: { name?: string; id?: string } | null;
+  }>;
+  production_outputs?: Array<{
+    item_id: string;
+    qty: number;
+    weight_kg?: number | null;
+    cook_kg?: number | null;
+    items?: { name?: string; id?: string } | null;
+  }>;
+  production_wastage?: Array<{
+    item_id: string;
+    qty: number;
+    items?: { name?: string; id?: string } | null;
+  }>;
+};
+
 export type FlashReportInput = {
   reportDate: string;
   rangeLabel?: string;
@@ -48,6 +77,8 @@ export type FlashReportInput = {
   ledgerMovements: MatrixMovement[];
   sales: MatrixOrder[];
   expenses?: ReportRow[];
+  stockCounts?: FlashStockCount[];
+  productionBatches?: FlashProductionBatch[];
 };
 
 type FlashStockItem = {
@@ -87,13 +118,23 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     ],
   ],
   [
+    "CAMARAO",
+    [
+      { label: "CAMARAO BOX PKTS (Qty)", aliases: ["CAMARAO BOX PKTS"] },
+      { label: "CAMARAO HALF (pkt6)", aliases: ["CAMARAO HALF (PKT6)", "CAMARAO HALF"] },
+      { label: "CAMARAO PASTA PKTS (80g)", aliases: ["CAMARAO PASTA PKTS (80G)"] },
+    ],
+  ],
+  [
     "CHEESE",
     [
       { label: "BLOCK (Qty)", aliases: ["CHEESE BLOCK QTY", "BLOCK (QTY)"] },
-      { label: "BLOCK (Kg)", aliases: ["CHEESE BLOCK"] },
-      { label: "PIZZA CHEESE PKTS (120g)", aliases: ["CHEESE PIZZA PKTS (120G)"] },
-      { label: "CHEESE BURGER/LOAF (40g)", aliases: ["CHEESE BURGER PKTS (40G)"] },
+      { label: "BLOCK (kg)", aliases: ["CHEESE BLOCK"] },
+      { label: "CHEESE PIZZA PKTS (120g)", aliases: ["CHEESE PIZZA PKTS (120G)"] },
+      { label: "CHEESE BURGER PKTS (40g)", aliases: ["CHEESE BURGER PKTS (40G)"] },
       { label: "MILK (500g)", aliases: ["MILK"] },
+      { label: "CONDENSED MILK (390g)", aliases: ["CONDENSED MILK"] },
+      { label: "EGGS (single)", aliases: ["EGGS"] },
     ],
   ],
   [
@@ -102,6 +143,7 @@ const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
       { label: "FLOUR BAG (Kg)", aliases: ["FLOUR BAG"] },
       { label: "DOUGH PIZZA BASES (Thin)", aliases: ["DOUGH PIZZA BASES THIN"] },
       { label: "DOUGH PIZZA BASES (Thick)", aliases: ["DOUGH PIZZA BASES THICK"] },
+      { label: "MAIZE FLOUR (kg)", aliases: ["MAIZE FLOUR"] },
     ],
   ],
   [
@@ -473,7 +515,12 @@ type FlashStockRow = {
   isMenu?: boolean;
   opening: number;
   purchases: number;
+  purchaseKg: number;
   usage: number;
+  uncooked: number;
+  cookKg: number;
+  produced: number;
+  waste: number;
   closing: number;
 };
 
@@ -486,6 +533,7 @@ function resolveAndSummarize(
   ledgerMovements: MatrixMovement[],
   menuAliases: string[] | undefined,
   isMenu: boolean | undefined,
+  stockCounts?: FlashStockCount[],
 ): {
   item?: MatrixItem;
   opening: number;
@@ -524,18 +572,39 @@ function resolveAndSummarize(
   });
 
   const summary = summarizeStock(item, periodMovements, ledger);
+
+  // Use stock counts for opening/closing if available
+  let opening = summary.opening;
+  let closing = summary.closing;
+  if (stockCounts) {
+    const count = stockCounts.find((sc) => sc.item_id === item.id);
+    if (count) {
+      opening = count.opening;
+      closing = count.closing;
+    }
+  }
+
   return {
     item,
-    opening: summary.opening,
+    opening,
     purchases: summary.purchase,
     usage: summary.usage,
-    closing: summary.closing,
+    closing,
     soldAsItemId: item.id,
   };
 }
 
 function flashStockRows(input: FlashReportInput): FlashStockRow[] {
   const rows: FlashStockRow[] = [];
+  const batches = input.productionBatches ?? [];
+
+  // Build index for resolving item_id from name
+  const nameToItemId = new Map<string, string>();
+  input.items.forEach((item) => {
+    if (item.name && item.id) {
+      nameToItemId.set(normalizeName(item.name), item.id);
+    }
+  });
 
   STOCK_SECTIONS.forEach(([sectionName, stockItems]) => {
     stockItems.forEach(({ label, aliases, isMenu, menuAliases }) => {
@@ -548,7 +617,55 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         input.ledgerMovements,
         menuAliases,
         isMenu,
+        input.stockCounts,
       );
+
+      // Compute production data for this item
+      let uncooked = 0;
+      let cookKg = 0;
+      let produced = 0;
+      let waste = 0;
+      let purchaseKg = 0;
+
+      if (result.item) {
+        const itemId = result.item.id;
+        const itemKey = normalizeName(label);
+
+        // Resolve item ID
+        let resolvedId = itemId;
+        const found = nameToItemId.get(itemKey);
+        if (found) resolvedId = found;
+
+        // Production inputs consumed (UNCOOK kg)
+        batches.forEach((batch) => {
+          batch.production_inputs?.forEach((input) => {
+            const inputName = normalizeName(input.items?.name ?? "");
+            if (input.item_id === resolvedId || inputName === itemKey) {
+              uncooked += Number(input.qty) || 0;
+              cookKg += Number(input.cook_kg) || 0;
+            }
+          });
+          batch.production_outputs?.forEach((output) => {
+            const outputName = normalizeName(output.items?.name ?? "");
+            if (output.item_id === resolvedId || outputName === itemKey) {
+              produced += Number(output.qty) || 0;
+              if (Number(output.cook_kg)) cookKg += Number(output.cook_kg);
+            }
+          });
+          batch.production_wastage?.forEach((w) => {
+            const wasteName = normalizeName(w.items?.name ?? "");
+            if (w.item_id === resolvedId || wasteName === itemKey) {
+              waste += Number(w.qty) || 0;
+            }
+          });
+        });
+
+        // Purchase kg (sum of purchase_in movements)
+        const periodMovements = input.movements.filter((m) => m.item_id === resolvedId);
+        purchaseKg = periodMovements
+          .filter((m) => m.type === "purchase_in")
+          .reduce((sum, m) => sum + Math.max(0, Number(m.qty)), 0);
+      }
 
       rows.push({
         section: sectionName,
@@ -557,7 +674,12 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         isMenu,
         opening: result.opening,
         purchases: result.purchases,
+        purchaseKg,
         usage: result.usage,
+        uncooked,
+        cookKg,
+        produced,
+        waste,
         closing: result.closing,
       });
     });
@@ -583,11 +705,15 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
     rows.push({
       Section: row.section,
       Item: row.label,
-      "Open": stockCell(row.opening),
-      "Pur": stockCell(row.purchases),
-      "Sale": stockCell(row.usage),
-      "Close": stockCell(row.closing),
-      "sold as": row.soldAs,
+      "OPEN": stockCell(row.opening),
+      "IN/PURCHASE": stockCell(row.purchaseKg),
+      "kg/IN": stockCell(row.purchases),
+      "SALES": stockCell(row.usage),
+      "UNCOOK": stockCell(row.uncooked),
+      "COOK kg": stockCell(row.cookKg),
+      "PRODUCED": stockCell(row.produced),
+      "WASTE": stockCell(row.waste),
+      "CLOSE": stockCell(row.closing),
     });
   });
 
@@ -900,14 +1026,14 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
 
   ws.getColumn(1).width = 36;
   ws.getColumn(2).width = 10;
-  ws.getColumn(3).width = 10;
+  ws.getColumn(3).width = 14;
   ws.getColumn(4).width = 10;
   ws.getColumn(5).width = 10;
   ws.getColumn(6).width = 10;
-  ws.getColumn(7).width = 10;
+  ws.getColumn(7).width = 12;
   ws.getColumn(8).width = 10;
   ws.getColumn(9).width = 10;
-  ws.getColumn(10).width = 48;
+  ws.getColumn(10).width = 10;
 
   const titleRow = ws.addRow(["JUNGLE PEPPER - FLASH REPORT"]);
   titleRow.getCell(1).font = TITLE_FONT;
@@ -977,12 +1103,16 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   ws.addRow([]);
 
   const stockHeader = ws.addRow([
-    "Key Item",
-    "Open",
-    "Pur",
-    "Sale",
-    "Close",
-    "sold as",
+    "",
+    "OPEN",
+    "IN/PURCHASE",
+    "kg/IN",
+    "SALES",
+    "UNCOOK",
+    "COOK kg",
+    "PRODUCED",
+    "WASTE",
+    "CLOSE",
   ]);
   stockHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = HEADER_FILL;
@@ -1004,20 +1134,24 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     const r = ws.addRow([
       stockRow.label,
       stockCell(stockRow.opening),
+      stockCell(stockRow.purchaseKg),
       stockCell(stockRow.purchases),
       stockCell(stockRow.usage),
+      stockCell(stockRow.uncooked),
+      stockCell(stockRow.cookKg),
+      stockCell(stockRow.produced),
+      stockCell(stockRow.waste),
       stockCell(stockRow.closing),
-      stockRow.soldAs || null,
     ]);
 
-    for (let c = 1; c <= 6; c++) {
+    for (let c = 1; c <= 10; c++) {
       r.getCell(c).border = BORDER_THIN;
     }
 
     const FMT_INT = "#,##0";
     const FMT_DEC = "#,##0.###";
 
-    const numCols = [2, 3, 4, 5];
+    const numCols = [2, 3, 4, 5, 6, 7, 8, 9, 10];
     numCols.forEach((c) => {
       const val = r.getCell(c).value;
       r.getCell(c).numFmt = typeof val === "number" && val % 1 !== 0 ? FMT_DEC : FMT_INT;

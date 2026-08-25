@@ -58,6 +58,12 @@ type DrinkRowDef =
   | { kind: "section"; label: string }
   | { kind: "stock"; label: string; aliases: string[] };
 
+export type StockCountData = {
+  item_id: string;
+  opening: number;
+  closing: number;
+};
+
 export type StockMatrixInput = {
   date: string;
   generatedAt?: Date;
@@ -66,6 +72,7 @@ export type StockMatrixInput = {
   movements: MatrixMovement[];
   ledgerMovements: MatrixMovement[];
   sales: MatrixOrder[];
+  stockCounts?: StockCountData[];
 };
 
 export type StockSummary = {
@@ -433,6 +440,7 @@ export function summarizeStock(
   item: MatrixItem | undefined,
   periodMovements: MatrixMovement[],
   ledgerMovements: MatrixMovement[],
+  stockCounts?: StockCountData[],
 ): StockSummary {
   if (!item) {
     return {
@@ -447,9 +455,6 @@ export function summarizeStock(
   }
 
   const periodNet = periodMovements.reduce((sum, movement) => sum + numeric(movement.qty), 0);
-  const ledgerNet = ledgerMovements.reduce((sum, movement) => sum + numeric(movement.qty), 0);
-  const currentClosing = numeric(item.qty_on_hand);
-  const opening = currentClosing - ledgerNet;
   const purchase = periodMovements.reduce(
     (sum, movement) => sum + (numeric(movement.qty) > 0 ? numeric(movement.qty) : 0),
     0,
@@ -460,10 +465,32 @@ export function summarizeStock(
       0,
     ),
   );
-  const closing = opening + periodNet;
+
+  // Use stock counts for opening/closing if available (physical count = truth)
+  let opening: number;
+  let closing: number;
+  if (stockCounts) {
+    const count = stockCounts.find((sc) => sc.item_id === item.id);
+    if (count) {
+      opening = count.opening;
+      closing = count.closing;
+    } else {
+      // Fallback: derive from movements
+      const ledgerNet = ledgerMovements.reduce((sum, m) => sum + numeric(m.qty), 0);
+      const currentClosing = numeric(item.qty_on_hand);
+      opening = currentClosing - ledgerNet;
+      closing = opening + periodNet;
+    }
+  } else {
+    // No stock counts: derive from movements (legacy)
+    const ledgerNet = ledgerMovements.reduce((sum, m) => sum + numeric(m.qty), 0);
+    const currentClosing = numeric(item.qty_on_hand);
+    opening = currentClosing - ledgerNet;
+    closing = opening + periodNet;
+  }
 
   const expected = opening + purchase - usage;
-  const missing = expected - currentClosing;
+  const missing = expected - closing;
 
   return {
     item,
@@ -542,7 +569,7 @@ function foodRows(input: StockMatrixInput): ReportRow[] {
       return true;
     });
 
-    const summary = summarizeStock(item, periodMovements, ledger);
+    const summary = summarizeStock(item, periodMovements, ledger, input.stockCounts);
     return [
       {
         Sheet: "OPEN-CLOSE FOOD",
@@ -693,7 +720,7 @@ function addFoodSheet(workbook: ExcelJS.Workbook, input: StockMatrixInput) {
     }
 
     const item = resolveItem(input.items, exact, row.label, row.aliases);
-    const summary = summarizeStock(item, input.movements, input.ledgerMovements);
+    const summary = summarizeStock(item, input.movements, input.ledgerMovements, input.stockCounts);
     const dataRow = worksheet.addRow([
       row.label,
       metricCell(summary.opening),
@@ -732,7 +759,7 @@ function addDrinkSheet(workbook: ExcelJS.Workbook, input: StockMatrixInput) {
     }
 
     const item = resolveItem(input.items, exact, row.label, row.aliases);
-    const summary = summarizeStock(item, input.movements, input.ledgerMovements);
+    const summary = summarizeStock(item, input.movements, input.ledgerMovements, input.stockCounts);
     worksheet.addRow([
       row.label,
       beverageMetric(summary.opening, item),
@@ -929,7 +956,7 @@ export function buildStockSalesWorkbook(input: StockMatrixInput) {
       return true;
     });
 
-    const summary = summarizeStock(item, periodMovements, ledger);
+    const summary = summarizeStock(item, periodMovements, ledger, input.stockCounts);
     const breakdown = salesBreakdown(periodMovements, row.label, input.sales);
 
     if (breakdown.size === 0) return;
