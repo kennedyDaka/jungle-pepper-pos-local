@@ -30,6 +30,7 @@ export const Route = createFileRoute("/_app/menu")({ component: MenuAdmin });
 function MenuAdmin() {
   const qc = useQueryClient();
   const [open, setOpen] = useState<any | null>(null);
+  const [search, setSearch] = useState("");
   const cats = useQuery({
     queryKey: ["menu", "cats"],
     queryFn: async () => {
@@ -51,22 +52,30 @@ function MenuAdmin() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Menu</h1>
-        <Button
-          onClick={() =>
-            setOpen({
-              name: "",
-              price: 0,
-              category_id: cats.data?.[0]?.id,
-              description: "",
-              active: true,
-            })
-          }
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          New item
-        </Button>
+        <div className="flex gap-2">
+          <Input
+            placeholder="Search menu..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-xs"
+          />
+          <Button
+            onClick={() =>
+              setOpen({
+                name: "",
+                price: 0,
+                category_id: cats.data?.[0]?.id,
+                description: "",
+                active: true,
+              })
+            }
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New item
+          </Button>
+        </div>
       </div>
       {(cats.isLoading || items.isLoading) && <LoadingState label="Loading live menu..." />}
       {(cats.error || items.error) && (
@@ -84,7 +93,7 @@ function MenuAdmin() {
             </tr>
           </thead>
           <tbody>
-            {items.data?.map((m: any) => (
+            {items.data?.filter((m: any) => !search.trim() || m.name.toLowerCase().includes(search.toLowerCase()) || m.categories?.name?.toLowerCase().includes(search.toLowerCase())).map((m: any) => (
               <tr key={m.id} className="border-t border-border hover:bg-secondary/30">
                 <td className="p-2 font-medium">{m.name}</td>
                 <td className="p-2 text-muted-foreground">{m.categories?.name}</td>

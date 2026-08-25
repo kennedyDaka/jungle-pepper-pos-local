@@ -44,6 +44,7 @@ function RecipesPage() {
     },
   });
 
+  const [menuSearch, setMenuSearch] = useState("");
   const [newItem, setNewItem] = useState("");
   const [newQty, setNewQty] = useState(0);
   const [newTakeawayOnly, setNewTakeawayOnly] = useState(false);
@@ -75,8 +76,14 @@ function RecipesPage() {
       {dataError && <ErrorState error={dataError} label="Could not load recipes" />}
       <Card className="p-3 md:col-span-1 max-h-[80vh] overflow-auto">
         <h2 className="font-semibold mb-2">Menu items</h2>
+        <Input
+          placeholder="Search menu..."
+          value={menuSearch}
+          onChange={(e) => setMenuSearch(e.target.value)}
+          className="mb-2"
+        />
         <div className="space-y-1">
-          {menu.data?.map((m: any) => (
+          {menu.data?.filter((m: any) => !menuSearch.trim() || m.name.toLowerCase().includes(menuSearch.toLowerCase()) || m.categories?.name?.toLowerCase().includes(menuSearch.toLowerCase())).map((m: any) => (
             <button
               key={m.id}
               onClick={() => setSelected(m.id)}
