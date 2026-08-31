@@ -1016,111 +1016,98 @@ function ReportsPage() {
       });
   };
 
-  // Item Contribution Report: for each inventory item, show which menu items used it with order details
+  // Item Contribution Report — simple & easy to read
+  // For each ingredient: which dishes were sold using it, and how many times
   const itemContributionRows = (): ReportRow[] => {
     const rows: ReportRow[] = [];
     const allSaleMovements = movements.filter((m: any) => m.type === "sale");
 
     // Group sale movements by inventory item
-    const byItem = new Map<string, { itemName: string; unit: string; category: string; usages: Array<{ menuItem: string; qty: number; orderId: string; orderRef: string; date: string; category: string }> }>();
+    const byItem = new Map<
+      string,
+      {
+        itemName: string;
+        unit: string;
+        dishes: Map<string, { qty: number; count: number }>
+      }
+    >();
 
     for (const movement of allSaleMovements) {
       const itemId = movement.item_id;
       const itemName = movement.items?.name ?? "Unknown";
       const unit = movement.items?.units?.code ?? "";
-      const category = movement.items?.stock_type ?? "";
-      const menuItem = movement.menu_item_names ?? movement.destination ?? "POS Sale";
-      const menuCategory = movement.menu_categories ?? "";
+      const dish = movement.menu_item_names ?? movement.destination ?? "POS Sale";
       const qty = Math.abs(Number(movement.qty));
-      const orderId = movement.ref_id ?? "";
-      const orderRef = movement.invoice_no ?? (orderId ? orderId.slice(0, 8).toUpperCase() : "");
-      const date = fmtDateTime(movement.created_at);
 
       if (!byItem.has(itemId)) {
-        byItem.set(itemId, { itemName, unit, category, usages: [] });
+        byItem.set(itemId, { itemName, unit, dishes: new Map() });
       }
-      byItem.get(itemId)!.usages.push({ menuItem, qty, orderId, orderRef, date, category: menuCategory });
+      const entry = byItem.get(itemId)!;
+      const dishEntry = entry.dishes.get(dish);
+      if (dishEntry) {
+        dishEntry.qty += qty;
+        dishEntry.count += 1;
+      } else {
+        entry.dishes.set(dish, { qty, count: 1 });
+      }
     }
 
     // Also include inventory items with no sales
-    for (const item of (items.data ?? [])) {
+    for (const item of items.data ?? []) {
       if (!byItem.has(item.id)) {
         byItem.set(item.id, {
           itemName: item.name ?? "Unknown",
           unit: item.units?.code ?? "",
-          category: item.stock_type ?? "",
-          usages: [],
+          dishes: new Map(),
         });
       }
     }
 
-    // Sort items by total usage descending
-    const sortedItems = [...byItem.entries()].sort((a, b) => b[1].usages.length - a[1].usages.length);
+    // Sort items by total dishes sold descending
+    const sortedItems = [...byItem.entries()].sort(
+      (a, b) => b[1].dishes.size - a[1].dishes.size,
+    );
 
-    for (const [itemId, data] of sortedItems) {
-      // Aggregate by menu item
-      const menuItemMap = new Map<string, { totalQty: number; orderRefs: string[]; dates: string[]; category: string }>();
-      for (const usage of data.usages) {
-        const existing = menuItemMap.get(usage.menuItem);
-        if (existing) {
-          existing.totalQty += usage.qty;
-          if (usage.orderRef && !existing.orderRefs.includes(usage.orderRef)) {
-            existing.orderRefs.push(usage.orderRef);
-          }
-          if (!existing.dates.includes(usage.date)) {
-            existing.dates.push(usage.date);
-          }
-        } else {
-          menuItemMap.set(usage.menuItem, {
-            totalQty: usage.qty,
-            orderRefs: usage.orderRef ? [usage.orderRef] : [],
-            dates: [usage.date],
-            category: usage.category,
-          });
-        }
+    for (const [_, data] of sortedItems) {
+      // Sort dishes by qty descending
+      const sortedDishes = [...data.dishes.entries()].sort(
+        (a, b) => b[1].qty - a[1].qty,
+      );
+
+      if (sortedDishes.length === 0) {
+        rows.push({
+          INGREDIENT: data.itemName,
+          UNIT: data.unit,
+          DISH: "(No sales in this period)",
+          "QTY USED": 0,
+          "TIMES ORDERED": 0,
+        });
+        continue;
       }
 
-      if (menuItemMap.size === 0) {
-        // Item with no sales in this period
+      let first = true;
+      let totalQty = 0;
+      let totalCount = 0;
+      for (const [dish, agg] of sortedDishes) {
         rows.push({
-          "Inventory Item": data.itemName,
-          Unit: data.unit,
-          "Menu Item": "(No sales in period)",
-          "Menu Category": "",
-          "Qty Used": 0,
-          "Times Sold": 0,
-          "Order Numbers": "",
-          "Order Dates": "",
+          INGREDIENT: first ? data.itemName : "",
+          UNIT: first ? data.unit : "",
+          DISH: dish,
+          "QTY USED": agg.qty,
+          "TIMES ORDERED": agg.count,
         });
-      } else {
-        // Sort menu items by qty descending
-        const sortedMenuItems = [...menuItemMap.entries()].sort((a, b) => b[1].totalQty - a[1].totalQty);
-        let first = true;
-        for (const [menuItem, agg] of sortedMenuItems) {
-          rows.push({
-            "Inventory Item": first ? data.itemName : "",
-            Unit: first ? data.unit : "",
-            "Menu Item": menuItem,
-            "Menu Category": agg.category,
-            "Qty Used": agg.totalQty,
-            "Times Sold": agg.orderRefs.length,
-            "Order Numbers": agg.orderRefs.join(", "),
-            "Order Dates": agg.dates.join(", "),
-          });
-          first = false;
-        }
-        // Total row for this inventory item
-        rows.push({
-          "Inventory Item": "",
-          Unit: "",
-          "Menu Item": `TOTAL ${data.itemName}`,
-          "Menu Category": "",
-          "Qty Used": data.usages.reduce((sum, u) => sum + u.qty, 0),
-          "Times Sold": data.usages.length,
-          "Order Numbers": "",
-          "Order Dates": "",
-        });
+        first = false;
+        totalQty += agg.qty;
+        totalCount += agg.count;
       }
+      // Simple total row
+      rows.push({
+        INGREDIENT: "",
+        UNIT: "",
+        DISH: `TOTAL — ${data.itemName}`,
+        "QTY USED": totalQty,
+        "TIMES ORDERED": totalCount,
+      });
     }
 
     return rows;

@@ -825,123 +825,147 @@ function columnLetter(index: number) {
 
 function addItemContributionWorksheet(wb: ExcelJS.Workbook, input: FlashReportInput) {
   const ws = wb.addWorksheet("Item Contribution");
-  ws.getColumn(1).width = 36;
+  ws.getColumn(1).width = 38;
   ws.getColumn(2).width = 8;
-  ws.getColumn(3).width = 36;
-  ws.getColumn(4).width = 16;
-  ws.getColumn(5).width = 10;
-  ws.getColumn(6).width = 12;
-  ws.getColumn(7).width = 40;
-  ws.getColumn(8).width = 24;
+  ws.getColumn(3).width = 40;
+  ws.getColumn(4).width = 14;
+  ws.getColumn(5).width = 16;
 
-  const titleRow = ws.addRow(["JUNGLE PEPPER — ITEM CONTRIBUTION REPORT"]);
-  titleRow.getCell(1).font = TITLE_FONT;
-  ws.addRow([`Period: ${input.rangeLabel ?? input.reportDate}`]).getCell(1).font = SUBTITLE_FONT;
+  // Title
+  const titleRow = ws.addRow(["WHICH DISHES USE THIS INGREDIENT?"]);
+  titleRow.getCell(1).font = { bold: true, size: 16, name: "Arial" };
+  ws.addRow([`Report Period: ${input.rangeLabel ?? input.reportDate}`]).getCell(1).font = {
+    size: 11,
+    color: { argb: "FF666666" },
+    name: "Arial",
+  };
+  ws.addRow([
+    "Each section shows one ingredient and the dishes that used it.",
+  ]).getCell(1).font = { italic: true, size: 10, color: { argb: "FF999999" }, name: "Arial" };
   ws.addRow([]);
 
+  // Header
   const headerRow = ws.addRow([
-    "Inventory Item",
-    "Unit",
-    "Menu Item",
-    "Menu Category",
-    "Qty Used",
-    "Times Sold",
-    "Order Numbers",
-    "Order Dates",
+    "INGREDIENT",
+    "UNIT",
+    "DISH NAME",
+    "QTY USED",
+    "TIMES ORDERED",
   ]);
   headerRow.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = HEADER_FILL;
     cell.font = HEADER_FONT;
-    cell.alignment = { vertical: "middle", wrapText: true };
+    cell.alignment = { vertical: "middle" };
     cell.border = BORDER_THIN;
   });
-  headerRow.height = 22;
+  headerRow.height = 24;
+
+  const FMT_INT = "#,##0";
 
   // Group sale movements by inventory item
   const allSaleMovements = (input.movements ?? []).filter((m: any) => m.type === "sale");
-  const byItem = new Map<string, { itemName: string; unit: string; usages: Array<{ menuItem: string; qty: number; orderRef: string; date: string; category: string }> }>();
+  const byItem = new Map<
+    string,
+    { itemName: string; unit: string; dishes: Map<string, { qty: number; count: number }> }
+  >();
 
   for (const movement of allSaleMovements) {
     const itemId = String(movement.item_id ?? "");
     const itemName = movement.items?.name ?? "Unknown";
     const unit = movement.items?.units?.code ?? "";
-    const menuItem = String(movement.menu_item_names ?? movement.destination ?? "POS Sale");
-    const menuCategory = String(movement.menu_categories ?? "");
+    const dish = String(movement.menu_item_names ?? movement.destination ?? "POS Sale");
     const qty = Math.abs(Number(movement.qty));
-    const orderRef = String(movement.invoice_no ?? "");
-    const date = movement.created_at ? fmtDate(movement.created_at) : "";
 
     if (!byItem.has(itemId)) {
-      byItem.set(itemId, { itemName, unit, usages: [] });
+      byItem.set(itemId, { itemName, unit, dishes: new Map() });
     }
-    byItem.get(itemId)!.usages.push({ menuItem, qty, orderRef, date, category: menuCategory });
+    const entry = byItem.get(itemId)!;
+    const dishEntry = entry.dishes.get(dish);
+    if (dishEntry) {
+      dishEntry.qty += qty;
+      dishEntry.count += 1;
+    } else {
+      entry.dishes.set(dish, { qty, count: 1 });
+    }
   }
 
-  // Sort items by total usage descending
-  const sortedItems = [...byItem.entries()].sort((a, b) => b[1].usages.length - a[1].usages.length);
+  // Sort items by most dishes used
+  const sortedItems = [...byItem.entries()].sort(
+    (a, b) => b[1].dishes.size - a[1].dishes.size,
+  );
 
-  const FMT_INT = "#,##0";
-  const FMT_DEC = "#,##0.###";
+  const SECTION_FILL: ExcelJS.Fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFDCE6F1" }, // light blue background
+  };
 
-  for (const [itemId, data] of sortedItems) {
-    // Aggregate by menu item
-    const menuItemMap = new Map<string, { totalQty: number; orderRefs: string[]; dates: string[]; category: string }>();
-    for (const usage of data.usages) {
-      const existing = menuItemMap.get(usage.menuItem);
-      if (existing) {
-        existing.totalQty += usage.qty;
-        if (usage.orderRef && !existing.orderRefs.includes(usage.orderRef)) {
-          existing.orderRefs.push(usage.orderRef);
-        }
-        if (!existing.dates.includes(usage.date)) {
-          existing.dates.push(usage.date);
-        }
-      } else {
-        menuItemMap.set(usage.menuItem, {
-          totalQty: usage.qty,
-          orderRefs: usage.orderRef ? [usage.orderRef] : [],
-          dates: [usage.date],
-          category: usage.category,
-        });
-      }
-    }
+  for (const [_, data] of sortedItems) {
+    const sortedDishes = [...data.dishes.entries()].sort(
+      (a, b) => b[1].qty - a[1].qty,
+    );
 
-    const sortedMenuItems = [...menuItemMap.entries()].sort((a, b) => b[1].totalQty - a[1].totalQty);
-    let first = true;
-    for (const [menuItem, agg] of sortedMenuItems) {
-      const r = ws.addRow([
-        first ? data.itemName : "",
-        first ? data.unit : "",
-        menuItem,
-        agg.category,
-        agg.totalQty,
-        agg.orderRefs.length,
-        agg.orderRefs.join(", "),
-        agg.dates.join(", "),
-      ]);
-      r.getCell(5).numFmt = FMT_INT;
-      r.getCell(6).numFmt = FMT_INT;
-      first = false;
-    }
-    // Total row
-    const totalQty = data.usages.reduce((sum, u) => sum + u.qty, 0);
-    const totalRow = ws.addRow([
+    // Section header row — ingredient name in blue
+    const sectionRow = ws.addRow([
+      data.itemName,
       "",
       "",
-      `TOTAL ${data.itemName}`,
-      "",
-      totalQty,
-      data.usages.length,
       "",
       "",
     ]);
-    totalRow.eachCell({ includeEmpty: true }, (cell) => {
-      cell.font = TOTALS_FONT;
-      cell.fill = TOTALS_FILL;
-      cell.border = BORDER_THIN;
+    sectionRow.getCell(1).font = { bold: true, size: 13, name: "Arial", color: { argb: "FF1F4E79" } };
+    sectionRow.eachCell({ includeEmpty: true }, (cell) => {
+      cell.fill = SECTION_FILL;
     });
-    totalRow.getCell(5).numFmt = FMT_INT;
-    totalRow.getCell(6).numFmt = FMT_INT;
+    sectionRow.height = 26;
+
+    if (sortedDishes.length === 0) {
+      const noSalesRow = ws.addRow(["", "", "(No sales in this period)", "", ""]);
+      noSalesRow.getCell(3).font = { italic: true, color: { argb: "FF999999" }, name: "Arial" };
+    } else {
+      let totalQty = 0;
+      let totalCount = 0;
+      for (const [dish, agg] of sortedDishes) {
+        const r = ws.addRow([
+          "",
+          data.unit,
+          dish,
+          agg.qty,
+          agg.count,
+        ]);
+        r.getCell(3).font = { size: 11, name: "Arial" };
+        r.getCell(4).numFmt = FMT_INT;
+        r.getCell(5).numFmt = FMT_INT;
+        r.getCell(4).alignment = { horizontal: "center" };
+        r.getCell(5).alignment = { horizontal: "center" };
+        totalQty += agg.qty;
+        totalCount += agg.count;
+      }
+      // Total row — bold with bottom border
+      const totalRow = ws.addRow([
+        "",
+        "",
+        `TOTAL dishes: ${sortedDishes.length}`,
+        totalQty,
+        totalCount,
+      ]);
+      totalRow.getCell(3).font = { bold: true, size: 11, name: "Arial" };
+      totalRow.getCell(4).numFmt = FMT_INT;
+      totalRow.getCell(5).numFmt = FMT_INT;
+      totalRow.getCell(4).font = { bold: true, name: "Arial" };
+      totalRow.getCell(5).font = { bold: true, name: "Arial" };
+      totalRow.getCell(4).alignment = { horizontal: "center" };
+      totalRow.getCell(5).alignment = { horizontal: "center" };
+      totalRow.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFB0B0B0" } },
+          bottom: { style: "thin", color: { argb: "FFB0B0B0" } },
+        };
+      });
+    }
+
+    // Blank row between sections
+    ws.addRow([]);
   }
 }
 
