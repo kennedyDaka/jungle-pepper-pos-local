@@ -1064,30 +1064,74 @@ function ReportsPage() {
       }
     }
 
-    // Build sort order from STOCK_SECTIONS (same as Flash Report)
-    const sortOrder = new Map<string, number>();
-    let orderIndex = 0;
-    for (const [sectionName, sectionItems] of STOCK_SECTIONS) {
-      for (const item of sectionItems) {
-        // Check label
-        sortOrder.set(item.label.toUpperCase(), orderIndex);
-        // Check all aliases
-        for (const alias of item.aliases) {
-          sortOrder.set(alias.toUpperCase(), orderIndex);
+    // Build a comprehensive sort map from STOCK_SECTIONS
+    // Each section gets a base index, items within get sub-indexes
+    const sectionOrder = new Map<string, number>(); // section name → base index
+    const itemOrder = new Map<string, number>(); // item name/alias → sort position
+    let globalIndex = 0;
+    for (const sectionIdx of STOCK_SECTIONS) {
+      const sectionName = sectionIdx[0];
+      const sectionItems = sectionIdx[1];
+      sectionOrder.set(sectionName.toUpperCase(), globalIndex);
+      for (const itemIdx of sectionItems) {
+        const itemLabel = itemIdx.label;
+        const itemAliases = itemIdx.aliases;
+        itemOrder.set(itemLabel.toUpperCase(), globalIndex);
+        for (const alias of itemAliases) {
+          itemOrder.set(alias.toUpperCase(), globalIndex);
         }
-        orderIndex++;
+        globalIndex++;
       }
+      globalIndex += 1000; // gap between sections for clear separation
     }
+
+    // Also build section-level matching: if item name contains a section keyword,
+    // assign it to that section
+    const sectionKeywords: Array<[string, string[]]> = [
+      ["CHICKEN", ["CHICKEN", "FRANGO", "FILLET", "CHICK"]],
+      ["RUMP", ["RUMP", "SLICED", "PREGOS"]],
+      ["MINCE", ["MINCE"]],
+      ["CAMARAO", ["CAMARAO"]],
+      ["CHEESE", ["CHEESE", "FETA", "PARMESAN", "EGGS", "MILK", "CONDENSED"]],
+      ["FLOUR", ["FLOUR", "DOUGH", "MAIZE"]],
+      ["BREAD", ["BREAD", "BURGER BUNS", "LOAF", "BUNS"]],
+      ["RICE", ["RICE"]],
+      ["PASTA", ["SPAGHETTI", "PENNE", "FETTUCCINE"]],
+      ["OILS", ["OIL", "SAUCE", "POMODORO", "JUNGLE SAUCE", "MASALA", "CHILLI"]],
+      ["VEGETABLES", ["POTATO", "GARLIC", "ONION", "TOMATO", "MUSHROOM", "PEPPER", "LETTUCE", "CUCUMBER", "OLIVE", "PARSLEY", "ROSEMARY", "SALT"]],
+      ["PACKAGING", ["BOX", "FOIL"]],
+      ["CHARCOAL", ["CHARCOAL", "FIREWOOD"]],
+      ["HOT DRINKS", ["COFFEE", "TEA", "CAPUCCINO", "LATTE", "CHOCOLATE", "CINNAMON", "CHOCO"]],
+      ["SOFT DRINKS", ["WATER", "COKE", "FANTA", "SPRITE", "CHERRY PLUM", "COCOPINA", "SWISS", "SODA", "LEMONADE", "BOX JUICE", "GRENADINE", "ICE CREAM"]],
+      ["BEERS", ["BEER", "KUCHE"]],
+    ];
+
+    const getSortKey = (name: string): number => {
+      const upper = name.toUpperCase();
+      // First try exact match against STOCK_SECTIONS items
+      if (itemOrder.has(upper)) return itemOrder.get(upper)!;
+      // Then try section-level keyword matching
+      for (const [secName, keywords] of sectionKeywords) {
+        if (sectionOrder.has(secName)) {
+          for (const kw of keywords) {
+            if (upper.includes(kw)) {
+              // Return section base + 999 to put unmatched items at end of section
+              return (sectionOrder.get(secName) ?? 0) + 999;
+            }
+          }
+        }
+      }
+      // Items with no match go at the very end
+      return 9999999 + globalIndex;
+    };
 
     // Sort items by STOCK_SECTIONS order, items not in STOCK_SECTIONS go to the end
     const sortedItems = [...byItem.entries()].sort((a, b) => {
-      const aName = a[1].itemName.toUpperCase();
-      const bName = b[1].itemName.toUpperCase();
-      const aOrder = sortOrder.has(aName) ? sortOrder.get(aName)! : 999999;
-      const bOrder = sortOrder.has(bName) ? sortOrder.get(bName)! : 999999;
-      if (aOrder !== bOrder) return aOrder - bOrder;
+      const aKey = getSortKey(a[1].itemName);
+      const bKey = getSortKey(b[1].itemName);
+      if (aKey !== bKey) return aKey - bKey;
       // Fallback: sort alphabetically
-      return aName.localeCompare(bName);
+      return a[1].itemName.toUpperCase().localeCompare(b[1].itemName.toUpperCase());
     });
 
     for (const [_, data] of sortedItems) {
