@@ -10,6 +10,7 @@ import {
   type MatrixOrder,
 } from "@/lib/stockMatrixReport";
 import { analyzeDailyOrderNumbers } from "@/lib/orderSequence";
+import { fmtDate } from "@/lib/format";
 import type { ReportRow } from "@/lib/xlsxReport";
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -822,6 +823,128 @@ function columnLetter(index: number) {
   return column;
 }
 
+function addItemContributionWorksheet(wb: ExcelJS.Workbook, input: FlashReportInput) {
+  const ws = wb.addWorksheet("Item Contribution");
+  ws.getColumn(1).width = 36;
+  ws.getColumn(2).width = 8;
+  ws.getColumn(3).width = 36;
+  ws.getColumn(4).width = 16;
+  ws.getColumn(5).width = 10;
+  ws.getColumn(6).width = 12;
+  ws.getColumn(7).width = 40;
+  ws.getColumn(8).width = 24;
+
+  const titleRow = ws.addRow(["JUNGLE PEPPER — ITEM CONTRIBUTION REPORT"]);
+  titleRow.getCell(1).font = TITLE_FONT;
+  ws.addRow([`Period: ${input.rangeLabel ?? input.reportDate}`]).getCell(1).font = SUBTITLE_FONT;
+  ws.addRow([]);
+
+  const headerRow = ws.addRow([
+    "Inventory Item",
+    "Unit",
+    "Menu Item",
+    "Menu Category",
+    "Qty Used",
+    "Times Sold",
+    "Order Numbers",
+    "Order Dates",
+  ]);
+  headerRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = HEADER_FILL;
+    cell.font = HEADER_FONT;
+    cell.alignment = { vertical: "middle", wrapText: true };
+    cell.border = BORDER_THIN;
+  });
+  headerRow.height = 22;
+
+  // Group sale movements by inventory item
+  const allSaleMovements = (input.movements ?? []).filter((m: any) => m.type === "sale");
+  const byItem = new Map<string, { itemName: string; unit: string; usages: Array<{ menuItem: string; qty: number; orderRef: string; date: string; category: string }> }>();
+
+  for (const movement of allSaleMovements) {
+    const itemId = String(movement.item_id ?? "");
+    const itemName = movement.items?.name ?? "Unknown";
+    const unit = movement.items?.units?.code ?? "";
+    const menuItem = String(movement.menu_item_names ?? movement.destination ?? "POS Sale");
+    const menuCategory = String(movement.menu_categories ?? "");
+    const qty = Math.abs(Number(movement.qty));
+    const orderRef = String(movement.invoice_no ?? "");
+    const date = movement.created_at ? fmtDate(movement.created_at) : "";
+
+    if (!byItem.has(itemId)) {
+      byItem.set(itemId, { itemName, unit, usages: [] });
+    }
+    byItem.get(itemId)!.usages.push({ menuItem, qty, orderRef, date, category: menuCategory });
+  }
+
+  // Sort items by total usage descending
+  const sortedItems = [...byItem.entries()].sort((a, b) => b[1].usages.length - a[1].usages.length);
+
+  const FMT_INT = "#,##0";
+  const FMT_DEC = "#,##0.###";
+
+  for (const [itemId, data] of sortedItems) {
+    // Aggregate by menu item
+    const menuItemMap = new Map<string, { totalQty: number; orderRefs: string[]; dates: string[]; category: string }>();
+    for (const usage of data.usages) {
+      const existing = menuItemMap.get(usage.menuItem);
+      if (existing) {
+        existing.totalQty += usage.qty;
+        if (usage.orderRef && !existing.orderRefs.includes(usage.orderRef)) {
+          existing.orderRefs.push(usage.orderRef);
+        }
+        if (!existing.dates.includes(usage.date)) {
+          existing.dates.push(usage.date);
+        }
+      } else {
+        menuItemMap.set(usage.menuItem, {
+          totalQty: usage.qty,
+          orderRefs: usage.orderRef ? [usage.orderRef] : [],
+          dates: [usage.date],
+          category: usage.category,
+        });
+      }
+    }
+
+    const sortedMenuItems = [...menuItemMap.entries()].sort((a, b) => b[1].totalQty - a[1].totalQty);
+    let first = true;
+    for (const [menuItem, agg] of sortedMenuItems) {
+      const r = ws.addRow([
+        first ? data.itemName : "",
+        first ? data.unit : "",
+        menuItem,
+        agg.category,
+        agg.totalQty,
+        agg.orderRefs.length,
+        agg.orderRefs.join(", "),
+        agg.dates.join(", "),
+      ]);
+      r.getCell(5).numFmt = FMT_INT;
+      r.getCell(6).numFmt = FMT_INT;
+      first = false;
+    }
+    // Total row
+    const totalQty = data.usages.reduce((sum, u) => sum + u.qty, 0);
+    const totalRow = ws.addRow([
+      "",
+      "",
+      `TOTAL ${data.itemName}`,
+      "",
+      totalQty,
+      data.usages.length,
+      "",
+      "",
+    ]);
+    totalRow.eachCell({ includeEmpty: true }, (cell) => {
+      cell.font = TOTALS_FONT;
+      cell.fill = TOTALS_FILL;
+      cell.border = BORDER_THIN;
+    });
+    totalRow.getCell(5).numFmt = FMT_INT;
+    totalRow.getCell(6).numFmt = FMT_INT;
+  }
+}
+
 function addExpensesWorksheet(wb: ExcelJS.Workbook, input: FlashReportInput) {
   const expenses = input.expenses ?? [];
   const ws = wb.addWorksheet("Expenses");
@@ -1261,6 +1384,7 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   if (missingByDate.length === 0) ws.addRow(["", "No missing order numbers"]);
   missingByDate.forEach((audit) => ws.addRow([audit.date, audit.missing.join(", ")]));
 
+  addItemContributionWorksheet(wb, input);
   addExpensesWorksheet(wb, input);
   addExecutiveSummary(wb, input);
 
