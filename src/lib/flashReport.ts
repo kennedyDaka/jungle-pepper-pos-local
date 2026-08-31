@@ -82,14 +82,14 @@ export type FlashReportInput = {
   productionBatches?: FlashProductionBatch[];
 };
 
-type FlashStockItem = {
+export type FlashStockItem = {
   label: string;
   aliases: string[];
   isMenu?: true;
   menuAliases?: string[];
 };
 
-const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
+export const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
   [
     "CHICKEN",
     [

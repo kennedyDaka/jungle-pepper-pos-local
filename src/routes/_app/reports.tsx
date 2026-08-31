@@ -40,7 +40,8 @@ import {
   type ReportMatrix,
   type ReportRow,
 } from "@/lib/xlsxReport";
-import { buildFlashReport, buildFlashReportRows } from "@/lib/flashReport";
+import { buildFlashReport, buildFlashReportRows, STOCK_SECTIONS } from "@/lib/flashReport";
+import type { FlashStockItem } from "@/lib/flashReport";
 import { missingOrderNumbersSummary } from "@/lib/orderSequence";
 import { reportService } from "@/services/reportService";
 import { stockCountsService } from "@/services/stockCountsService";
@@ -1063,10 +1064,31 @@ function ReportsPage() {
       }
     }
 
-    // Sort items by total dishes sold descending
-    const sortedItems = [...byItem.entries()].sort(
-      (a, b) => b[1].dishes.size - a[1].dishes.size,
-    );
+    // Build sort order from STOCK_SECTIONS (same as Flash Report)
+    const sortOrder = new Map<string, number>();
+    let orderIndex = 0;
+    for (const [sectionName, sectionItems] of STOCK_SECTIONS) {
+      for (const item of sectionItems) {
+        // Check label
+        sortOrder.set(item.label.toUpperCase(), orderIndex);
+        // Check all aliases
+        for (const alias of item.aliases) {
+          sortOrder.set(alias.toUpperCase(), orderIndex);
+        }
+        orderIndex++;
+      }
+    }
+
+    // Sort items by STOCK_SECTIONS order, items not in STOCK_SECTIONS go to the end
+    const sortedItems = [...byItem.entries()].sort((a, b) => {
+      const aName = a[1].itemName.toUpperCase();
+      const bName = b[1].itemName.toUpperCase();
+      const aOrder = sortOrder.has(aName) ? sortOrder.get(aName)! : 999999;
+      const bOrder = sortOrder.has(bName) ? sortOrder.get(bName)! : 999999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      // Fallback: sort alphabetically
+      return aName.localeCompare(bName);
+    });
 
     for (const [_, data] of sortedItems) {
       // Sort dishes by qty descending
