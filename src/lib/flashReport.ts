@@ -514,15 +514,30 @@ type FlashStockRow = {
   soldAs: string;
   isMenu?: boolean;
   opening: number;
-  purchases: number;
+  /** Column C: purchase qty for count-measured items (pkts, boxes, singles) */
+  purchaseQty: number;
+  /** Column D: purchase qty for weight-measured items (kg, L, g) */
   purchaseKg: number;
-  usage: number;
+  /** Column E: sale deductions only (type=sale) */
+  saleUsage: number;
   uncooked: number;
   cookKg: number;
   produced: number;
   waste: number;
   closing: number;
 };
+
+/** Check if a unit code represents a weight/volume measurement */
+function isWeightUnit(unit?: string | null): boolean {
+  if (!unit) return false;
+  const u = unit.toLowerCase();
+  return ["kg", "g", "l", "ml", "litre", "liter", "litres", "liters"].includes(u);
+}
+
+/** Check if a unit code represents a count measurement */
+function isCountUnit(unit?: string | null): boolean {
+  return !isWeightUnit(unit);
+}
 
 function resolveAndSummarize(
   items: MatrixItem[],
@@ -537,16 +552,13 @@ function resolveAndSummarize(
 ): {
   item?: MatrixItem;
   opening: number;
-  purchases: number;
-  usage: number;
   closing: number;
   soldAsItemId?: string;
 } {
-  const defaultRow = { opening: 0, purchases: 0, usage: 0, closing: 0 };
+  const defaultRow = { opening: 0, closing: 0 };
 
   if (isMenu) {
-    const menuUsage = countMenuSales(label, sales);
-    return { ...defaultRow, usage: menuUsage };
+    return { ...defaultRow };
   }
 
   const exact = itemIndex(items);
@@ -587,8 +599,6 @@ function resolveAndSummarize(
   return {
     item,
     opening,
-    purchases: summary.purchase,
-    usage: summary.usage,
     closing,
     soldAsItemId: item.id,
   };
@@ -620,51 +630,93 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         input.stockCounts,
       );
 
-      // Compute production data for this item
-      let uncooked = 0;
-      let cookKg = 0;
-      let produced = 0;
-      let waste = 0;
-      let purchaseKg = 0;
+      // Compute per-type movement breakdown for this item
+      let purchaseQty = 0;  // Column C: purchases for count-measured items
+      let purchaseKg = 0;   // Column D: purchases for weight-measured items
+      let saleUsage = 0;    // Column E: ONLY recipe/sale deductions
+      let uncooked = 0;     // Column F: raw ingredients consumed in production
+      let cookKg = 0;       // Column G: post-cooking weight (from outputs ONLY)
+      let produced = 0;     // Column H: items produced
+      let waste = 0;        // Column I: wastage
 
       if (result.item) {
         const itemId = result.item.id;
         const itemKey = normalizeName(label);
+        const unitCode = result.item.units?.code;
+        const weightItem = isWeightUnit(unitCode);
 
         // Resolve item ID
         let resolvedId = itemId;
         const found = nameToItemId.get(itemKey);
         if (found) resolvedId = found;
 
-        // Production inputs consumed (UNCOOK kg)
+        // ── Movement breakdown (correctly separated by type) ──
+        const periodMovements = input.movements.filter((m) => m.item_id === resolvedId);
+
+        for (const m of periodMovements) {
+          const qty = Number(m.qty) || 0;
+          switch (m.type) {
+            case "purchase_in":
+              if (qty > 0) {
+                // Split by unit type: weight items → Column D, count items → Column C
+                if (weightItem) {
+                  purchaseKg += qty;
+                } else {
+                  purchaseQty += qty;
+                }
+              }
+              break;
+            case "sale":
+              // ONLY POS sale deductions (recipe-based)
+              saleUsage += Math.abs(Math.min(0, qty));
+              break;
+            case "production_in":
+              // Raw ingredients consumed in production
+              uncooked += Math.abs(Math.min(0, qty));
+              break;
+            case "wastage":
+            case "breakage":
+              waste += Math.abs(Math.min(0, qty));
+              break;
+            // production_out, adjustment, issue_out, complimentary are
+            // tracked but not in the main stock formula columns
+          }
+        }
+
+        // ── Production batch data ──
         batches.forEach((batch) => {
-          batch.production_inputs?.forEach((input) => {
-            const inputName = normalizeName(input.items?.name ?? "");
-            if (input.item_id === resolvedId || inputName === itemKey) {
-              uncooked += Number(input.qty) || 0;
-              cookKg += Number(input.cook_kg) || 0;
+          batch.production_inputs?.forEach((inputLine) => {
+            const inputName = normalizeName(inputLine.items?.name ?? "");
+            if (inputLine.item_id === resolvedId || inputName === itemKey) {
+              // uncooked already computed from movements above;
+              // supplement with batch data if movements missed it
+              const batchQty = Math.abs(Number(inputLine.qty) || 0);
+              if (uncooked === 0 && batchQty > 0) uncooked = batchQty;
             }
           });
           batch.production_outputs?.forEach((output) => {
             const outputName = normalizeName(output.items?.name ?? "");
             if (output.item_id === resolvedId || outputName === itemKey) {
               produced += Number(output.qty) || 0;
-              if (Number(output.cook_kg)) cookKg += Number(output.cook_kg);
+              // cook_kg ONLY from outputs (post-cooking weight)
+              const ck = Number(output.cook_kg) || 0;
+              if (ck > 0) cookKg += ck;
             }
           });
           batch.production_wastage?.forEach((w) => {
             const wasteName = normalizeName(w.items?.name ?? "");
             if (w.item_id === resolvedId || wasteName === itemKey) {
-              waste += Number(w.qty) || 0;
+              const wQty = Number(w.qty) || 0;
+              // Supplement waste if movements didn't capture it
+              if (waste === 0 && wQty > 0) waste = wQty;
             }
           });
         });
+      }
 
-        // Purchase kg (sum of purchase_in movements)
-        const periodMovements = input.movements.filter((m) => m.item_id === resolvedId);
-        purchaseKg = periodMovements
-          .filter((m) => m.type === "purchase_in")
-          .reduce((sum, m) => sum + Math.max(0, Number(m.qty)), 0);
+      // Menu items: count sales from order_lines
+      if (isMenu) {
+        saleUsage = countMenuSales(label, input.sales);
       }
 
       rows.push({
@@ -673,9 +725,9 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         soldAs: result.soldAsItemId ? buildSoldAs(result.soldAsItemId, input.movements) : "",
         isMenu,
         opening: result.opening,
-        purchases: result.purchases,
+        purchaseQty,
         purchaseKg,
-        usage: result.usage,
+        saleUsage,
         uncooked,
         cookKg,
         produced,
@@ -718,9 +770,9 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
       "Statement Deposited": null,
       "Delayed Deposits": null,
       "OPEN": stockCell(row.opening),
-      "IN/PURCHASE": stockCell(row.purchaseKg),
-      "kg/IN": stockCell(row.purchases),
-      "SALES": stockCell(row.usage),
+      "IN/PURCHASE": stockCell(row.purchaseQty),
+      "kg/IN": stockCell(row.purchaseKg),
+      "SALES": stockCell(row.saleUsage),
       "UNCOOK": stockCell(row.uncooked),
       "COOK kg": stockCell(row.cookKg),
       "PRODUCED": stockCell(row.produced),
@@ -1131,8 +1183,8 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     cell.font = STOCK_BOLD;
   });
 
-  // Sub-header row (PURCHASE under IN/PURCHASE, kg under UNCOOK)
-  const subHeader = ws.addRow([null, null, "PURCHASE", null, null, "kg", null, null, null, null]);
+  // Sub-header row (PURCHASE under IN/PURCHASE, kg under kg/IN)
+  const subHeader = ws.addRow([null, null, "PURCHASE", "kg", null, null, null, null, null, null]);
   subHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.font = STOCK_BOLD;
   });
@@ -1151,9 +1203,9 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     const r = ws.addRow([
       stockRow.label,
       stockCell(stockRow.opening),
+      stockCell(stockRow.purchaseQty),
       stockCell(stockRow.purchaseKg),
-      stockCell(stockRow.purchases),
-      stockCell(stockRow.usage),
+      stockCell(stockRow.saleUsage),
       stockCell(stockRow.uncooked),
       stockCell(stockRow.cookKg),
       stockCell(stockRow.produced),
@@ -1161,6 +1213,8 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       null, // CLOSE formula added below
     ]);
     // CLOSE = OPEN + IN/PURCHASE + kg/IN + PRODUCED - SALES
+    // Note: IN/PURCHASE (C) and kg/IN (D) are mutually exclusive per item
+    // (count-measured items use C, weight-measured items use D)
     const rowNum = r.number;
     r.getCell(10).value = { formula: `SUM(B${rowNum}+C${rowNum}+D${rowNum}+H${rowNum}-E${rowNum})` };
 

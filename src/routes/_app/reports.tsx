@@ -129,39 +129,50 @@ function ReportsPage() {
         bid = branchList[0]?.id ?? "";
       }
       if (!bid) return [];
-      const counts = await stockCountsService.listCountsRange(bid, from, to);
+      // Query one day before 'from' to capture opening count
+      const prevDate = new Date(from + "T00:00:00Z");
+      prevDate.setUTCDate(prevDate.getUTCDate() - 1);
+      const fromDate = prevDate.toISOString().slice(0, 10);
+      const counts = await stockCountsService.listCountsRange(bid, fromDate, to);
       return counts;
     },
     enabled: !!branchId,
   });
 
   // Transform stock counts into flash report format: opening and closing per item
+  // Opening = most recent count BEFORE the range start (day before 'from')
+  // Closing = count on the range end date ('to')
   const stockCountsForFlash = (() => {
     const counts = stockCountsRaw.data ?? [];
     if (counts.length === 0) return undefined;
 
-    const byItem = new Map<string, { opening: number; closing: number }>();
+    const byItem = new Map<string, { opening: number; closing: number; openingSet: boolean; closingSet: boolean }>();
+    // Counts are ordered by count_date DESC (most recent first)
     for (const count of counts) {
-      const existing = byItem.get(count.item_id);
-      if (!existing || count.count_date === from) {
-        byItem.set(count.item_id, {
-          opening: existing?.opening ?? Number(count.qty),
-          closing: Number(count.qty),
-        });
+      let entry = byItem.get(count.item_id);
+      if (!entry) {
+        entry = { opening: 0, closing: 0, openingSet: false, closingSet: false };
+        byItem.set(count.item_id, entry);
       }
-      if (count.count_date === to) {
-        byItem.set(count.item_id, {
-          opening: existing?.opening ?? Number(count.qty),
-          closing: Number(count.qty),
-        });
+      // Opening = count from BEFORE the range start
+      if (!entry.openingSet && count.count_date < from) {
+        entry.opening = Number(count.qty);
+        entry.openingSet = true;
+      }
+      // Closing = count ON the range end date
+      if (!entry.closingSet && count.count_date === to) {
+        entry.closing = Number(count.qty);
+        entry.closingSet = true;
       }
     }
 
-    return Array.from(byItem.entries()).map(([item_id, vals]) => ({
-      item_id,
-      opening: vals.opening,
-      closing: vals.closing,
-    }));
+    return Array.from(byItem.entries())
+      .filter(([, vals]) => vals.closingSet) // only include items with a closing count
+      .map(([item_id, vals]) => ({
+        item_id,
+        opening: vals.opening, // 0 if no count before range
+        closing: vals.closing,
+      }));
   })();
 
   const totalSales = sumBy(sales.data ?? [], (order: any) => Number(order.total));
