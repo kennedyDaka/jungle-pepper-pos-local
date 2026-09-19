@@ -140,46 +140,29 @@ function ReportsPage() {
     enabled: !!branchId,
   });
 
-  // Transform stock counts into flash report format: opening and closing per item.
-  // Opening = most recent count BEFORE the range start (physical, when it exists).
-  // Closing = count on the range end date ('to') — the physical truth.
+  // Transform stock counts into flash report format: opening and closing per item
+  // Opening = most recent count BEFORE the range start (day before 'from')
+  // Closing = count on the range end date ('to')
   const stockCountsForFlash = (() => {
     const counts = stockCountsRaw.data ?? [];
     if (counts.length === 0) return undefined;
 
-    const byItem = new Map<
-      string,
-      { opening: number; closing: number; openingSet: boolean; closingSet: boolean; byDate: Map<string, number> }
-    >();
+    const byItem = new Map<string, { opening: number; closing: number; openingSet: boolean; closingSet: boolean }>();
+    // Counts are ordered by count_date DESC (most recent first)
     for (const count of counts) {
       let entry = byItem.get(count.item_id);
       if (!entry) {
-        entry = { opening: 0, closing: 0, openingSet: false, closingSet: false, byDate: new Map() };
+        entry = { opening: 0, closing: 0, openingSet: false, closingSet: false };
         byItem.set(count.item_id, entry);
       }
-      // Dedupe: keep the latest count per item per date (list is date DESC)
-      if (!entry.byDate.has(count.count_date)) {
-        entry.byDate.set(count.count_date, Number(count.qty));
-      }
-    }
-
-    for (const entry of byItem.values()) {
-      // Opening = latest count strictly before the range start
-      const openingDate = [...entry.byDate.keys()]
-        .filter((d) => d < from)
-        .sort()
-        .pop();
-      if (openingDate) {
-        entry.opening = entry.byDate.get(openingDate)!;
+      // Opening = count from BEFORE the range start
+      if (!entry.openingSet && count.count_date < from) {
+        entry.opening = Number(count.qty);
         entry.openingSet = true;
       }
-      // Closing = count on the range end date (fall back to latest count in range)
-      const closingDate = [...entry.byDate.keys()]
-        .filter((d) => d <= to)
-        .sort()
-        .pop();
-      if (closingDate) {
-        entry.closing = entry.byDate.get(closingDate)!;
+      // Closing = count ON the range end date
+      if (!entry.closingSet && count.count_date === to) {
+        entry.closing = Number(count.qty);
         entry.closingSet = true;
       }
     }
@@ -188,9 +171,8 @@ function ReportsPage() {
       .filter(([, vals]) => vals.closingSet) // only include items with a closing count
       .map(([item_id, vals]) => ({
         item_id,
-        opening: vals.opening,
+        opening: vals.opening, // 0 if no count before range
         closing: vals.closing,
-        opening_known: vals.openingSet,
       }));
   })();
 
