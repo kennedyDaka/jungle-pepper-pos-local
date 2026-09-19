@@ -43,6 +43,8 @@ export type FlashStockCount = {
   item_id: string;
   opening: number;
   closing: number;
+  /** True when an earlier physical count exists before the range start */
+  opening_known?: boolean;
 };
 
 export type FlashProductionBatch = {
@@ -526,6 +528,8 @@ type FlashStockRow = {
   produced: number;
   waste: number;
   closing: number;
+  /** True when closing comes from a physical stock count (physical = truth) */
+  closingFromCount?: boolean;
 };
 
 /** Check if a unit code represents a weight/volume measurement */
@@ -554,9 +558,10 @@ function resolveAndSummarize(
   item?: MatrixItem;
   opening: number;
   closing: number;
+  closingFromCount?: boolean;
   soldAsItemId?: string;
 } {
-  const defaultRow = { opening: 0, closing: 0 };
+  const defaultRow = { opening: 0, closing: 0, closingFromCount: false };
 
   if (isMenu) {
     return { ...defaultRow };
@@ -589,11 +594,34 @@ function resolveAndSummarize(
   // Use stock counts for opening/closing if available
   let opening = summary.opening;
   let closing = summary.closing;
+  let closingFromCount = false;
   if (stockCounts) {
     const count = stockCounts.find((sc) => sc.item_id === item.id);
     if (count) {
-      opening = count.opening;
       closing = count.closing;
+      closingFromCount = true;
+      if (count.opening_known) {
+        opening = count.opening;
+      } else {
+        // No earlier count: derive the true opening by reversing the period's
+        // movements from the counted closing (components are filled in later
+        // in flashStockRows, so recompute them here).
+        let purchases = 0;
+        let sales = 0;
+        let uncook = 0;
+        let producedOut = 0;
+        let wasteQty = 0;
+        for (const m of movements) {
+          if (m.item_id !== item.id) continue;
+          const qty = Number(m.qty) || 0;
+          if (m.type === "purchase_in") purchases += Math.max(0, qty);
+          else if (m.type === "sale") sales += Math.abs(Math.min(0, qty));
+          else if (m.type === "production_in") uncook += Math.abs(Math.min(0, qty));
+          else if (m.type === "production_out") producedOut += Math.max(0, qty);
+          else if (m.type === "wastage" || m.type === "breakage") wasteQty += Math.abs(Math.min(0, qty));
+        }
+        opening = closing + sales + uncook + wasteQty - purchases - producedOut;
+      }
     }
   }
 
@@ -601,6 +629,7 @@ function resolveAndSummarize(
     item,
     opening,
     closing,
+    closingFromCount,
     soldAsItemId: item.id,
   };
 }
@@ -734,6 +763,7 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         produced,
         waste,
         closing: result.closing,
+        closingFromCount: result.closingFromCount,
       });
     });
   });
