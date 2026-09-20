@@ -211,6 +211,15 @@ export const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
       },
     ],
   ],
+  [
+    "WINE",
+    [
+      { label: "RED SWEET WINE", aliases: ["RED SWEET WINE BOTTLE"] },
+      { label: "RED DRY OVERMEER WINE", aliases: ["RED DRY OVERMEER WINE", "WINE RED DRY (OVERMEER)"] },
+      { label: "WHITE WINE DRY", aliases: ["WHITE WINE DRY"] },
+      { label: "RED DRY DROSTDY", aliases: ["RED DRY DROSTDY", "WINE RED DRY (DRODSTY)"] },
+    ],
+  ],
 ];
 
 const PAYMENT_METHOD_MAP: Array<[string, string[]]> = [
