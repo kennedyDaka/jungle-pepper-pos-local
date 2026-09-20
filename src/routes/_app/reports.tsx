@@ -1892,13 +1892,23 @@ function ReportsPage() {
                     <tr key={rowIndex} className="border-t border-border">
                       {Object.keys(currentRows[0] ?? reportRow)
                         .slice(0, 15)
-                        .map((column) => (
-                          <td key={column} className="p-1.5">
-                            {typeof reportRow[column] === "number"
-                              ? fmtQty(Number(reportRow[column]))
-                              : reportRow[column]}
-                          </td>
-                        ))}
+                        .map((column) => {
+                          const value = reportRow[column];
+                          // MISSING: red when stock is short, green when there is a surplus
+                          const varianceColor =
+                            column === "MISSING" && typeof value === "number" && value !== 0
+                              ? value < 0
+                                ? " font-semibold text-destructive"
+                                : " font-semibold text-green-700"
+                              : "";
+                          return (
+                            <td key={column} className="p-1.5">
+                              <span className={varianceColor.trim()}>
+                                {typeof value === "number" ? fmtQty(Number(value)) : value}
+                              </span>
+                            </td>
+                          );
+                        })}
                     </tr>
                   );
                 })}

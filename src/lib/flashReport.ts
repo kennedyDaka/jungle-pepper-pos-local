@@ -21,6 +21,9 @@ const HEADER_FILL: ExcelJS.Fill = {
 const HEADER_FONT: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
 const SECTION_FONT: Partial<ExcelJS.Font> = { bold: true, size: 11, underline: "single" };
 const TITLE_FONT: Partial<ExcelJS.Font> = { bold: true, size: 16, color: { argb: "FF1F5132" } };
+/** MISSING column: negative variance (short) red, positive variance (surplus) green */
+const MISSING_SHORT_COLOR = "FFB91C1C";
+const MISSING_SURPLUS_COLOR = "FF15803D";
 const SUBTITLE_FONT: Partial<ExcelJS.Font> = {
   italic: true,
   size: 10,
@@ -1373,6 +1376,16 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
       const val = r.getCell(c).value;
       r.getCell(c).numFmt = typeof val === "number" && val % 1 !== 0 ? FMT_DEC : FMT_INT;
     });
+
+    // MISSING: red when stock is short, green when there is a surplus
+    const missing = stockRow.missing;
+    if (missing !== null && Math.abs(missing) > 0.000001) {
+      r.getCell(11).font = {
+        size: 11,
+        bold: true,
+        color: { argb: missing < 0 ? MISSING_SHORT_COLOR : MISSING_SURPLUS_COLOR },
+      };
+    }
   });
 
   ws.addRow([]);
