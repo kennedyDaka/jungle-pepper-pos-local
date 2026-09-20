@@ -130,37 +130,32 @@ function ReportsPage() {
         bid = branchList[0]?.id ?? "";
       }
       if (!bid) return [];
-      // Query one day before 'from' to capture opening count
+      // Query one day before 'from' so the stock matrix can find the opening count
       const prevDate = new Date(from + "T00:00:00Z");
       prevDate.setUTCDate(prevDate.getUTCDate() - 1);
       const fromDate = prevDate.toISOString().slice(0, 10);
-      const counts = await stockCountsService.listCountsRange(bid, fromDate, to);
-      return counts;
+      return stockCountsService.listCountsRange(bid, fromDate, to);
     },
     enabled: !!branchId,
   });
 
-  // Transform stock counts into flash report format: opening and closing per item
-  // Opening = most recent count BEFORE the range start (day before 'from')
-  // Closing = count on the range end date ('to')
-  const stockCountsForFlash = (() => {
+  // Stock matrix: opening = most recent count before the range, closing = count at the end.
+  // Counts arrive ordered by count_date DESC (most recent first).
+  const stockCountsForMatrix = (() => {
     const counts = stockCountsRaw.data ?? [];
     if (counts.length === 0) return undefined;
 
     const byItem = new Map<string, { opening: number; closing: number; openingSet: boolean; closingSet: boolean }>();
-    // Counts are ordered by count_date DESC (most recent first)
     for (const count of counts) {
       let entry = byItem.get(count.item_id);
       if (!entry) {
         entry = { opening: 0, closing: 0, openingSet: false, closingSet: false };
         byItem.set(count.item_id, entry);
       }
-      // Opening = count from BEFORE the range start
       if (!entry.openingSet && count.count_date < from) {
         entry.opening = Number(count.qty);
         entry.openingSet = true;
       }
-      // Closing = count ON the range end date
       if (!entry.closingSet && count.count_date === to) {
         entry.closing = Number(count.qty);
         entry.closingSet = true;
@@ -168,12 +163,27 @@ function ReportsPage() {
     }
 
     return Array.from(byItem.entries())
-      .filter(([, vals]) => vals.closingSet) // only include items with a closing count
-      .map(([item_id, vals]) => ({
-        item_id,
-        opening: vals.opening, // 0 if no count before range
-        closing: vals.closing,
-      }));
+      .filter(([, vals]) => vals.closingSet)
+      .map(([item_id, vals]) => ({ item_id, opening: vals.opening, closing: vals.closing }));
+  })();
+
+  // Flash report: CLOSE is the physical count — the latest count inside the range
+  // (for a single-day report, exactly the count taken that day). Items that were never
+  // counted stay blank instead of showing a computed number.
+  const stockCountsForFlash = (() => {
+    const counts = stockCountsRaw.data ?? [];
+    if (counts.length === 0) return undefined;
+
+    const closingByItem = new Map<string, number>();
+    for (const count of counts) {
+      if (count.count_date < from) continue;
+      if (!closingByItem.has(count.item_id)) {
+        closingByItem.set(count.item_id, Number(count.qty) || 0);
+      }
+    }
+    if (closingByItem.size === 0) return undefined;
+
+    return Array.from(closingByItem.entries()).map(([item_id, closing]) => ({ item_id, closing }));
   })();
 
   const totalSales = sumBy(sales.data ?? [], (order: any) => Number(order.total));
@@ -192,7 +202,7 @@ function ReportsPage() {
     movements: stockMatrixMovements.data ?? [],
     ledgerMovements: stockMatrixLedgerMovements.data ?? [],
     sales: sales.data ?? [],
-    stockCounts: stockCountsForFlash,
+    stockCounts: stockCountsForMatrix,
   };
 
   const itemAgg = new Map<string, { qty: number; revenue: number }>();

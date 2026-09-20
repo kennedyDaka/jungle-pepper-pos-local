@@ -41,7 +41,7 @@ const BORDER_THIN: Partial<ExcelJS.Borders> = {
 
 export type FlashStockCount = {
   item_id: string;
-  opening: number;
+  /** Physical count on the range end date. This is the only value the report trusts for CLOSE. */
   closing: number;
 };
 
@@ -151,36 +151,19 @@ export const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     "BREAD",
     [{ label: "BREAD BURGER (6 each pkt)", aliases: ["BURGER (6 EACH PKT)", "BURGER BUNS"] }],
   ],
-  [
-    "RICE",
-    [
-      { label: "BULK (Kg)", aliases: ["RICE BULK"] },
-      { label: "SUGAR (Kg)", aliases: ["SUGAR"] },
-    ],
-  ],
-  ["PASTA", [
-    { label: "SPAGHETTI (Kg)", aliases: ["SPAGHETTI"] },
-    { label: "PENNE (Kg)", aliases: ["PENNE"] },
-    { label: "FETTUCCINE (Kg)", aliases: ["FETTUCCINE"] },
-  ]],
+  ["RICE", [{ label: "BULK (Kg)", aliases: ["RICE BULK"] }]],
   ["OILS / SAUCES", [{ label: "COOKING OIL BULK (L)", aliases: ["COOKING OIL BULK"] }]],
   [
     "VEGETABLES",
     [
       { label: "POTATOES BULK (Kg)", aliases: ["POTATOES BULK"] },
-      { label: "GARLIC FULL (Kg)", aliases: ["GARLIC FULL"] },
-      { label: "ONION (Kg)", aliases: ["ONIONS (KG)", "ONIONS"] },
+      {
+        label: "CHIPS PEELED (Kg)",
+        aliases: ["CHIPS PEELED", "CHIPS PEELED (KG)", "CHIPS"],
+      },
     ],
   ],
-  [
-    "PACKAGING",
-    [
-      { label: "PIZZA BOX (Qty)", aliases: ["PIZZA BOX"] },
-      { label: "WHITE SMALL BOX", aliases: ["WHITE SMALL BOX"] },
-      { label: "WHITE LARGE BOX", aliases: ["WHITE LARGE BOX"] },
-      { label: "FOIL BOX", aliases: ["FOIL", "FOIL CUPS"] },
-    ],
-  ],
+  ["PACKAGING", [{ label: "PIZZA BOX (Qty)", aliases: ["PIZZA BOX"] }]],
   ["CHARCOAL / FIREWOOD", [{ label: "CHARCOAL (Kg)", aliases: ["CHARCOAL"] }]],
   [
     "HOT DRINKS",
@@ -225,24 +208,6 @@ export const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
       },
     ],
   ],
-  [
-    "WINES - GLASS",
-    [
-      {
-        label: "WINE RED DRY (DRODSTY)",
-        aliases: ["RED DRY DROSTDY"],
-        menuAliases: ["RED DRY (DROSTDY)"],
-      },
-      {
-        label: "WINE RED DRY (OVERMEER)",
-        aliases: ["RED DRY OVERMEER WINE"],
-        menuAliases: ["RED DRY (OVERMEER)"],
-      },
-      { label: "WINE RED SWEET", aliases: ["RED SWEET WINE BOTTLE"], menuAliases: ["RED SWEET"] },
-      { label: "WINE WHITE DRY", aliases: ["WHITE WINE DRY"], menuAliases: ["WHITE WINE GLASS"] },
-    ],
-  ],
-  ["LIQUORS + MORE", []],
 ];
 
 const PAYMENT_METHOD_MAP: Array<[string, string[]]> = [
@@ -515,17 +480,24 @@ type FlashStockRow = {
   soldAs: string;
   isMenu?: boolean;
   opening: number;
-  /** Column C: purchase qty for count-measured items (pkts, boxes, singles) */
-  purchaseQty: number;
-  /** Column D: purchase qty for weight-measured items (kg, L, g) */
-  purchaseKg: number;
-  /** Column E: sale deductions only (type=sale) */
-  saleUsage: number;
-  uncooked: number;
+  /** IN/PURCHASE (Kg + Qty) — all purchase-in quantities in the period */
+  purchase: number;
+  /** OUT Kg / Qty — bulk items issued out of stock into production/preparation */
+  out: number;
+  /** SALES — recipe deductions from POS sales only */
+  sales: number;
+  /** COOK/PREPARED Kg — final cooked/prepared weight of production outputs */
   cookKg: number;
+  /** PRODUCED — units produced by production batches */
   produced: number;
+  /** WASTE/INCREASE(G's) — batch weight variance (negative = weight increase) */
   waste: number;
-  closing: number;
+  /** EXPECTED CLOSE — opening + purchase − sales − out + produced − waste */
+  expected: number;
+  /** CLOSE — physical count (null when the item was not counted) */
+  closing: number | null;
+  /** MISSING — close − expected (null when the item was not counted) */
+  missing: number | null;
 };
 
 /** Check if a unit code represents a weight/volume measurement */
@@ -553,10 +525,11 @@ function resolveAndSummarize(
 ): {
   item?: MatrixItem;
   opening: number;
-  closing: number;
+  /** Physical count on the range end date, or null when the item was not counted */
+  closing: number | null;
   soldAsItemId?: string;
 } {
-  const defaultRow = { opening: 0, closing: 0 };
+  const defaultRow = { opening: 0, closing: null };
 
   if (isMenu) {
     return { ...defaultRow };
@@ -586,16 +559,13 @@ function resolveAndSummarize(
 
   const summary = summarizeStock(item, periodMovements, ledger);
 
-  // Use stock counts for opening/closing if available
-  let opening = summary.opening;
-  let closing = summary.closing;
-  if (stockCounts) {
-    const count = stockCounts.find((sc) => sc.item_id === item.id);
-    if (count) {
-      opening = count.opening;
-      closing = count.closing;
-    }
-  }
+  // OPEN comes from the stock ledger (qty_on_hand − period movements).
+  // CLOSE is ONLY the physical stock count on the range end date — when the item
+  // was not counted, CLOSE stays blank instead of showing a computed number.
+  const opening = summary.opening;
+  let closing: number | null = null;
+  const count = stockCounts?.find((sc) => sc.item_id === item.id);
+  if (count) closing = count.closing;
 
   return {
     item,
@@ -608,14 +578,6 @@ function resolveAndSummarize(
 function flashStockRows(input: FlashReportInput): FlashStockRow[] {
   const rows: FlashStockRow[] = [];
   const batches = input.productionBatches ?? [];
-
-  // Build index for resolving item_id from name
-  const nameToItemId = new Map<string, string>();
-  input.items.forEach((item) => {
-    if (item.name && item.id) {
-      nameToItemId.set(normalizeName(item.name), item.id);
-    }
-  });
 
   STOCK_SECTIONS.forEach(([sectionName, stockItems]) => {
     stockItems.forEach(({ label, aliases, isMenu, menuAliases }) => {
@@ -631,94 +593,123 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         input.stockCounts,
       );
 
-      // Compute per-type movement breakdown for this item
-      let purchaseQty = 0;  // Column C: purchases for count-measured items
-      let purchaseKg = 0;   // Column D: purchases for weight-measured items
-      let saleUsage = 0;    // Column E: ONLY recipe/sale deductions
-      let uncooked = 0;     // Column F: raw ingredients consumed in production
-      let cookKg = 0;       // Column G: post-cooking weight (from outputs ONLY)
-      let produced = 0;     // Column H: items produced
-      let waste = 0;        // Column I: wastage
+      // Period breakdown for this item
+      let purchase = 0;   // IN/PURCHASE (Kg + Qty)
+      let sales = 0;      // SALES — POS recipe deductions only
+      let out = 0;        // OUT Kg / Qty — issued out of stock into preparation
+      let cookKg = 0;     // COOK/PREPARED Kg — post-cooking weight
+      let produced = 0;   // PRODUCED — units coming out of production
+      let waste = 0;      // WASTE/INCREASE — positive = waste, negative = weight increase
 
       if (result.item) {
-        const itemId = result.item.id;
         const itemKey = normalizeName(label);
-        const unitCode = result.item.units?.code;
-        const weightItem = isWeightUnit(unitCode);
+        // Always use the item the label/alias actually resolved to — resolving again by
+        // the display label would pick up unrelated same-named items (e.g. "WATER").
+        const resolvedId = result.item.id;
 
-        // Resolve item ID
-        let resolvedId = itemId;
-        const found = nameToItemId.get(itemKey);
-        if (found) resolvedId = found;
-
-        // ── Movement breakdown (correctly separated by type) ──
+        // ── Stock movements in the period ──
         const periodMovements = input.movements.filter((m) => m.item_id === resolvedId);
+        let movementOut = 0;
+        let movementProduced = 0;
 
         for (const m of periodMovements) {
           const qty = Number(m.qty) || 0;
           switch (m.type) {
             case "purchase_in":
-              if (qty > 0) {
-                // Split by unit type: weight items → Column D, count items → Column C
-                if (weightItem) {
-                  purchaseKg += qty;
-                } else {
-                  purchaseQty += qty;
-                }
-              }
+              if (qty > 0) purchase += qty;
               break;
             case "sale":
               // ONLY POS sale deductions (recipe-based)
-              saleUsage += Math.abs(Math.min(0, qty));
+              sales += Math.abs(Math.min(0, qty));
               break;
             case "production_in":
-              // Raw ingredients consumed in production
-              uncooked += Math.abs(Math.min(0, qty));
+              // Bulk stock issued out into production/preparation
+              movementOut += Math.abs(Math.min(0, qty));
+              break;
+            case "production_out":
+              if (qty > 0) movementProduced += qty;
               break;
             case "wastage":
             case "breakage":
               waste += Math.abs(Math.min(0, qty));
               break;
-            // production_out, adjustment, issue_out, complimentary are
-            // tracked but not in the main stock formula columns
+            // adjustment, issue_out, complimentary are tracked but not part of
+            // the stock formula columns
           }
         }
 
-        // ── Production batch data ──
+        // ── Production batches: OUT fallback, COOK/PREPARED, PRODUCED, batch variance ──
+        let batchOut = 0;
+        let batchProduced = 0;
+
         batches.forEach((batch) => {
+          const inputWeight = (batch.production_inputs ?? []).reduce(
+            (sum, line) => sum + (Number(line.weight_kg) || Number(line.qty) || 0),
+            0,
+          );
+          const outputLines = batch.production_outputs ?? [];
+          const totalOutputWeight = outputLines.reduce(
+            (sum, line) => sum + (Number(line.cook_kg) || Number(line.weight_kg) || 0),
+            0,
+          );
+          // Batch weight variance: sits on the OUTPUT rows, shown negative
+          // (negative WASTE = weight increase, e.g. dough and burger gain)
+          const variance = inputWeight - totalOutputWeight;
+
           batch.production_inputs?.forEach((inputLine) => {
             const inputName = normalizeName(inputLine.items?.name ?? "");
             if (inputLine.item_id === resolvedId || inputName === itemKey) {
-              // uncooked already computed from movements above;
-              // supplement with batch data if movements missed it
-              const batchQty = Math.abs(Number(inputLine.qty) || 0);
-              if (uncooked === 0 && batchQty > 0) uncooked = batchQty;
+              batchOut += Math.abs(Number(inputLine.weight_kg) || Number(inputLine.qty) || 0);
             }
           });
-          batch.production_outputs?.forEach((output) => {
+
+          outputLines.forEach((output) => {
             const outputName = normalizeName(output.items?.name ?? "");
             if (output.item_id === resolvedId || outputName === itemKey) {
-              produced += Number(output.qty) || 0;
-              // cook_kg ONLY from outputs (post-cooking weight)
-              const ck = Number(output.cook_kg) || 0;
+              batchProduced += Number(output.qty) || 0;
+              // COOK/PREPARED kg = post-cooking weight (falls back to batch weight)
+              const ck = Number(output.cook_kg) || Number(output.weight_kg) || 0;
               if (ck > 0) cookKg += ck;
+
+              if (totalOutputWeight > 0) {
+                const weight = Number(output.cook_kg) || Number(output.weight_kg) || 0;
+                waste -= variance * (weight / totalOutputWeight);
+              } else if (outputLines.length > 0) {
+                waste -= variance / outputLines.length;
+              }
             }
           });
+
+          // A batch with inputs but no outputs carries its whole variance on the inputs
+          if (outputLines.length === 0) {
+            batch.production_inputs?.forEach((inputLine) => {
+              const inputName = normalizeName(inputLine.items?.name ?? "");
+              if (inputLine.item_id === resolvedId || inputName === itemKey) waste -= variance;
+            });
+          }
+
+          // Wastage recorded against the batch itself
           batch.production_wastage?.forEach((w) => {
             const wasteName = normalizeName(w.items?.name ?? "");
             if (w.item_id === resolvedId || wasteName === itemKey) {
               const wQty = Number(w.qty) || 0;
-              // Supplement waste if movements didn't capture it
-              if (waste === 0 && wQty > 0) waste = wQty;
+              if (wQty > 0) waste += wQty;
             }
           });
         });
+
+        // Prefer batch lines over movements so nothing is counted twice
+        out = movementOut > 0 ? movementOut : batchOut;
+        produced = batchProduced > 0 ? batchProduced : movementProduced;
       }
 
       // Menu items: count sales from order_lines
       if (isMenu) {
-        saleUsage = countMenuSales(label, input.sales);
+        sales = countMenuSales(label, input.sales);
       }
+
+      const expected = result.opening + purchase - sales - out + produced - waste;
+      const missing = result.closing === null ? null : result.closing - expected;
 
       rows.push({
         section: sectionName,
@@ -726,14 +717,15 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         soldAs: result.soldAsItemId ? buildSoldAs(result.soldAsItemId, input.movements) : "",
         isMenu,
         opening: result.opening,
-        purchaseQty,
-        purchaseKg,
-        saleUsage,
-        uncooked,
+        purchase,
+        out,
+        sales,
         cookKg,
         produced,
         waste,
+        expected,
         closing: result.closing,
+        missing,
       });
     });
   });
@@ -751,15 +743,16 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
       "Expected Deposits": paymentTotal(input.paymentTotals, dbMethods),
       "Statement Deposited": 0,
       "Delayed Deposits": 0,
-      "OPEN": null,
+      OPEN: null,
       "IN/PURCHASE": null,
-      "kg/IN": null,
-      "SALES": null,
-      "UNCOOK": null,
+      OUT: null,
+      SALES: null,
       "COOK kg": null,
-      "PRODUCED": null,
-      "WASTE": null,
-      "CLOSE": null,
+      PRODUCED: null,
+      WASTE: null,
+      "EXPECTED CLOSE": null,
+      CLOSE: null,
+      MISSING: null,
     });
   });
 
@@ -771,14 +764,15 @@ export function buildFlashReportRows(input: FlashReportInput): ReportRow[] {
       "Statement Deposited": null,
       "Delayed Deposits": null,
       "OPEN": stockCell(row.opening),
-      "IN/PURCHASE": stockCell(row.purchaseQty),
-      "kg/IN": stockCell(row.purchaseKg),
-      "SALES": stockCell(row.saleUsage),
-      "UNCOOK": stockCell(row.uncooked),
+      "IN/PURCHASE": stockCell(row.purchase),
+      "OUT": stockCell(row.out),
+      "SALES": stockCell(row.sales),
       "COOK kg": stockCell(row.cookKg),
       "PRODUCED": stockCell(row.produced),
       "WASTE": stockCell(row.waste),
-      "CLOSE": stockCell(row.closing),
+      "EXPECTED CLOSE": stockCell(row.expected),
+      "CLOSE": row.closing === null ? null : stockCell(row.closing),
+      "MISSING": row.missing === null ? null : stockCell(row.missing),
     });
   });
 
@@ -1237,14 +1231,15 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
 
   ws.getColumn(1).width = 36;
   ws.getColumn(2).width = 10;
-  ws.getColumn(3).width = 14;
-  ws.getColumn(4).width = 10;
+  ws.getColumn(3).width = 16;
+  ws.getColumn(4).width = 16;
   ws.getColumn(5).width = 10;
-  ws.getColumn(6).width = 10;
-  ws.getColumn(7).width = 12;
-  ws.getColumn(8).width = 10;
-  ws.getColumn(9).width = 10;
-  ws.getColumn(10).width = 10;
+  ws.getColumn(6).width = 16;
+  ws.getColumn(7).width = 16;
+  ws.getColumn(8).width = 18;
+  ws.getColumn(9).width = 14;
+  ws.getColumn(10).width = 12;
+  ws.getColumn(11).width = 10;
 
   const titleRow = ws.addRow(["JUNGLE PEPPER - FLASH REPORT"]);
   titleRow.getCell(1).font = TITLE_FONT;
@@ -1313,34 +1308,31 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
   s2Title.getCell(1).font = { bold: true, size: 12 };
   ws.addRow([]);
 
+  const STOCK_BOLD: Partial<ExcelJS.Font> = { bold: true, size: 11 };
   const stockHeader = ws.addRow([
     "",
     "OPEN",
-    "IN/PURCHASE",
-    "kg/IN",
+    "IN/PURCHASE (Kg + Qty) (Shops)",
+    "OUT Kg / Qty (Bulk items only - Meat, Flour, Potatos etc)",
     "SALES",
-    "UNCOOK",
-    "COOK kg",
-    "PRODUCED",
-    "WASTE",
+    "COOK/PREPARED Kg (Final Weight of prepared Bulk Meat or Bulk Dough)",
+    "PRODUCED (How many Pizza Pkts/Burgers/Pregos/Thin/Thick/Chips etc produced from Cooked or from OUT items)",
+    "WASTE/INCREASE(G's) (Weight waste = Prego Rump + Chicken fillet + Potato) (Weight Increase = Burger + Dough)",
+    "EXPECTED CLOSE",
     "CLOSE",
+    "MISSING",
   ]);
-  const STOCK_BOLD: Partial<ExcelJS.Font> = { bold: true, size: 11 };
   stockHeader.eachCell({ includeEmpty: true }, (cell) => {
     cell.font = STOCK_BOLD;
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
   });
-
-  // Sub-header row (PURCHASE under IN/PURCHASE, kg under kg/IN)
-  const subHeader = ws.addRow([null, null, "PURCHASE", "kg", null, null, null, null, null, null]);
-  subHeader.eachCell({ includeEmpty: true }, (cell) => {
-    cell.font = STOCK_BOLD;
-  });
+  stockHeader.height = 60;
 
   let currentSection = "";
   flashStockRows(input).forEach((stockRow) => {
     if (stockRow.section !== currentSection) {
       currentSection = stockRow.section;
-      const sectionRow = ws.addRow([currentSection, null, null, null, null, null, null, null, null, null]);
+      const sectionRow = ws.addRow([currentSection]);
       sectionRow.eachCell({ includeEmpty: true }, (cell) => {
         cell.font = STOCK_BOLD;
         cell.alignment = { horizontal: "center" };
@@ -1350,33 +1342,29 @@ export function buildFlashReport(input: FlashReportInput): ExcelJS.Workbook {
     const r = ws.addRow([
       stockRow.label,
       stockCell(stockRow.opening),
-      stockCell(stockRow.purchaseQty),
-      stockCell(stockRow.purchaseKg),
-      stockCell(stockRow.saleUsage),
-      stockCell(stockRow.uncooked),
+      stockCell(stockRow.purchase),
+      stockCell(stockRow.out),
+      stockCell(stockRow.sales),
       stockCell(stockRow.cookKg),
       stockCell(stockRow.produced),
       stockCell(stockRow.waste),
-      null, // CLOSE formula added below
+      stockCell(stockRow.expected),
+      stockRow.closing === null ? null : stockCell(stockRow.closing),
+      stockRow.missing === null ? null : stockCell(stockRow.missing),
     ]);
-    // CLOSE = OPEN + IN/PURCHASE + kg/IN + PRODUCED - SALES
-    // Note: IN/PURCHASE (C) and kg/IN (D) are mutually exclusive per item
-    // (count-measured items use C, weight-measured items use D)
-    const rowNum = r.number;
-    r.getCell(10).value = { formula: `SUM(B${rowNum}+C${rowNum}+D${rowNum}+H${rowNum}-E${rowNum})` };
 
     // No borders on stock data rows — matching manual Excel
-    for (let c = 1; c <= 10; c++) {
+    for (let c = 1; c <= 11; c++) {
       r.getCell(c).font = { size: 11 };
     }
-    [2, 3, 4, 5, 6, 7, 8, 9, 10].forEach((c) => {
+    [2, 3, 4, 5, 6, 7, 8, 9, 10, 11].forEach((c) => {
       r.getCell(c).alignment = { horizontal: "center" };
     });
 
     const FMT_INT = "#,##0";
     const FMT_DEC = "#,##0.###";
 
-    const numCols = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const numCols = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
     numCols.forEach((c) => {
       const val = r.getCell(c).value;
       r.getCell(c).numFmt = typeof val === "number" && val % 1 !== 0 ? FMT_DEC : FMT_INT;
