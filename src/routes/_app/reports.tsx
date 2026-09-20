@@ -167,16 +167,17 @@ function ReportsPage() {
       .map(([item_id, vals]) => ({ item_id, opening: vals.opening, closing: vals.closing }));
   })();
 
-  // Flash report: CLOSE is the physical count — the latest count inside the range
-  // (for a single-day report, exactly the count taken that day). Items that were never
-  // counted stay blank instead of showing a computed number.
+  // Flash report: CLOSE is the physical count taken on the report end date ONLY.
+  // A count from an earlier day is never carried forward: when a new day starts —
+  // before that day's count is entered — CLOSE and MISSING stay blank instead of
+  // showing yesterday's numbers. Items not counted on that date also stay blank.
   const stockCountsForFlash = (() => {
     const counts = stockCountsRaw.data ?? [];
     if (counts.length === 0) return undefined;
 
     const closingByItem = new Map<string, number>();
     for (const count of counts) {
-      if (count.count_date < from) continue;
+      if (count.count_date !== to) continue;
       if (!closingByItem.has(count.item_id)) {
         closingByItem.set(count.item_id, Number(count.qty) || 0);
       }

@@ -492,7 +492,7 @@ type FlashStockRow = {
   produced: number;
   /** WASTE/INCREASE(G's) — batch weight variance (negative = weight increase) */
   waste: number;
-  /** EXPECTED CLOSE — opening + purchase − sales − out + produced − waste */
+  /** EXPECTED CLOSE — opening + purchase − sales − out + produced */
   expected: number;
   /** CLOSE — physical count (null when the item was not counted) */
   closing: number | null;
@@ -708,7 +708,11 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         sales = countMenuSales(label, input.sales);
       }
 
-      const expected = result.opening + purchase - sales - out + produced - waste;
+      // EXPECTED CLOSE = OPEN + IN/PURCHASE − SALES − OUT + PRODUCED.
+      // WASTE/INCREASE(G's) and COOK/PREPARED Kg are informational columns only:
+      // the batch weight variance is a kg figure and must never be applied to a
+      // piece-count item (it produced fractional closes such as PIZZA PKTS 19.2).
+      const expected = result.opening + purchase - sales - out + produced;
       const missing = result.closing === null ? null : result.closing - expected;
 
       rows.push({
