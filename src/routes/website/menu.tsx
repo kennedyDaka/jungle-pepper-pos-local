@@ -50,8 +50,7 @@ function MenuPage() {
   const filterMods = useCallback((item: any, mods: any[]) => {
     if (item.kind === "pizza")
       return mods.filter((m: any) => /^(thin|thick)\s*crust$/i.test(m.name));
-    if (item.kind === "pasta")
-      return mods.filter((m: any) => /^(spaghetti|penne)$/i.test(m.name));
+    if (item.kind === "pasta") return mods.filter((m: any) => /^(spaghetti|penne)$/i.test(m.name));
     return mods;
   }, []);
 
@@ -76,7 +75,11 @@ function MenuPage() {
     const itemMods = (allModifiers ?? []).filter((m: any) => m.menu_item_id === item.id);
     const crustMods = itemMods.filter((m: any) => /^(thin|thick)\s*crust$/i.test(m.name));
     if (item.kind === "pizza" || crustMods.length > 0) {
-      setModifierDialog({ item, modifiers: crustMods.length > 0 ? crustMods : itemMods, kind: "base" });
+      setModifierDialog({
+        item,
+        modifiers: crustMods.length > 0 ? crustMods : itemMods,
+        kind: "base",
+      });
       return;
     }
     if (item.kind === "pasta") {

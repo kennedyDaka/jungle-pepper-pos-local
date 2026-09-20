@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { ErrorState, LoadingState } from "@/components/DataState";
 import { Button } from "@/components/ui/button";
@@ -55,8 +55,8 @@ const POS_CATEGORY_GROUPS = [
   { id: "sweets", label: "SWEETS" },
   { id: "hot-drinks", label: "HOT DRINKS" },
   { id: "beers", label: "BEERS" },
-  { id: "soft-drinks",       label: "SOFT DRINKS" },
-  { id: "liquor-wine",      label: "LIQUOR / WINE" },
+  { id: "soft-drinks", label: "SOFT DRINKS" },
+  { id: "liquor-wine", label: "LIQUOR / WINE" },
   { id: "extras", label: "EXTRAS" },
 ];
 
@@ -104,8 +104,7 @@ function printReceiptElement(elementId: string, title: string) {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.setAttribute("title", title);
-  iframe.style.cssText =
-    "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
+  iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
   document.body.appendChild(iframe);
 
   const cleanup = () => {
@@ -305,9 +304,20 @@ function WaiterPage() {
     );
   }
 
+  const cartScrollRef = useRef<HTMLDivElement>(null);
+  const prevCartLen = useRef(cart.length);
+  useEffect(() => {
+    if (cart.length > prevCartLen.current && cartScrollRef.current) {
+      requestAnimationFrame(() => {
+        cartScrollRef.current?.scrollTo({ top: cartScrollRef.current.scrollHeight, behavior: "smooth" });
+      });
+    }
+    prevCartLen.current = cart.length;
+  }, [cart.length]);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-9rem)]">
-      <div className="lg:col-span-2 flex flex-col gap-3 min-h-0">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 h-[calc(100vh-9rem)]">
+      <div className="lg:col-span-3 flex flex-col gap-3 min-h-0">
         {loading && <LoadingState label="Loading menu..." />}
         {dataError && <ErrorState error={dataError} label="Could not load menu" />}
 
@@ -366,14 +376,14 @@ function WaiterPage() {
         </div>
       </div>
 
-      <Card className="p-3 flex flex-col min-h-0">
-        <h2 className="font-semibold mb-2">
+      <Card className="lg:col-span-2 p-3 flex flex-col min-h-0 overflow-hidden">
+        <h2 className="font-semibold mb-2 shrink-0">
           Order{" "}
           {selectedTableId
             ? `- ${(tables.data ?? []).find((t) => t.id === selectedTableId)?.label ?? ""}`
             : ""}
         </h2>
-        <div className="flex-1 overflow-auto space-y-2">
+        <div ref={cartScrollRef} className="flex-1 overflow-y-auto space-y-2 min-h-0">
           {cart.length === 0 && (
             <p className="text-sm text-muted-foreground">Tap items to add to order.</p>
           )}
@@ -450,33 +460,37 @@ function WaiterPage() {
             </div>
           ))}
         </div>
-        <div className="border-t border-border pt-3 mt-2 space-y-2 text-sm">
-          <Input
-            placeholder="Order note..."
-            value={orderNote}
-            onChange={(e) => setOrderNote(e.target.value)}
-            className="h-8"
-          />
-          <Input
-            placeholder="Physical order number..."
-            value={physicalOrderNo}
-            onChange={(e) => setPhysicalOrderNo(e.target.value)}
-            className="h-8"
-          />
-          <div className="flex justify-between text-base font-bold border-t border-border pt-2">
-            <span>Subtotal</span>
-            <span className="text-primary">{MWK(subtotal)}</span>
+        <div className="shrink-0 border-t border-border pt-2 mt-2 space-y-1.5 text-sm">
+          <div className="flex gap-1.5">
+            <Input
+              placeholder="Order note..."
+              value={orderNote}
+              onChange={(e) => setOrderNote(e.target.value)}
+              className="h-7 flex-1 text-xs"
+            />
+            <Input
+              placeholder="Order #..."
+              value={physicalOrderNo}
+              onChange={(e) => setPhysicalOrderNo(e.target.value)}
+              className="h-7 w-24 text-xs"
+            />
           </div>
           {hasMissingCrust && (
             <p className="text-xs text-destructive">Choose thin or thick crust for every pizza.</p>
           )}
-          <Button
-            className="w-full"
-            disabled={cart.length === 0 || !selectedTableId || hasMissingCrust || submit.isPending}
-            onClick={() => submit.mutate()}
-          >
-            {submit.isPending ? "Submitting..." : "Send to kitchen"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <div className="text-base font-bold">{MWK(subtotal)}</div>
+            </div>
+            <Button
+              size="sm"
+              disabled={cart.length === 0 || !selectedTableId || hasMissingCrust || submit.isPending}
+              onClick={() => submit.mutate()}
+              className="px-4"
+            >
+              {submit.isPending ? "Submitting..." : "Send to kitchen"}
+            </Button>
+          </div>
         </div>
       </Card>
 

@@ -63,7 +63,11 @@ function MenuItemPage() {
   const handleAdd = () => {
     const crustMods = itemModifiers.filter((m: any) => /^(thin|thick)\s*crust$/i.test(m.name));
     if (item.kind === "pizza" || crustMods.length > 0) {
-      setModifierDialog({ item, modifiers: crustMods.length > 0 ? crustMods : itemModifiers, kind: "base" });
+      setModifierDialog({
+        item,
+        modifiers: crustMods.length > 0 ? crustMods : itemModifiers,
+        kind: "base",
+      });
       return;
     }
     if (item.kind === "pasta" && itemModifiers.length > 0) {

@@ -90,8 +90,7 @@ function printReceiptElement(elementId: string, title: string) {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.setAttribute("title", title);
-  iframe.style.cssText =
-    "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
+  iframe.style.cssText = "position:fixed;left:-9999px;top:0;width:400px;height:600px;border:0;";
   document.body.appendChild(iframe);
 
   const cleanup = () => {
@@ -1153,7 +1152,16 @@ function OrderReceiptDialog({ result, onClose }: { result: any; onClose: () => v
                 <div>Kidney Crescent, Blantyre</div>
                 <div className="mt-1">{tableLabel}</div>
                 <div className="mt-1">Order: {orderRef}</div>
-                <div>{new Date().toLocaleString("en-GB", { hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                <div>
+                  {new Date().toLocaleString("en-GB", {
+                    hour12: false,
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </div>
               </div>
               <hr className="my-1 border-black" />
               {result.lines.map((l: any) => (

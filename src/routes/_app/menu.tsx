@@ -93,24 +93,31 @@ function MenuAdmin() {
             </tr>
           </thead>
           <tbody>
-            {items.data?.filter((m: any) => !search.trim() || m.name.toLowerCase().includes(search.toLowerCase()) || m.categories?.name?.toLowerCase().includes(search.toLowerCase())).map((m: any) => (
-              <tr key={m.id} className="border-t border-border hover:bg-secondary/30">
-                <td className="p-2 font-medium">{m.name}</td>
-                <td className="p-2 text-muted-foreground">{m.categories?.name}</td>
-                <td className="p-2 text-right">{MWK(m.price)}</td>
-                <td className="p-2 text-xs text-muted-foreground max-w-md truncate">
-                  {m.description}
-                </td>
-                <td className="p-2 text-right whitespace-nowrap">
-                  <Button size="sm" variant="ghost" onClick={() => setOpen(m)}>
-                    Edit
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => del(m.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
+            {items.data
+              ?.filter(
+                (m: any) =>
+                  !search.trim() ||
+                  m.name.toLowerCase().includes(search.toLowerCase()) ||
+                  m.categories?.name?.toLowerCase().includes(search.toLowerCase()),
+              )
+              .map((m: any) => (
+                <tr key={m.id} className="border-t border-border hover:bg-secondary/30">
+                  <td className="p-2 font-medium">{m.name}</td>
+                  <td className="p-2 text-muted-foreground">{m.categories?.name}</td>
+                  <td className="p-2 text-right">{MWK(m.price)}</td>
+                  <td className="p-2 text-xs text-muted-foreground max-w-md truncate">
+                    {m.description}
+                  </td>
+                  <td className="p-2 text-right whitespace-nowrap">
+                    <Button size="sm" variant="ghost" onClick={() => setOpen(m)}>
+                      Edit
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => del(m.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </Card>

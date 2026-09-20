@@ -1335,9 +1335,20 @@ function PosPage() {
 
   const omitLine = omitOpen ? cart.find((line) => line.key === omitOpen.lineKey) : null;
 
+  const cartScrollRef = useRef<HTMLDivElement>(null);
+  const prevCartLen = useRef(cart.length);
+  useEffect(() => {
+    if (cart.length > prevCartLen.current && cartScrollRef.current) {
+      requestAnimationFrame(() => {
+        cartScrollRef.current?.scrollTo({ top: cartScrollRef.current.scrollHeight, behavior: "smooth" });
+      });
+    }
+    prevCartLen.current = cart.length;
+  }, [cart.length]);
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-9rem)]">
-      <div className="lg:col-span-2 flex flex-col gap-3 min-h-0">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 h-[calc(100vh-9rem)]">
+      <div className="lg:col-span-3 flex flex-col gap-3 min-h-0">
         {(cats.isLoading ||
           items.isLoading ||
           mods.isLoading ||
@@ -1440,9 +1451,9 @@ function PosPage() {
         </div>
       </div>
 
-      <Card className="p-3 flex flex-col min-h-0">
-        <h2 className="font-semibold mb-2">Order</h2>
-        <div className="flex-1 overflow-auto space-y-2">
+      <Card className="lg:col-span-2 p-3 flex flex-col min-h-0 overflow-hidden">
+        <h2 className="font-semibold mb-2 shrink-0">Order</h2>
+        <div ref={cartScrollRef} className="flex-1 overflow-y-auto space-y-2 min-h-0">
           {cart.length === 0 && (
             <p className="text-sm text-muted-foreground">Tap items to add to order.</p>
           )}
@@ -1501,8 +1512,8 @@ function PosPage() {
                 <div className="font-semibold">{MWK(lineTotal(l))}</div>
               </div>
               {isPackagingSaleLine(l) ? (
-                <div className="mt-2">
-                  <Label className="text-xs">Price each</Label>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">Price</Label>
                   <Input
                     type="number"
                     min={0}
@@ -1514,33 +1525,31 @@ function PosPage() {
                       );
                       if (l.item_id) setPriceOverride(l.item_id, newPrice);
                     }}
-                    className="h-8 text-right"
+                    className="h-7 flex-1 text-right text-xs"
                   />
                 </div>
               ) : (
-                <>
-                  <div className="mt-2">
-                    <Label className="text-xs">Price each</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={l.price}
-                      onChange={(event) => {
-                        const newPrice = Math.max(0, Number(event.target.value) || 0);
-                        setCart((rows) =>
-                          rows.map((row) =>
-                            row.key === l.key ? { ...row, price: newPrice } : row,
-                          ),
-                        );
-                        if (isMenuLine(l) && l.menu_item_id)
-                          setPriceOverride(l.menu_item_id, newPrice);
-                      }}
-                      className="h-8 text-right"
-                    />
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <Label htmlFor={`takeaway-${l.key}`} className="text-xs">
-                      Takeaway
+                <div className="mt-1.5 flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground shrink-0">Price</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={l.price}
+                    onChange={(event) => {
+                      const newPrice = Math.max(0, Number(event.target.value) || 0);
+                      setCart((rows) =>
+                        rows.map((row) =>
+                          row.key === l.key ? { ...row, price: newPrice } : row,
+                        ),
+                      );
+                      if (isMenuLine(l) && l.menu_item_id)
+                        setPriceOverride(l.menu_item_id, newPrice);
+                    }}
+                    className="h-7 flex-1 text-right text-xs"
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Label htmlFor={`takeaway-${l.key}`} className="text-xs text-muted-foreground whitespace-nowrap">
+                      Away
                     </Label>
                     <Switch
                       id={`takeaway-${l.key}`}
@@ -1570,26 +1579,26 @@ function PosPage() {
                       }}
                     />
                   </div>
-                </>
+                </div>
               )}
               {isMenuLine(l) && l.takeaway && (
-                <div className="mt-2 rounded border border-dashed border-border p-2 text-xs">
+                <div className="mt-1.5 rounded border border-dashed border-border px-2 py-1 text-xs">
                   {l.packaging.length ? (
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       {l.packaging.map((pack) => (
                         <div
                           key={pack.option_id}
                           className="flex items-center justify-between gap-2"
                         >
                           <span>
-                            <Package className="h-3.5 w-3.5 inline mr-1" />
-                            {pack.name} x {fmtQty(linePackagingQty(l, pack))}
+                            <Package className="h-3 w-3 inline mr-1" />
+                            {pack.name} x{fmtQty(linePackagingQty(l, pack))}
                           </span>
                           <button
                             className="font-medium text-primary"
                             onClick={() => setPackOpen({ lineKey: l.key })}
                           >
-                            {MWK(pack.unit_price)} each
+                            {MWK(pack.unit_price)}
                           </button>
                         </div>
                       ))}
@@ -1599,7 +1608,7 @@ function PosPage() {
                       className="text-primary font-medium"
                       onClick={() => setPackOpen({ lineKey: l.key })}
                     >
-                      Choose takeaway packaging
+                      Choose packaging
                     </button>
                   )}
                 </div>
@@ -1609,7 +1618,7 @@ function PosPage() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  className="mt-2 h-7 w-full text-xs"
+                  className="mt-1.5 h-6 w-full text-xs"
                   onClick={() => setModOpen({ menuId: l.menu_item_id, lineKey: l.key })}
                 >
                   Change crust
@@ -1620,40 +1629,32 @@ function PosPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="mt-2 h-7 w-full text-xs"
+                  className="mt-1.5 h-6 w-full text-xs"
                   onClick={() => setOmitOpen({ lineKey: l.key })}
                 >
-                  <Ban className="h-3.5 w-3.5 mr-1" />
-                  Remove recipe items
+                  <Ban className="h-3 w-3 mr-1" />
+                  Remove items
                 </Button>
               )}
             </div>
           ))}
         </div>
-        <div className="border-t border-border pt-3 mt-2 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>{MWK(subtotal)}</span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span>Discount</span>
+        <div className="shrink-0 border-t border-border pt-2 mt-2 space-y-1.5 text-sm">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Note..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="h-7 flex-1 text-xs"
+            />
             <Input
               type="number"
               min={0}
               value={discount}
               onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
-              className="h-8 w-28 text-right"
+              className="h-7 w-20 text-right text-xs"
+              placeholder="Disc"
             />
-          </div>
-          <Input
-            placeholder="Order note..."
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="h-8"
-          />
-          <div className="flex justify-between text-base font-bold border-t border-border pt-2">
-            <span>Total</span>
-            <span className="text-primary">{MWK(total)}</span>
           </div>
           {hasMissingPackaging && (
             <p className="text-xs text-destructive">
@@ -1663,57 +1664,65 @@ function PosPage() {
           {hasMissingCrust && (
             <p className="text-xs text-destructive">Choose thin or thick crust for every pizza.</p>
           )}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <div className="text-xs text-muted-foreground">Sub {MWK(subtotal)}</div>
+              <div className="text-base font-bold">{MWK(total)}</div>
+            </div>
             <Button
-              className="w-full"
+              size="sm"
               disabled={
                 branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust
               }
               onClick={() => setPayOpen(true)}
+              className="px-4"
             >
               Pay {MWK(total)}
             </Button>
             <Button
-              className="w-full"
+              size="sm"
               variant="secondary"
               disabled={
                 branch.isLoading || cart.length === 0 || hasMissingPackaging || hasMissingCrust
               }
               onClick={() => setStaffMealOpen(true)}
             >
-              <UserCheck className="h-4 w-4 mr-1" />
-              Staff meal
+              <UserCheck className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <Button
-            variant="outline"
-            className="w-full"
-            disabled={cart.length === 0}
-            onClick={() =>
-              printThermalDocument(
-                buildBillHtml(cart, subtotal, discount, total, note, lineTotal),
-                "Bill",
-              )
-            }
-          >
-            <Printer className="h-4 w-4 mr-1" />
-            Print Bill
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full"
-            disabled={
-              branch.isLoading ||
-              cart.length === 0 ||
-              hasMissingPackaging ||
-              hasMissingCrust ||
-              saveBill.isPending
-            }
-            onClick={() => saveBill.mutate()}
-          >
-            <Save className="h-4 w-4 mr-1" />
-            Save bill
-          </Button>
+          <div className="flex gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-7 text-xs"
+              disabled={cart.length === 0}
+              onClick={() =>
+                printThermalDocument(
+                  buildBillHtml(cart, subtotal, discount, total, note, lineTotal),
+                  "Bill",
+                )
+              }
+            >
+              <Printer className="h-3 w-3 mr-1" />
+              Bill
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-7 text-xs"
+              disabled={
+                branch.isLoading ||
+                cart.length === 0 ||
+                hasMissingPackaging ||
+                hasMissingCrust ||
+                saveBill.isPending
+              }
+              onClick={() => saveBill.mutate()}
+            >
+              <Save className="h-3 w-3 mr-1" />
+              Save
+            </Button>
+          </div>
         </div>
       </Card>
 

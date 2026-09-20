@@ -83,16 +83,23 @@ function RecipesPage() {
           className="mb-2"
         />
         <div className="space-y-1">
-          {menu.data?.filter((m: any) => !menuSearch.trim() || m.name.toLowerCase().includes(menuSearch.toLowerCase()) || m.categories?.name?.toLowerCase().includes(menuSearch.toLowerCase())).map((m: any) => (
-            <button
-              key={m.id}
-              onClick={() => setSelected(m.id)}
-              className={`w-full text-left px-2 py-1.5 rounded text-sm ${selected === m.id ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
-            >
-              <div className="font-medium">{m.name}</div>
-              <div className="text-xs opacity-70">{m.categories?.name}</div>
-            </button>
-          ))}
+          {menu.data
+            ?.filter(
+              (m: any) =>
+                !menuSearch.trim() ||
+                m.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+                m.categories?.name?.toLowerCase().includes(menuSearch.toLowerCase()),
+            )
+            .map((m: any) => (
+              <button
+                key={m.id}
+                onClick={() => setSelected(m.id)}
+                className={`w-full text-left px-2 py-1.5 rounded text-sm ${selected === m.id ? "bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+              >
+                <div className="font-medium">{m.name}</div>
+                <div className="text-xs opacity-70">{m.categories?.name}</div>
+              </button>
+            ))}
         </div>
       </Card>
       <Card className="p-4 md:col-span-2">
