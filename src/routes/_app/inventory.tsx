@@ -376,6 +376,7 @@ function ItemsTab() {
       )}
       {producedOpen && (
         <ProducedDialog
+          item={producedOpen}
           onClose={() => setProducedOpen(null)}
           onDone={() => {
             qc.invalidateQueries({ queryKey: ["inv"] });
@@ -506,9 +507,9 @@ function PurchaseDialog({
   );
 }
 
-function ProducedDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function ProducedDialog({ item, onClose, onDone }: { item: any; onClose: () => void; onDone: () => void }) {
   const [inputs, setInputs] = useState<ProdLine[]>([blankProdLine()]);
-  const [outputs, setOutputs] = useState<ProdLine[]>([blankProdLine()]);
+  const [outputs, setOutputs] = useState<ProdLine[]>([{ ...blankProdLine(), item_id: item?.id ?? "" }]);
   const [wastage, setWastage] = useState<ProdWaste[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);

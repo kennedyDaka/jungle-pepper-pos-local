@@ -1204,6 +1204,61 @@ function ReportsPage() {
       Status: row.audit_status,
     }));
 
+  const binCardRows = (): ReportRow[] =>
+    (items.data ?? []).map((item: any) => {
+      const summary = movementSummaryForItem(item);
+      const itemMoves = movementsForItem(item.id);
+      const purchases = sumBy(
+        itemMoves.filter((m) => m.type === "purchase_in"),
+        (m) => Math.max(0, moneyValue(m.qty)),
+      );
+      const salesOut = Math.abs(
+        sumBy(
+          itemMoves.filter((m) => ["sale", "complimentary"].includes(m.type)),
+          (m) => Math.min(0, moneyValue(m.qty)),
+        ),
+      );
+      const productionOut = Math.abs(
+        sumBy(
+          itemMoves.filter((m) => m.type === "production_in"),
+          (m) => Math.min(0, moneyValue(m.qty)),
+        ),
+      );
+      const productionIn = sumBy(
+        itemMoves.filter((m) => m.type === "production_out"),
+        (m) => Math.max(0, moneyValue(m.qty)),
+      );
+      const waste = Math.abs(
+        sumBy(
+          itemMoves.filter((m) => ["wastage", "breakage"].includes(m.type)),
+          (m) => Math.min(0, moneyValue(m.qty)),
+        ),
+      );
+      const adjustments = sumBy(
+        itemMoves.filter((m) => m.type === "adjustment"),
+        (m) => moneyValue(m.qty),
+      );
+      const unit = item.units?.code ?? "";
+      const currentBalance = Number(item.qty_on_hand) || 0;
+      const openingQty = summary.openingQty;
+      return {
+        Item: item.name,
+        Category: item.categories?.name ?? "-",
+        "Stock Type": item.stock_type ?? "",
+        Unit: unit,
+        "Opening Balance": openingQty,
+        "Purchases (In)": purchases,
+        "Sales (Out)": salesOut,
+        "Production Issued": productionOut,
+        "Production Received": productionIn,
+        "Waste / Breakage": waste,
+        Adjustments: adjustments,
+        "Current Balance": currentBalance,
+        "Closing Balance": summary.closingQty,
+        "Missing / Surplus": currentBalance - summary.closingQty,
+      };
+    });
+
   const expenseCategoryRows = (): ReportRow[] =>
     [...expByCat.entries()].map(([category, amount]) => ({
       Category: category,
@@ -1268,6 +1323,7 @@ function ReportsPage() {
     },
     { id: "takeaway-packaging", title: "Takeaway Packaging", rows: takeawayPackagingRows() },
     { id: "inventory-master", title: "Inventory Master", rows: inventoryRows() },
+    { id: "bin-cards", title: "Inventory Bin Cards", rows: binCardRows() },
     { id: "low-stock", title: "Low Stock", rows: lowStockRows() },
     { id: "bar-variance", title: "Bar Variance", rows: barControlRows() },
     { id: "production-input", title: "Production Input", rows: productionInputRows() },
@@ -1460,6 +1516,16 @@ function ReportsPage() {
       { title: "Inventory Exceptions", rangeLabel },
     );
     void writeReportWorkbook(wb, `inventory-${reportDateRange(from, to)}.xlsx`);
+  };
+
+  const exportBinCardsXlsx = () => {
+    const wb = createReportWorkbook("Jungle Pepper Inventory Bin Cards");
+    const rows = binCardRows();
+    appendReportSheet(wb, "Bin Cards", rows, {
+      title: "Inventory Bin Cards",
+      rangeLabel,
+    });
+    void writeReportWorkbook(wb, `bin-cards-${reportDateRange(from, to)}.xlsx`);
   };
 
   const exportStockMatrixXlsx = () => {
@@ -1851,6 +1917,10 @@ function ReportsPage() {
           <Button onClick={exportFlashXlsx} variant="secondary">
             <Download className="h-4 w-4 mr-1" />
             Flash Report
+          </Button>
+          <Button onClick={exportBinCardsXlsx} variant="secondary">
+            <Download className="h-4 w-4 mr-1" />
+            Bin Cards
           </Button>
         </div>
       </Card>
