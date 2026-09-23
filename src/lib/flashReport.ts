@@ -98,9 +98,9 @@ export const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     [
       { label: "FRANGO FULL 1.2kg", aliases: ["CHICKEN FRANGO FULL 1.2KG", "FRANGO FULL (1.2KG)"] },
       { label: "FRANGO HALF (600g)", aliases: ["FRANGO HALF (600G)"] },
-      { label: "FILLET TRAYS (500G)", aliases: ["FILLET TRAYS (400/500g)"] },
+      { label: "FILLET TRAYS", aliases: ["FILLET TRAYS (500G)", "FILLET TRAYS (400/500g)"] },
       { label: "PIZZA PKTS (80G)", aliases: ["CHICK PIZZA PKTS (80G)", "PIZZA PKTS (80G)"] },
-      { label: "BURGER (120g)", aliases: ["CHICK BURGERS/BITOQUES (120g)", "BURGER (120G)"] },
+      { label: "BURGER/BITOQUE(120g)", aliases: ["CHICK BURGERS/BITOQUES (120g)", "BURGER (120G)", "BURGER (120g)"] },
     ],
   ],
   [
