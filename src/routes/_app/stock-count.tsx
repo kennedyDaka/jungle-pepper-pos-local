@@ -446,7 +446,7 @@ function StockCountPage() {
           </h2>
           <p className="text-xs text-muted-foreground">
             {existingCounts.data.length} items have been counted today.
-            Saving again will update the existing counts.
+            Re-saving adds a new revision so the history is never lost.
           </p>
         </Card>
       )}

@@ -21,9 +21,9 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { MWK, fmtQty, fmtDateTime } from "@/lib/format";
+import { MWK, fmtQty, fmtDate } from "@/lib/format";
 import { supabase } from "@/services/repositories/supabaseClient";
-import { stockCountsService, type StockCountWithItem } from "@/services/stockCountsService";
+import { stockCountsService, type StockCountWithItem, type CountHistoryRow } from "@/services/stockCountsService";
 import {
   AlertTriangle,
   CheckCircle,
@@ -153,6 +153,13 @@ function ReconciliationPage() {
       return (data ?? []) as MovementDetail[];
     },
     enabled: !!branchId,
+  });
+
+  // Count history for the selected item dialog
+  const countHistory = useQuery({
+    queryKey: ["recon", "count-history", branchId, selectedItem?.item_id],
+    queryFn: () => stockCountsService.listItemHistory(branchId!, selectedItem!.item_id),
+    enabled: !!branchId && !!selectedItem,
   });
 
   // Build reconciliation rows
@@ -591,6 +598,25 @@ function ReconciliationPage() {
                 </Card>
               </div>
 
+              {/* Count History Timeline */}
+              <div>
+                <h3 className="font-semibold text-sm mb-2">Count History</h3>
+                {countHistory.isLoading && (
+                  <p className="text-xs text-muted-foreground">Loading count history...</p>
+                )}
+                {countHistory.error && (
+                  <p className="text-xs text-destructive">Could not load count history.</p>
+                )}
+                {countHistory.data && countHistory.data.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-3">
+                    No counts recorded for this item yet.
+                  </p>
+                )}
+                {countHistory.data && countHistory.data.length > 0 && (
+                  <CountHistoryList rows={countHistory.data} unit={selectedItem.unit} />
+                )}
+              </div>
+
               {/* Movement Summary */}
               <div>
                 <h3 className="font-semibold text-sm mb-2">Movements Today</h3>
@@ -720,6 +746,97 @@ function MovementStat({
       </div>
       <div className="text-sm font-semibold tabular-nums mt-0.5">
         {value !== 0 ? `${fmtQty(value)} ${unit}` : "—"}
+      </div>
+    </div>
+  );
+}
+
+function CountHistoryList({
+  rows,
+  unit,
+}: {
+  rows: CountHistoryRow[];
+  unit: string;
+}) {
+  const latest = rows[rows.length - 1];
+  const revised = rows.length > 1 && rows[rows.length - 2].count_date === latest.count_date;
+
+  return (
+    <div className="space-y-2">
+      {/* Plain-language summary */}
+      <div className="rounded-md border border-border bg-secondary/20 p-2.5 text-xs">
+        <span className="font-semibold">{rows.length} count{rows.length === 1 ? "" : "s"} recorded</span>
+        {rows.length > 1 && (
+          <span>
+            {" "}· from {fmtDate(rows[0].count_date)} to {fmtDate(latest.count_date)}
+          </span>
+        )}
+        {" — "}latest: book said <span className="font-medium">{fmtQty(latest.expected_qty)}</span>, you
+        counted <span className="font-medium">{fmtQty(latest.qty)}</span>, so{" "}
+        <span
+          className={`font-semibold ${
+            Math.abs(latest.variance) > 0.001
+              ? latest.variance < 0
+                ? "text-destructive"
+                : "text-success"
+              : ""
+          }`}
+        >
+          {Math.abs(latest.variance) > 0.001
+            ? `${fmtQty(Math.abs(latest.variance))} ${unit} ${latest.variance < 0 ? "were short" : "were extra"}`
+            : "it matched"}
+        </span>
+        {revised && <span className="text-muted-foreground"> (recounted)</span>}.
+      </div>
+
+      {/* Timeline */}
+      <div className="max-h-64 overflow-auto rounded border border-border">
+        <div className="grid grid-cols-[86px_70px_70px_70px_1fr_90px] gap-2 px-3 py-2 border-b border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <div>Date</div>
+          <div className="text-right">Expected</div>
+          <div className="text-right">Counted</div>
+          <div className="text-right">Variance</div>
+          <div>Notes</div>
+          <div className="text-right">Counted by</div>
+        </div>
+        {rows.map((row, idx) => {
+          const isLatest = idx === rows.length - 1;
+          const isRevised = idx > 0 && rows[idx - 1].count_date === row.count_date;
+          return (
+            <div
+              key={row.id}
+              className={`grid grid-cols-[86px_70px_70px_70px_1fr_90px] gap-2 px-3 py-1.5 border-b border-border/50 text-xs ${
+                isLatest ? "bg-primary/5" : ""
+              }`}
+            >
+              <div className="tabular-nums">
+                {fmtDate(row.count_date)}
+                {isRevised && <span className="text-[9px] text-muted-foreground ml-1">rev</span>}
+              </div>
+              <div className="text-right tabular-nums text-muted-foreground">
+                {fmtQty(row.expected_qty)}
+              </div>
+              <div className="text-right tabular-nums font-medium">{fmtQty(row.qty)}</div>
+              <div
+                className={`text-right tabular-nums font-semibold ${
+                  Math.abs(row.variance) > 0.001
+                    ? row.variance < 0
+                      ? "text-destructive"
+                      : "text-success"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {Math.abs(row.variance) > 0.001
+                  ? `${row.variance > 0 ? "+" : ""}${fmtQty(row.variance)}`
+                  : "0"}
+              </div>
+              <div className="truncate text-muted-foreground">{row.notes ?? "—"}</div>
+              <div className="text-right truncate text-muted-foreground">
+                {row.counter_name ?? "—"}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

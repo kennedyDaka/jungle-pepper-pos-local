@@ -7,10 +7,24 @@ export interface StockCount {
   item_id: string;
   count_date: string;
   qty: number;
+  expected_qty: number;
+  variance: number;
   counted_by: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CountHistoryRow {
+  id: string;
+  count_date: string;
+  qty: number;
+  expected_qty: number;
+  variance: number;
+  notes: string | null;
+  counted_by: string | null;
+  counter_name: string | null;
+  created_at: string;
 }
 
 export interface StockCountWithItem extends StockCount {
@@ -61,7 +75,9 @@ export async function getClosingQty(
 
 export const stockCountsService = {
   /**
-   * List all stock counts for a branch on a given date, joined with item info.
+   * List the LATEST revision of each item's count for a branch on a given date.
+   * stock_counts is append-only, so a date can hold multiple revisions; this
+   * returns the most recent one per item.
    */
   async listCounts(branchId: string, date: string): Promise<StockCountWithItem[]> {
     const { data, error } = await (supabase as any)
@@ -71,14 +87,24 @@ export const stockCountsService = {
       )
       .eq("branch_id", branchId)
       .eq("count_date", date)
-      .order("count_date", { ascending: false });
+      .order("created_at", { ascending: true });
 
     raiseIfError(error, "Could not load stock counts");
-    return (data ?? []) as StockCountWithItem[];
+    const rows = (data ?? []) as StockCountWithItem[];
+
+    // Latest revision wins: later created_at values overwrite earlier ones.
+    const latestByItem = new Map<string, StockCountWithItem>();
+    for (const row of rows) {
+      latestByItem.set(row.item_id, row);
+    }
+    return [...latestByItem.values()];
   },
 
   /**
-   * List all stock counts for a date range.
+   * List counts across a date range, keeping only the LATEST revision per
+   * (item, count_date), ordered by count_date DESC (most recent first).
+   * Flash report / stock matrix rely on this ordering: the first match for
+   * "most recent count before the range" is the row they want.
    */
   async listCountsRange(
     branchId: string,
@@ -93,10 +119,19 @@ export const stockCountsService = {
       .eq("branch_id", branchId)
       .gte("count_date", fromDate)
       .lte("count_date", toDate)
-      .order("count_date", { ascending: false });
+      .order("count_date", { ascending: false })
+      .order("created_at", { ascending: false });
 
     raiseIfError(error, "Could not load stock counts");
-    return (data ?? []) as StockCountWithItem[];
+    const rows = (data ?? []) as StockCountWithItem[];
+
+    // First-wins per (item, count_date) = the latest revision.
+    const latestByKey = new Map<string, StockCountWithItem>();
+    for (const row of rows) {
+      const key = `${row.item_id}|${row.count_date}`;
+      if (!latestByKey.has(key)) latestByKey.set(key, row);
+    }
+    return [...latestByKey.values()];
   },
 
   /**
@@ -114,6 +149,22 @@ export const stockCountsService = {
       _counts: counts,
     });
     raiseIfError(error, "Could not save stock counts");
+  },
+
+  /**
+   * Get the full count history (all revisions) for a single item.
+   * Chronological: earliest to latest. Includes the counter's name.
+   */
+  async listItemHistory(
+    branchId: string,
+    itemId: string,
+  ): Promise<CountHistoryRow[]> {
+    const { data, error } = await (supabase as any).rpc(
+      "get_item_count_history",
+      { _branch_id: branchId, _item_id: itemId },
+    );
+    raiseIfError(error, "Could not load count history");
+    return (data ?? []) as CountHistoryRow[];
   },
 
   /**
@@ -158,16 +209,28 @@ export const stockCountsService = {
 
     for (const [itemId, itemCounts] of byItem) {
       const sorted = [...itemCounts].sort((a, b) =>
-        a.count_date.localeCompare(b.count_date),
+        a.count_date === b.count_date
+          ? a.created_at.localeCompare(b.created_at)
+          : a.count_date.localeCompare(b.count_date),
       );
 
-      // Opening = most recent count before fromDate
-      const openingCount = sorted.find((c) => c.count_date < fromDate);
-      const opening = openingCount ? Number(openingCount.qty) : 0;
+      // Opening = most recent count before fromDate (latest date, latest revision)
+      let opening = 0;
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        if (sorted[i].count_date < fromDate) {
+          opening = Number(sorted[i].qty);
+          break;
+        }
+      }
 
-      // Closing = count on toDate (or last available)
-      const closingCount = sorted.find((c) => c.count_date === toDate);
-      const closing = closingCount ? Number(closingCount.qty) : null;
+      // Closing = latest revision on toDate
+      let closing: number | null = null;
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        if (sorted[i].count_date === toDate) {
+          closing = Number(sorted[i].qty);
+          break;
+        }
+      }
 
       if (closing !== null) {
         map.set(itemId, {
