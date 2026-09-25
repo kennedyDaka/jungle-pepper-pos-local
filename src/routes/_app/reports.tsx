@@ -100,6 +100,16 @@ function ReportsPage() {
     queryFn: () => reportService.listStockMovements(fromIso, toIso, branchId),
   });
 
+  // Flash report OPEN must be pinned to the start of the selected range even when
+  // the range is in the past: OPEN = qty_on_hand − Σ(movements from range start to
+  // now) reconstructs the exact book balance at the range start. Movements AFTER
+  // the range are included so later trading can never shift an old report.
+  const flashLedgerMovements = useQuery({
+    queryKey: ["rep", "flash-ledger", from, branchId],
+    queryFn: () =>
+      reportService.listStockMovements(fromIso, new Date().toISOString(), branchId),
+  });
+
   const stockMatrixMovements = stockMovements;
   const stockMatrixLedgerMovements = stockMovements;
 
@@ -171,20 +181,27 @@ function ReportsPage() {
   // A count from an earlier day is never carried forward: when a new day starts —
   // before that day's count is entered — CLOSE and MISSING stay blank instead of
   // showing yesterday's numbers. Items not counted on that date also stay blank.
+  // expected/variance are the values FROZEN at count time: history is never
+  // recomputed, so rerunning a past date always reproduces the same figures.
   const stockCountsForFlash = (() => {
     const counts = stockCountsRaw.data ?? [];
     if (counts.length === 0) return undefined;
 
-    const closingByItem = new Map<string, number>();
+    const closingByItem = new Map<string, FlashStockCount>();
     for (const count of counts) {
       if (count.count_date !== to) continue;
       if (!closingByItem.has(count.item_id)) {
-        closingByItem.set(count.item_id, Number(count.qty) || 0);
+        closingByItem.set(count.item_id, {
+          item_id: count.item_id,
+          closing: Number(count.qty) || 0,
+          expected: count.expected_qty == null ? null : Number(count.expected_qty),
+          variance: count.variance == null ? null : Number(count.variance),
+        });
       }
     }
     if (closingByItem.size === 0) return undefined;
 
-    return Array.from(closingByItem.entries()).map(([item_id, closing]) => ({ item_id, closing }));
+    return Array.from(closingByItem.values());
   })();
 
   const totalSales = sumBy(sales.data ?? [], (order: any) => Number(order.total));
@@ -1295,7 +1312,7 @@ function ReportsPage() {
         paymentTotals: Object.fromEntries(payAgg),
         items: items.data ?? [],
         movements: stockMatrixMovements.data ?? [],
-        ledgerMovements: stockMatrixLedgerMovements.data ?? [],
+        ledgerMovements: flashLedgerMovements.data ?? [],
         sales: sales.data ?? [],
         expenses: expenseLineRows(),
         stockCounts: stockCountsForFlash,
@@ -1731,15 +1748,22 @@ function ReportsPage() {
     void writeReportWorkbook(wb, `expenses-${reportDateRange(from, to)}.xlsx`);
   };
 
-  const exportFlashXlsx = () => {
+  const exportFlashXlsx = async () => {
+    // The workbook must reflect the database at click time, never a stale tab
+    // snapshot. qty_on_hand feeds OPEN, so fetch fresh items + the flash ledger
+    // and rebuild the workbook from those.
+    const [freshItems, freshLedger] = await Promise.all([
+      reportService.listItems(),
+      reportService.listStockMovements(fromIso, new Date().toISOString(), branchId),
+    ]);
     const wb = buildFlashReport({
       reportDate: reportPeriodLabel,
       rangeLabel,
       preparedBy: "Kennedy Daka",
       paymentTotals: Object.fromEntries(payAgg),
-      items: items.data ?? [],
+      items: freshItems,
       movements: stockMatrixMovements.data ?? [],
-      ledgerMovements: stockMatrixLedgerMovements.data ?? [],
+      ledgerMovements: freshLedger,
       sales: sales.data ?? [],
       expenses: expenseLineRows(),
       stockCounts: stockCountsForFlash,

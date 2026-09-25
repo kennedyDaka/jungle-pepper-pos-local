@@ -46,6 +46,10 @@ export type FlashStockCount = {
   item_id: string;
   /** Physical count on the range end date. This is the only value the report trusts for CLOSE. */
   closing: number;
+  /** Book/expected quantity frozen at count time (append-only) — never recomputed. */
+  expected: number | null;
+  /** Frozen variance (closing − expected) captured at count time — never recomputed. */
+  variance: number | null;
 };
 
 export type FlashProductionBatch = {
@@ -539,9 +543,13 @@ function resolveAndSummarize(
   opening: number;
   /** Physical count on the range end date, or null when the item was not counted */
   closing: number | null;
+  /** Expected book quantity frozen at count time (null when no count exists) */
+  expected: number | null;
+  /** Variance frozen at count time (null when no count exists) */
+  variance: number | null;
   soldAsItemId?: string;
 } {
-  const defaultRow = { opening: 0, closing: null };
+  const defaultRow = { opening: 0, closing: null, expected: null, variance: null };
 
   if (isMenu) {
     return { ...defaultRow };
@@ -571,18 +579,28 @@ function resolveAndSummarize(
 
   const summary = summarizeStock(item, periodMovements, ledger);
 
-  // OPEN comes from the stock ledger (qty_on_hand − period movements).
+  // OPEN comes from the stock ledger (qty_on_hand − extended movements so the
+  // balance is pinned to the start of the range, even for past dates).
   // CLOSE is ONLY the physical stock count on the range end date — when the item
   // was not counted, CLOSE stays blank instead of showing a computed number.
+  // expected/variance are the values frozen at count time when a count exists.
   const opening = summary.opening;
   let closing: number | null = null;
+  let expected: number | null = null;
+  let variance: number | null = null;
   const count = stockCounts?.find((sc) => sc.item_id === item.id);
-  if (count) closing = count.closing;
+  if (count) {
+    closing = count.closing;
+    expected = count.expected;
+    variance = count.variance;
+  }
 
   return {
     item,
     opening,
     closing,
+    expected,
+    variance,
     soldAsItemId: item.id,
   };
 }
@@ -724,8 +742,12 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
       // WASTE/INCREASE(G's) and COOK/PREPARED Kg are informational columns only:
       // the batch weight variance is a kg figure and must never be applied to a
       // piece-count item (it produced fractional closes such as PIZZA PKTS 19.2).
-      const expected = result.opening + purchase - sales - out + produced;
-      const missing = result.closing === null ? null : result.closing - expected;
+      // When a physical count exists on the end date, the expected/variance FROZEN
+      // at count time win — a past report must reproduce the same figures forever.
+      const computedExpected = result.opening + purchase - sales - out + produced;
+      const expected = result.expected ?? computedExpected;
+      const missing =
+        result.closing === null ? null : (result.variance ?? result.closing - expected);
 
       rows.push({
         section: sectionName,
