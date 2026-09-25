@@ -1282,6 +1282,63 @@ function ReportsPage() {
       "Total Amount": amount,
     }));
 
+  // Stock Purchases: every purchase from BOTH entry points in the range.
+  //  1) Expense → "Stock Purchase" category: one row per stock line of the expense
+  //     (includes backdated purchases that were recorded expense-only, i.e. "Affects Stock: No").
+  //  2) Inventory → direct purchase_in stock movement not created from an expense
+  //     (the Inventory Purchase dialog or the "Stock-in (Purchase)" movement).
+  const stockPurchaseRows = (): ReportRow[] => {
+    const rows: ReportRow[] = [];
+
+    (expenses.data ?? []).forEach((expense: any) => {
+      (expense.expense_stock_lines ?? []).forEach((line: any) => {
+        const qty = Number(line.qty) || 0;
+        const unitCost = Number(line.unit_cost) || 0;
+        rows.push({
+          Date: expense.expense_date,
+          Source: "Expense",
+          Ref: expense.ref_no,
+          Item: line.items?.name ?? "",
+          Qty: fmtQty(qty),
+          Unit: line.items?.units?.code ?? line.package_unit ?? "",
+          "Unit Cost": unitCost,
+          Total: line.total_cost ?? line.line_total ?? Number((qty * unitCost).toFixed(2)),
+          Supplier: expense.suppliers?.name ?? "",
+          Method: paymentMethodLabel(expense.payment_method),
+          "Affects Stock": line.stock_movement_id ? "Yes" : "No",
+          Note: expense.description ?? "",
+        });
+      });
+    });
+
+    (stockMatrixMovements.data ?? []).forEach((movement: any) => {
+      if (movement.type !== "purchase_in" || movement.ref_type === "expense") return;
+      const qty = Number(movement.qty) || 0;
+      const unitCost = Number(movement.unit_cost) || 0;
+      rows.push({
+        Date: String(movement.created_at ?? "").slice(0, 10),
+        Source: "Inventory",
+        Ref: "",
+        Item: movement.items?.name ?? "",
+        Qty: fmtQty(qty),
+        Unit: movement.items?.units?.code ?? "",
+        "Unit Cost": unitCost,
+        Total: Number((qty * unitCost).toFixed(2)),
+        Supplier: "",
+        Method: "",
+        "Affects Stock": "Yes",
+        Note: movement.note ?? "",
+      });
+    });
+
+    return rows.sort(
+      (a, b) =>
+        String(a.Date ?? "").localeCompare(String(b.Date ?? "")) ||
+        String(a.Ref ?? "").localeCompare(String(b.Ref ?? "")) ||
+        String(a.Item ?? "").localeCompare(String(b.Item ?? "")),
+    );
+  };
+
   const categoryOptions = [
     ...new Set([
       ...(items.data ?? []).map((item: any) => item.categories?.name).filter(Boolean),
@@ -1348,6 +1405,7 @@ function ReportsPage() {
     { id: "deduction-audit", title: "Inventory Deduction Audit", rows: deductionAuditRows() },
     { id: "expenses-detail", title: "Expense Detail", rows: expenseLineRows() },
     { id: "expenses-category", title: "Expense Category", rows: expenseCategoryRows() },
+    { id: "stock-purchases", title: "Stock Purchases", rows: stockPurchaseRows() },
   ];
 
   const currentReport =
