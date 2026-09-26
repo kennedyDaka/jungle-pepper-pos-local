@@ -673,11 +673,20 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
         let batchProduced = 0;
 
         batches.forEach((batch) => {
-          const inputWeight = (batch.production_inputs ?? []).reduce(
-            (sum, line) => sum + (Number(line.weight_kg) || Number(line.qty) || 0),
+          const inputLines = batch.production_inputs ?? [];
+          const outputLines = batch.production_outputs ?? [];
+          // Weight variance only means something when the batch records REAL
+          // weights (weight_kg / cook_kg). Count-only batches such as piece
+          // conversions (11 full chickens -> 22 halves) must never fabricate a kg
+          // variance from quantities — that put bogus WASTE figures like -11 on
+          // FRANGO HALF.
+          const batchHasWeights =
+            inputLines.some((line) => Number(line.weight_kg) > 0) &&
+            outputLines.some((line) => Number(line.cook_kg) > 0 || Number(line.weight_kg) > 0);
+          const inputWeight = inputLines.reduce(
+            (sum, line) => sum + (Number(line.weight_kg) || 0),
             0,
           );
-          const outputLines = batch.production_outputs ?? [];
           const totalOutputWeight = outputLines.reduce(
             (sum, line) => sum + (Number(line.cook_kg) || Number(line.weight_kg) || 0),
             0,
@@ -701,11 +710,9 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
               const ck = Number(output.cook_kg) || Number(output.weight_kg) || 0;
               if (ck > 0) cookKg += ck;
 
-              if (totalOutputWeight > 0) {
+              if (batchHasWeights) {
                 const weight = Number(output.cook_kg) || Number(output.weight_kg) || 0;
                 waste -= variance * (weight / totalOutputWeight);
-              } else if (outputLines.length > 0) {
-                waste -= variance / outputLines.length;
               }
             }
           });
