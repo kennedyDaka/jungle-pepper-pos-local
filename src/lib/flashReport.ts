@@ -653,7 +653,10 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
               sales += Math.abs(Math.min(0, qty));
               break;
             case "production_in":
-              // Bulk stock issued out into production/preparation
+            case "issue_out":
+              // Bulk stock issued out into production/preparation (production_in)
+              // or manually issued out of inventory (issue_out) — both consume
+              // stock and therefore land in the OUT column.
               movementOut += Math.abs(Math.min(0, qty));
               break;
             case "production_out":
@@ -663,7 +666,7 @@ function flashStockRows(input: FlashReportInput): FlashStockRow[] {
             case "breakage":
               waste += Math.abs(Math.min(0, qty));
               break;
-            // adjustment, issue_out, complimentary are tracked but not part of
+            // adjustment and complimentary are tracked but not part of
             // the stock formula columns
           }
         }
