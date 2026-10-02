@@ -158,7 +158,13 @@ export const STOCK_SECTIONS: [string, FlashStockItem[]][] = [
     "BREAD",
     [{ label: "BREAD BURGER (6 each pkt)", aliases: ["BURGER (6 EACH PKT)", "BURGER BUNS"] }],
   ],
-  ["RICE", [{ label: "BULK (Kg)", aliases: ["RICE BULK"] }]],
+  [
+    "RICE",
+    [
+      { label: "BULK (Kg)", aliases: ["RICE BULK"] },
+      { label: "RICE COOKED", aliases: ["RICE COOKED"] },
+    ],
+  ],
   ["OILS / SAUCES", [{ label: "COOKING OIL BULK (L)", aliases: ["COOKING OIL BULK"] }]],
   [
     "VEGETABLES",
