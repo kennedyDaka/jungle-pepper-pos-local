@@ -9,46 +9,40 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WebsiteRouteImport } from './routes/website'
-import { Route as WaiterRouteImport } from './routes/waiter'
-import { Route as SetupRouteImport } from './routes/setup'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as WebsiteIndexRouteImport } from './routes/website/index'
-import { Route as WebsiteReservationsRouteImport } from './routes/website/reservations'
-import { Route as WebsiteMenuRouteImport } from './routes/website/menu'
-import { Route as WebsiteContactRouteImport } from './routes/website/contact'
-import { Route as WebsiteAboutRouteImport } from './routes/website/about'
-import { Route as AppStockCountRouteImport } from './routes/_app/stock-count'
-import { Route as AppReservationsRouteImport } from './routes/_app/reservations'
-import { Route as AppReportsRouteImport } from './routes/_app/reports'
-import { Route as AppReconciliationRouteImport } from './routes/_app/reconciliation'
-import { Route as AppRecipesRouteImport } from './routes/_app/recipes'
-import { Route as AppProductionRouteImport } from './routes/_app/production'
-import { Route as AppPosWaiterRouteImport } from './routes/_app/pos-waiter'
-import { Route as AppPosRouteImport } from './routes/_app/pos'
-import { Route as AppMenuRouteImport } from './routes/_app/menu'
-import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
-import { Route as AppExpensesRouteImport } from './routes/_app/expenses'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as SetupRouteImport } from './routes/setup'
+import { Route as WaiterRouteImport } from './routes/waiter'
+import { Route as WebsiteRouteImport } from './routes/website'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
-import { Route as WebsiteMenuSlugRouteImport } from './routes/website/menu.$slug'
-import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
+import { Route as AppExpensesRouteImport } from './routes/_app/expenses'
+import { Route as AppInventoryRouteImport } from './routes/_app/inventory'
+import { Route as AppMenuRouteImport } from './routes/_app/menu'
+import { Route as AppPosRouteImport } from './routes/_app/pos'
+import { Route as AppPosWaiterRouteImport } from './routes/_app/pos-waiter'
+import { Route as AppProductionRouteImport } from './routes/_app/production'
+import { Route as AppRecipesRouteImport } from './routes/_app/recipes'
+import { Route as AppReconciliationRouteImport } from './routes/_app/reconciliation'
+import { Route as AppReportsRouteImport } from './routes/_app/reports'
+import { Route as AppReservationsRouteImport } from './routes/_app/reservations'
+import { Route as AppStockCountRouteImport } from './routes/_app/stock-count'
+import { Route as WebsiteIndexRouteImport } from './routes/website/index'
+import { Route as WebsiteAboutRouteImport } from './routes/website/about'
+import { Route as WebsiteContactRouteImport } from './routes/website/contact'
+import { Route as WebsiteMenuRouteImport } from './routes/website/menu'
+import { Route as WebsiteReservationsRouteImport } from './routes/website/reservations'
 import { Route as AppAdminTablesRouteImport } from './routes/_app/admin.tables'
+import { Route as AppAdminUsersRouteImport } from './routes/_app/admin.users'
+import { Route as WebsiteMenuSlugRouteImport } from './routes/website/menu.$slug'
 
-const WebsiteRoute = WebsiteRouteImport.update({
-  id: '/website',
-  path: '/website',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WaiterRoute = WaiterRouteImport.update({
-  id: '/waiter',
-  path: '/waiter',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SetupRoute = SetupRouteImport.update({
-  id: '/setup',
-  path: '/setup',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -56,88 +50,24 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const WaiterRoute = WaiterRouteImport.update({
+  id: '/waiter',
+  path: '/waiter',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WebsiteIndexRoute = WebsiteIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => WebsiteRoute,
+const WebsiteRoute = WebsiteRouteImport.update({
+  id: '/website',
+  path: '/website',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const WebsiteReservationsRoute = WebsiteReservationsRouteImport.update({
-  id: '/reservations',
-  path: '/reservations',
-  getParentRoute: () => WebsiteRoute,
-} as any)
-const WebsiteMenuRoute = WebsiteMenuRouteImport.update({
-  id: '/menu',
-  path: '/menu',
-  getParentRoute: () => WebsiteRoute,
-} as any)
-const WebsiteContactRoute = WebsiteContactRouteImport.update({
-  id: '/contact',
-  path: '/contact',
-  getParentRoute: () => WebsiteRoute,
-} as any)
-const WebsiteAboutRoute = WebsiteAboutRouteImport.update({
-  id: '/about',
-  path: '/about',
-  getParentRoute: () => WebsiteRoute,
-} as any)
-const AppStockCountRoute = AppStockCountRouteImport.update({
-  id: '/stock-count',
-  path: '/stock-count',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReservationsRoute = AppReservationsRouteImport.update({
-  id: '/reservations',
-  path: '/reservations',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReportsRoute = AppReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppReconciliationRoute = AppReconciliationRouteImport.update({
-  id: '/reconciliation',
-  path: '/reconciliation',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppRecipesRoute = AppRecipesRouteImport.update({
-  id: '/recipes',
-  path: '/recipes',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppProductionRoute = AppProductionRouteImport.update({
-  id: '/production',
-  path: '/production',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPosWaiterRoute = AppPosWaiterRouteImport.update({
-  id: '/pos-waiter',
-  path: '/pos-waiter',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPosRoute = AppPosRouteImport.update({
-  id: '/pos',
-  path: '/pos',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppMenuRoute = AppMenuRouteImport.update({
-  id: '/menu',
-  path: '/menu',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppInventoryRoute = AppInventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
 const AppExpensesRoute = AppExpensesRouteImport.update({
@@ -145,25 +75,95 @@ const AppExpensesRoute = AppExpensesRouteImport.update({
   path: '/expenses',
   getParentRoute: () => AppRoute,
 } as any)
-const AppDashboardRoute = AppDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AppInventoryRoute = AppInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
   getParentRoute: () => AppRoute,
 } as any)
-const WebsiteMenuSlugRoute = WebsiteMenuSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => WebsiteMenuRoute,
+const AppMenuRoute = AppMenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPosRoute = AppPosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPosWaiterRoute = AppPosWaiterRouteImport.update({
+  id: '/pos-waiter',
+  path: '/pos-waiter',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProductionRoute = AppProductionRouteImport.update({
+  id: '/production',
+  path: '/production',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRecipesRoute = AppRecipesRouteImport.update({
+  id: '/recipes',
+  path: '/recipes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReconciliationRoute = AppReconciliationRouteImport.update({
+  id: '/reconciliation',
+  path: '/reconciliation',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReservationsRoute = AppReservationsRouteImport.update({
+  id: '/reservations',
+  path: '/reservations',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStockCountRoute = AppStockCountRouteImport.update({
+  id: '/stock-count',
+  path: '/stock-count',
+  getParentRoute: () => AppRoute,
+} as any)
+const WebsiteIndexRoute = WebsiteIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteAboutRoute = WebsiteAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteContactRoute = WebsiteContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteMenuRoute = WebsiteMenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const WebsiteReservationsRoute = WebsiteReservationsRouteImport.update({
+  id: '/reservations',
+  path: '/reservations',
+  getParentRoute: () => WebsiteRoute,
+} as any)
+const AppAdminTablesRoute = AppAdminTablesRouteImport.update({
+  id: '/admin/tables',
+  path: '/admin/tables',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   id: '/admin/users',
   path: '/admin/users',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAdminTablesRoute = AppAdminTablesRouteImport.update({
-  id: '/admin/tables',
-  path: '/admin/tables',
-  getParentRoute: () => AppRoute,
+const WebsiteMenuSlugRoute = WebsiteMenuSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => WebsiteMenuRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -343,32 +343,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/website': {
-      id: '/website'
-      path: '/website'
-      fullPath: '/website'
-      preLoaderRoute: typeof WebsiteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/waiter': {
-      id: '/waiter'
-      path: '/waiter'
-      fullPath: '/waiter'
-      preLoaderRoute: typeof WaiterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/setup': {
-      id: '/setup'
-      path: '/setup'
-      fullPath: '/setup'
-      preLoaderRoute: typeof SetupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -378,116 +357,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/website/': {
-      id: '/website/'
-      path: '/'
-      fullPath: '/website/'
-      preLoaderRoute: typeof WebsiteIndexRouteImport
-      parentRoute: typeof WebsiteRoute
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/website/reservations': {
-      id: '/website/reservations'
-      path: '/reservations'
-      fullPath: '/website/reservations'
-      preLoaderRoute: typeof WebsiteReservationsRouteImport
-      parentRoute: typeof WebsiteRoute
+    '/waiter': {
+      id: '/waiter'
+      path: '/waiter'
+      fullPath: '/waiter'
+      preLoaderRoute: typeof WaiterRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/website/menu': {
-      id: '/website/menu'
-      path: '/menu'
-      fullPath: '/website/menu'
-      preLoaderRoute: typeof WebsiteMenuRouteImport
-      parentRoute: typeof WebsiteRoute
+    '/website': {
+      id: '/website'
+      path: '/website'
+      fullPath: '/website'
+      preLoaderRoute: typeof WebsiteRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/website/contact': {
-      id: '/website/contact'
-      path: '/contact'
-      fullPath: '/website/contact'
-      preLoaderRoute: typeof WebsiteContactRouteImport
-      parentRoute: typeof WebsiteRoute
-    }
-    '/website/about': {
-      id: '/website/about'
-      path: '/about'
-      fullPath: '/website/about'
-      preLoaderRoute: typeof WebsiteAboutRouteImport
-      parentRoute: typeof WebsiteRoute
-    }
-    '/_app/stock-count': {
-      id: '/_app/stock-count'
-      path: '/stock-count'
-      fullPath: '/stock-count'
-      preLoaderRoute: typeof AppStockCountRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/reservations': {
-      id: '/_app/reservations'
-      path: '/reservations'
-      fullPath: '/reservations'
-      preLoaderRoute: typeof AppReservationsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/reports': {
-      id: '/_app/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof AppReportsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/reconciliation': {
-      id: '/_app/reconciliation'
-      path: '/reconciliation'
-      fullPath: '/reconciliation'
-      preLoaderRoute: typeof AppReconciliationRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/recipes': {
-      id: '/_app/recipes'
-      path: '/recipes'
-      fullPath: '/recipes'
-      preLoaderRoute: typeof AppRecipesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/production': {
-      id: '/_app/production'
-      path: '/production'
-      fullPath: '/production'
-      preLoaderRoute: typeof AppProductionRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/pos-waiter': {
-      id: '/_app/pos-waiter'
-      path: '/pos-waiter'
-      fullPath: '/pos-waiter'
-      preLoaderRoute: typeof AppPosWaiterRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/pos': {
-      id: '/_app/pos'
-      path: '/pos'
-      fullPath: '/pos'
-      preLoaderRoute: typeof AppPosRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/menu': {
-      id: '/_app/menu'
-      path: '/menu'
-      fullPath: '/menu'
-      preLoaderRoute: typeof AppMenuRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/inventory': {
-      id: '/_app/inventory'
-      path: '/inventory'
-      fullPath: '/inventory'
-      preLoaderRoute: typeof AppInventoryRouteImport
+    '/_app/dashboard': {
+      id: '/_app/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/expenses': {
@@ -497,19 +399,117 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppExpensesRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/dashboard': {
-      id: '/_app/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AppDashboardRouteImport
+    '/_app/inventory': {
+      id: '/_app/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof AppInventoryRouteImport
       parentRoute: typeof AppRoute
     }
-    '/website/menu/$slug': {
-      id: '/website/menu/$slug'
-      path: '/$slug'
-      fullPath: '/website/menu/$slug'
-      preLoaderRoute: typeof WebsiteMenuSlugRouteImport
-      parentRoute: typeof WebsiteMenuRoute
+    '/_app/menu': {
+      id: '/_app/menu'
+      path: '/menu'
+      fullPath: '/menu'
+      preLoaderRoute: typeof AppMenuRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pos': {
+      id: '/_app/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof AppPosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pos-waiter': {
+      id: '/_app/pos-waiter'
+      path: '/pos-waiter'
+      fullPath: '/pos-waiter'
+      preLoaderRoute: typeof AppPosWaiterRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/production': {
+      id: '/_app/production'
+      path: '/production'
+      fullPath: '/production'
+      preLoaderRoute: typeof AppProductionRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/recipes': {
+      id: '/_app/recipes'
+      path: '/recipes'
+      fullPath: '/recipes'
+      preLoaderRoute: typeof AppRecipesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reconciliation': {
+      id: '/_app/reconciliation'
+      path: '/reconciliation'
+      fullPath: '/reconciliation'
+      preLoaderRoute: typeof AppReconciliationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reservations': {
+      id: '/_app/reservations'
+      path: '/reservations'
+      fullPath: '/reservations'
+      preLoaderRoute: typeof AppReservationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/stock-count': {
+      id: '/_app/stock-count'
+      path: '/stock-count'
+      fullPath: '/stock-count'
+      preLoaderRoute: typeof AppStockCountRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/website/': {
+      id: '/website/'
+      path: '/'
+      fullPath: '/website/'
+      preLoaderRoute: typeof WebsiteIndexRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/about': {
+      id: '/website/about'
+      path: '/about'
+      fullPath: '/website/about'
+      preLoaderRoute: typeof WebsiteAboutRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/contact': {
+      id: '/website/contact'
+      path: '/contact'
+      fullPath: '/website/contact'
+      preLoaderRoute: typeof WebsiteContactRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/menu': {
+      id: '/website/menu'
+      path: '/menu'
+      fullPath: '/website/menu'
+      preLoaderRoute: typeof WebsiteMenuRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/website/reservations': {
+      id: '/website/reservations'
+      path: '/reservations'
+      fullPath: '/website/reservations'
+      preLoaderRoute: typeof WebsiteReservationsRouteImport
+      parentRoute: typeof WebsiteRoute
+    }
+    '/_app/admin/tables': {
+      id: '/_app/admin/tables'
+      path: '/admin/tables'
+      fullPath: '/admin/tables'
+      preLoaderRoute: typeof AppAdminTablesRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/admin/users': {
       id: '/_app/admin/users'
@@ -518,12 +518,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminUsersRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/admin/tables': {
-      id: '/_app/admin/tables'
-      path: '/admin/tables'
-      fullPath: '/admin/tables'
-      preLoaderRoute: typeof AppAdminTablesRouteImport
-      parentRoute: typeof AppRoute
+    '/website/menu/$slug': {
+      id: '/website/menu/$slug'
+      path: '/$slug'
+      fullPath: '/website/menu/$slug'
+      preLoaderRoute: typeof WebsiteMenuSlugRouteImport
+      parentRoute: typeof WebsiteMenuRoute
     }
   }
 }

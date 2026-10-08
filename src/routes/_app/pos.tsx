@@ -939,6 +939,7 @@ function PosPage() {
     lineKey: string;
     removeOnCancel?: boolean;
   } | null>(null);
+  const [boxOpen, setBoxOpen] = useState<{ lineKey: string } | null>(null);
   const [omitOpen, setOmitOpen] = useState<{ lineKey: string } | null>(null);
   const [packOpen, setPackOpen] = useState<{ lineKey: string } | null>(null);
   const [packManagerOpen, setPackManagerOpen] = useState(false);
@@ -1346,6 +1347,10 @@ function PosPage() {
     prevCartLen.current = cart.length;
   }, [cart.length]);
 
+  const pizzaBoxOption = (packaging.data ?? []).find(
+    (option) => option.name.toLowerCase() === "pizza box",
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 h-[calc(100vh-9rem)]">
       <div className="lg:col-span-3 flex flex-col gap-3 min-h-0">
@@ -1743,6 +1748,24 @@ function PosPage() {
               c.map((x) => (x.key === modOpen.lineKey ? { ...x, modifiers: selected } : x)),
             );
             setModOpen(null);
+            if (modOpen.removeOnCancel) setBoxOpen({ lineKey: modOpen.lineKey });
+          }}
+        />
+      )}
+
+      {boxOpen && pizzaBoxOption && (
+        <BoxPromptDialog
+          pizzaBox={pizzaBoxOption}
+          onEatIn={() => setBoxOpen(null)}
+          onTakeaway={(pack) => {
+            setCart((c) =>
+              c.map((x) =>
+                x.key === boxOpen.lineKey
+                  ? { ...x, takeaway: true, packaging: [pack] }
+                  : x,
+              ),
+            );
+            setBoxOpen(null);
           }}
         />
       )}
@@ -2521,6 +2544,56 @@ function ModifierDialog({
             Add
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BoxPromptDialog({
+  pizzaBox,
+  onEatIn,
+  onTakeaway,
+}: {
+  pizzaBox: PackagingOptionView;
+  onEatIn: () => void;
+  onTakeaway: (pack: PackagingSelection) => void;
+}) {
+  return (
+    <Dialog open onOpenChange={onEatIn}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Pizza box?</DialogTitle>
+          <DialogDescription>
+            Eat-in pizzas don't need a box. Takeaway pizzas get a pizza box (MK 0) added and
+            deducted from stock automatically.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onEatIn}
+            className="p-4 rounded border border-border font-medium hover:bg-muted"
+          >
+            Eat in
+            <span className="block text-xs font-normal text-muted-foreground mt-1">No box</span>
+          </button>
+          <button
+            onClick={() =>
+              onTakeaway({
+                option_id: pizzaBox.id,
+                name: pizzaBox.name,
+                item_id: pizzaBox.item_id,
+                unit_price: Number(pizzaBox.price),
+                qty_per_item: 1,
+              })
+            }
+            className="p-4 rounded border border-border font-medium hover:bg-muted"
+          >
+            Takeaway
+            <span className="block text-xs font-normal text-muted-foreground mt-1">
+              + Pizza box
+            </span>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
