@@ -85,20 +85,26 @@ function ProductionPage() {
         reason: line.reason.trim() || "Production wastage",
       }));
     setBusy(true);
-    await productionService.applyProduction({
-      inputs: cleanIn,
-      outputs: cleanOut,
-      wastage: cleanWastage,
-      note,
-    });
-    setBusy(false);
-    toast.success("Production batch saved");
-    setInputs([blankLine()]);
-    setOutputs([blankLine()]);
-    setWastage([]);
-    setNote("");
-    qc.invalidateQueries({ queryKey: ["prod"] });
-    qc.invalidateQueries({ queryKey: ["inv"] });
+    try {
+      await productionService.applyProduction({
+        inputs: cleanIn,
+        outputs: cleanOut,
+        wastage: cleanWastage,
+        note,
+      });
+      toast.success("Production batch saved");
+      setInputs([blankLine()]);
+      setOutputs([blankLine()]);
+      setWastage([]);
+      setNote("");
+      qc.invalidateQueries({ queryKey: ["prod"] });
+      qc.invalidateQueries({ queryKey: ["inv"] });
+    } catch (e: any) {
+      console.error("Production batch save failed", e);
+      toast.error(e?.message ?? "Could not save production batch");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const ItemSelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
