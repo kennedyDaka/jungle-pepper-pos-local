@@ -92,19 +92,24 @@ hr { border: 0; border-top: 1px solid #000; margin: 2mm 0; }
 `;
 
 function buildReceiptHtml(receipt: any): string {
-  const ref = receipt.physicalOrderNo || String(receipt.id).slice(0, 8).toUpperCase();
-  const tax = vatBreakdownFromInclusive(receipt.total);
+  const ref = receipt?.physicalOrderNo || String(receipt?.id ?? "").slice(0, 8).toUpperCase();
+  const total = Number(receipt?.total ?? 0);
+  const subtotal = Number(receipt?.subtotal ?? 0);
+  const discount = Number(receipt?.discount ?? 0);
+  const tax = vatBreakdownFromInclusive(total);
   let items = "";
-  for (const l of receipt.lines) {
-    items += `<div class="row"><span>${l.qty}x ${l.name}${l.takeaway ? " (takeaway)" : ""}</span><span>MK${l.total.toLocaleString()}</span></div>`;
-    if (l.modifiers?.length)
-      items += `<div class="sub">${l.modifiers.map((m: any) => m.name).join(", ")}</div>`;
-    if (l.omissions?.length)
-      items += `<div class="sub">No ${l.omissions.map((o: any) => o.name).join(", ")}</div>`;
-    if (l.takeaway && l.packaging?.length) {
+  for (const l of receipt?.lines ?? []) {
+    const lineTotal = Number(l?.total ?? 0);
+    items += `<div class="row"><span>${Number(l?.qty ?? 0)}x ${l?.name ?? "Item"}${l?.takeaway ? " (takeaway)" : ""}</span><span>MK${lineTotal.toLocaleString()}</span></div>`;
+    if (l?.modifiers?.length)
+      items += `<div class="sub">${l.modifiers.map((m: any) => m?.name ?? "Extra").join(", ")}</div>`;
+    if (l?.omissions?.length)
+      items += `<div class="sub">No ${l.omissions.map((o: any) => o?.name ?? "item").join(", ")}</div>`;
+    if (l?.takeaway && l?.packaging?.length) {
       for (const p of l.packaging) {
-        const qty = receiptPackagingQty(l, p);
-        items += `<div class="row small sub"><span>Packaging: ${p.name} x${fmtQty(qty)}</span><span>MK${(p.unit_price * qty).toLocaleString()}</span></div>`;
+        const qty = Number(receiptPackagingQty(l, p) ?? 0);
+        const pUnit = Number(p?.unit_price ?? 0);
+        items += `<div class="row small sub"><span>Packaging: ${p?.name ?? "Packaging"} x${fmtQty(qty)}</span><span>MK${(pUnit * qty).toLocaleString()}</span></div>`;
       }
     }
   }
@@ -113,19 +118,19 @@ function buildReceiptHtml(receipt: any): string {
   <div class="center">
     <div class="bold">JUNGLE PEPPER</div>
     <div>Kidney Crescent, Blantyre</div>
-    <div>${fmtDateTime(receipt.at)}</div>
+    <div>${fmtDateTime(receipt?.at)}</div>
     <div>Order: ${ref}</div>
-    ${receipt.saleType === "staff_meal" ? '<div class="bold">STAFF MEAL</div>' : ""}
+    ${receipt?.saleType === "staff_meal" ? '<div class="bold">STAFF MEAL</div>' : ""}
   </div>
   <hr />
   ${items}
   <hr />
-  <div class="row"><span>Subtotal</span><span>MK${receipt.subtotal.toLocaleString()}</span></div>
-  ${receipt.discount > 0 ? `<div class="row"><span>${receipt.saleType === "staff_meal" ? "Staff meal discount" : "Discount"}</span><span>-MK${receipt.discount.toLocaleString()}</span></div>` : ""}
+  <div class="row"><span>Subtotal</span><span>MK${subtotal.toLocaleString()}</span></div>
+  ${discount > 0 ? `<div class="row"><span>${receipt?.saleType === "staff_meal" ? "Staff meal discount" : "Discount"}</span><span>-MK${discount.toLocaleString()}</span></div>` : ""}
   <div class="row"><span>Net excl. VAT</span><span>MK${tax.net.toLocaleString()}</span></div>
   <div class="row"><span>VAT ${(VAT_RATE * 100).toFixed(1)}% included</span><span>MK${tax.vat.toLocaleString()}</span></div>
-  <div class="row total-bold"><span>TOTAL INCL. VAT</span><span>MK${receipt.total.toLocaleString()}</span></div>
-  ${receipt.staffMealReason ? `<div class="small mt">Approval: ${receipt.staffMealReason}</div>` : ""}
+  <div class="row total-bold"><span>TOTAL INCL. VAT</span><span>MK${total.toLocaleString()}</span></div>
+  ${receipt?.staffMealReason ? `<div class="small mt">Approval: ${receipt.staffMealReason}</div>` : ""}
   <div class="center mt">Obrigado!</div>
 </div>`;
 }
@@ -948,6 +953,7 @@ function PosPage() {
   const [historyFrom, setHistoryFrom] = useState(() => isoDateDaysAgo(30));
   const [historyTo, setHistoryTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [lastReceipt, setLastReceipt] = useState<any>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const [pendingOpen, setPendingOpen] = useState(false);
 
   const branch = useQuery({
@@ -1240,6 +1246,7 @@ function PosPage() {
         at: new Date(request.saleAt),
       };
       setLastReceipt(receipt);
+      setReceiptOpen(true);
       setCart([]);
       setDiscount(0);
       setNote("");
@@ -1849,6 +1856,7 @@ function PosPage() {
           onClose={() => setHistoryOpen(false)}
           onReprint={(order) => {
             setLastReceipt(receiptFromOrder(order));
+            setReceiptOpen(true);
             setHistoryOpen(false);
           }}
         />
@@ -1883,6 +1891,7 @@ function PosPage() {
           onSelectOrder={(order) => {
             setPendingOpen(false);
             setLastReceipt(receiptFromOrder(order));
+            setReceiptOpen(true);
           }}
           onEditOrder={requestEdit}
         />
@@ -1913,7 +1922,7 @@ function PosPage() {
         </Dialog>
       )}
 
-      {lastReceipt && <ReceiptDialog receipt={lastReceipt} onClose={() => setLastReceipt(null)} />}
+      {receiptOpen && lastReceipt && <ReceiptDialog receipt={lastReceipt} onClose={() => setReceiptOpen(false)} />}
     </div>
   );
 }
@@ -2953,13 +2962,13 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
   };
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Receipt</DialogTitle>
           <DialogDescription>Print or download the completed order receipt.</DialogDescription>
         </DialogHeader>
         <div
-          className="receipt-print bg-white text-black p-4 rounded text-sm font-mono"
+          className="receipt-print bg-white text-black p-4 rounded text-sm font-mono overflow-y-auto flex-1 min-h-0"
           id="receipt-print"
         >
           <div className="text-center">
@@ -3035,7 +3044,7 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
           )}
           <div className="text-center mt-3">Obrigado!</div>
         </div>
-        <DialogFooter className="items-center">
+        <DialogFooter className="items-center flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -3062,7 +3071,13 @@ function ReceiptDialog({ receipt, onClose }: { receipt: any; onClose: () => void
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
-              onClick={() => printThermalDocument(buildReceiptHtml(receipt), "Receipt", copies)}
+              onClick={() => {
+                try {
+                  printThermalDocument(buildReceiptHtml(receipt), "Receipt", copies);
+                } catch (e: any) {
+                  toast.error(e?.message || "Could not print receipt");
+                }
+              }}
             >
               <Printer className="h-4 w-4 mr-1" />
               Print
